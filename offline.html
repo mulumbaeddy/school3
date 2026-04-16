@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - School Management System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #01605a, #ff862d);
+            color: white;
+            text-align: center;
+        }
+        .offline-container {
+            padding: 20px;
+        }
+        i {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        button {
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: white;
+            border: none;
+            border-radius: 10px;
+            color: #01605a;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <i class="fas fa-wifi"></i>
+        <h1>You are Offline</h1>
+        <p>Please check your internet connection</p>
+        <button onclick="location.reload()">Try Again</button>
+    </div>
+</body>
+</html>

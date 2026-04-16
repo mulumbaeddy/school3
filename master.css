@@ -1,0 +1,567 @@
+/* ============================================
+   ENHANCED RESPONSIVE CSS
+   Preserves ALL your original colors & design
+   Adds professional responsiveness
+   ============================================ */
+
+/* ============================================
+   MOBILE MENU SYSTEM
+   ============================================ */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1001;
+    background: linear-gradient(135deg, #01605a, #ff862d);
+    border: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+}
+
+.mobile-menu-toggle:active {
+    transform: scale(0.95);
+}
+
+.mobile-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+    transition: all 0.3s ease;
+}
+
+.mobile-overlay.active {
+    display: block;
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+/* Mobile Devices (up to 768px) */
+@media (max-width: 768px) {
+    /* Sidebar - Slide Out Menu */
+    .sidebar {
+        position: fixed !important;
+        left: -280px !important;
+        top: 0 !important;
+        height: 100vh !important;
+        width: 280px !important;
+        z-index: 1000 !important;
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        overflow-y: auto !important;
+        box-shadow: none !important;
+    }
+    
+    .sidebar.mobile-open {
+        left: 0 !important;
+        box-shadow: 5px 0 25px rgba(0,0,0,0.15) !important;
+    }
+    
+    /* Show mobile menu button */
+    .mobile-menu-toggle {
+        display: flex !important;
+    }
+    
+    /* Main Content Adjustment */
+    .main-content {
+        margin-left: 0 !important;
+        padding: 70px 15px 20px 15px !important;
+        width: 100% !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    /* Top Bar - Add spacing for mobile menu */
+    .top-bar {
+        margin-top: 5px !important;
+        flex-direction: column !important;
+        text-align: center !important;
+        gap: 12px !important;
+        padding: 15px !important;
+    }
+    
+    .page-title {
+        font-size: 20px !important;
+    }
+    
+    .user-info {
+        justify-content: center !important;
+        flex-wrap: wrap !important;
+    }
+    
+    /* Level Badge - Stack vertically */
+    .level-badge {
+        flex-direction: column !important;
+        gap: 8px !important;
+        margin: 10px !important;
+    }
+    
+    .level-badge-item {
+        width: 100% !important;
+        text-align: center !important;
+        padding: 10px !important;
+    }
+    
+    /* Stats Cards - Stack vertically */
+    .stats-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 15px !important;
+    }
+    
+    .stat-card {
+        width: 100% !important;
+        margin-bottom: 0 !important;
+    }
+    
+    .stat-card-inner {
+        flex-direction: row !important;
+        text-align: left !important;
+    }
+    
+    /* Welcome Section - Stack on mobile */
+    .welcome-section {
+        flex-direction: column !important;
+        text-align: center !important;
+        padding: 20px !important;
+        gap: 15px !important;
+    }
+    
+    .welcome-avatar {
+        margin: 0 auto !important;
+    }
+    
+    .welcome-actions {
+        justify-content: center !important;
+        width: 100% !important;
+    }
+    
+    .welcome-btn {
+        flex: 1 !important;
+        justify-content: center !important;
+    }
+    
+    /* Dashboard Bottom Section - Stack */
+    .dashboard-bottom {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 20px !important;
+    }
+    
+    .recent-payments-card,
+    .quick-actions-card {
+        width: 100% !important;
+    }
+    
+    /* Actions Grid - 2 columns on tablet, 1 on mobile */
+    .actions-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+    }
+    
+    /* Tables - Horizontal scroll */
+    .table-responsive {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        margin-bottom: 15px !important;
+    }
+    
+    .data-table {
+        overflow-x: auto !important;
+    }
+    
+    table {
+        min-width: 650px !important;
+    }
+    
+    /* Forms - Stack inputs */
+    .row {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    
+    .row > [class*="col-"] {
+        width: 100% !important;
+        margin-bottom: 12px !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    /* Form Cards */
+    .form-card {
+        padding: 18px !important;
+    }
+    
+    /* Buttons Group - Stack vertically */
+    .btn-group {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+    
+    .btn-group .btn,
+    .btn-group .ms-2 {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Action Buttons in Tables */
+    .btn-group.btn-group-sm {
+        display: inline-flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 5px !important;
+    }
+    
+    /* Filter Section - Stack */
+    .filter-bar .row,
+    .card-body .row {
+        flex-direction: column !important;
+    }
+    
+    .filter-bar [class*="col-"],
+    .card-body [class*="col-"] {
+        margin-bottom: 10px !important;
+    }
+    
+    /* Search inputs - Full width */
+    #paymentSearchInput,
+    #filterPaymentClass,
+    #filterPaymentTerm,
+    #filterPaymentYear,
+    #filterPaymentMethod,
+    #markSearch,
+    #markStudentFilter,
+    #markSubjectFilter,
+    #markExamFilter,
+    #markYearFilter {
+        width: 100% !important;
+        margin-bottom: 8px !important;
+    }
+    
+    /* Modal - Full width on mobile */
+    .modal-dialog {
+        margin: 10px !important;
+        max-width: calc(100% - 20px) !important;
+    }
+    
+    .modal-body {
+        max-height: 60vh !important;
+        overflow-y: auto !important;
+    }
+    
+    .modal-footer {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    
+    .modal-footer .btn {
+        width: 100% !important;
+        margin: 0 !important;
+    }
+    
+    /* Settings Tabs - Stack */
+    .settings-tabs {
+        flex-direction: column !important;
+        gap: 5px !important;
+    }
+    
+    .settings-tab {
+        width: 100% !important;
+        text-align: center !important;
+        padding: 12px !important;
+    }
+    
+    /* Fee Structure Tables */
+    .fee-table {
+        min-width: 750px !important;
+    }
+    
+    /* Report Card */
+    .report-container {
+        padding: 15px !important;
+        margin: 10px !important;
+    }
+    
+    .report-container .signature {
+        flex-direction: column !important;
+        gap: 20px !important;
+        text-align: center !important;
+    }
+    
+    .report-container .signature div {
+        width: 100% !important;
+    }
+    
+    /* Attendance Actions */
+    .attendance-actions,
+    .btn-group[role="group"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 5px !important;
+    }
+    
+    /* Payment Items */
+    .payment-item {
+        flex-direction: column !important;
+        text-align: center !important;
+        gap: 8px !important;
+    }
+    
+    .payment-info {
+        align-items: center !important;
+    }
+    
+    /* Card Headers */
+    .card-header-custom {
+        flex-direction: column !important;
+        text-align: center !important;
+        gap: 8px !important;
+    }
+    
+    /* Bulk Attendance Modal */
+    #bulkStudentsList table {
+        min-width: 500px !important;
+    }
+    
+    /* Batch Marks Table */
+    #batchTableBody input,
+    #batchTableHeader th {
+        font-size: 11px !important;
+        padding: 5px !important;
+    }
+}
+
+/* ============================================
+   SMALL PHONES (up to 480px)
+   ============================================ */
+@media (max-width: 480px) {
+    .main-content {
+        padding: 60px 10px 15px 10px !important;
+    }
+    
+    .page-title {
+        font-size: 18px !important;
+    }
+    
+    .stat-card-inner {
+        flex-direction: column !important;
+        text-align: center !important;
+    }
+    
+    .stat-icon {
+        margin-bottom: 8px !important;
+    }
+    
+    .actions-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .welcome-btn {
+        width: 100% !important;
+    }
+    
+    .btn, 
+    .action-btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    
+    .badge {
+        font-size: 10px !important;
+        padding: 4px 8px !important;
+    }
+    
+    /* Table cell padding */
+    .data-table td,
+    .data-table th {
+        padding: 8px !important;
+        font-size: 11px !important;
+    }
+    
+    /* Modal body padding */
+    .modal-body {
+        padding: 15px !important;
+    }
+    
+    .form-control, 
+    .form-select {
+        font-size: 14px !important;
+        padding: 8px 10px !important;
+    }
+}
+
+/* ============================================
+   TABLETS (481px - 768px)
+   ============================================ */
+@media (min-width: 481px) and (max-width: 768px) {
+    .stats-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 15px !important;
+    }
+    
+    .dashboard-bottom {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 15px !important;
+    }
+    
+    .actions-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    .welcome-actions {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+    }
+    
+    .welcome-btn {
+        flex: 1 !important;
+        min-width: 120px !important;
+    }
+}
+
+/* ============================================
+   LANDSCAPE MODE FIX
+   ============================================ */
+@media (max-width: 900px) and (orientation: landscape) {
+    .sidebar {
+        width: 240px !important;
+    }
+    
+    .sidebar-header {
+        padding: 15px !important;
+    }
+    
+    .nav-item {
+        padding: 8px 15px !important;
+    }
+    
+    .level-badge {
+        flex-direction: row !important;
+    }
+    
+    .main-content {
+        margin-left: 0 !important;
+        padding-top: 20px !important;
+    }
+    
+    @media (max-width: 768px) {
+        .main-content {
+            margin-left: 0 !important;
+        }
+    }
+}
+
+/* ============================================
+   TOUCH FRIENDLY IMPROVEMENTS
+   ============================================ */
+@media (hover: none) and (pointer: coarse) {
+    button, 
+    .btn, 
+    .nav-item, 
+    .stat-card,
+    .level-badge-item,
+    .action-btn {
+        cursor: pointer;
+        min-height: 44px;
+    }
+    
+    /* Prevent zoom on iOS for inputs */
+    input, 
+    select, 
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* ============================================
+   PRINT STYLES (Keep your existing)
+   ============================================ */
+@media print {
+    .sidebar,
+    .top-bar,
+    .mobile-menu-toggle,
+    .mobile-overlay,
+    .btn-group,
+    .btn,
+    .no-print,
+    .level-badge,
+    .welcome-actions,
+    .action-buttons,
+    .filter-bar,
+    .settings-tabs {
+        display: none !important;
+    }
+    
+    .main-content {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    .report-container {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+    
+    .sidebar,
+    .app-container {
+        display: block !important;
+    }
+}
+
+/* ============================================
+   SMOOTH TRANSITIONS
+   ============================================ */
+.sidebar,
+.main-content,
+.stat-card,
+.btn,
+.welcome-btn,
+.action-btn,
+.modal-content {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* ============================================
+   FLEXIBLE GRID UTILITIES (Mobile friendly)
+   ============================================ */
+@media (max-width: 768px) {
+    .d-flex {
+        flex-direction: column !important;
+    }
+    
+    .flex-row {
+        flex-direction: row !important;
+    }
+    
+    .gap-2 {
+        gap: 8px !important;
+    }
+    
+    .text-start {
+        text-align: center !important;
+    }
+    
+    .justify-content-between {
+        justify-content: center !important;
+    }
+}

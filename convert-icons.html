@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA Icon Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #01605a, #ff862d);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .drop-zone {
+            border: 3px dashed #01605a;
+            border-radius: 20px;
+            padding: 50px;
+            margin: 20px 0;
+            cursor: pointer;
+        }
+        .drop-zone:hover {
+            background: #f0f0f0;
+        }
+        .preview {
+            max-width: 150px;
+            margin: 20px auto;
+            display: none;
+        }
+        button {
+            background: linear-gradient(135deg, #01605a, #ff862d);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .sizes {
+            margin: 20px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+        .size-badge {
+            background: #01605a;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <div class="container">
+        <h2><i class="fas fa-magic"></i> PWA Icon Converter</h2>
+        <p>Upload your image (PNG or JPG) to convert to PWA icons</p>
+        
+        <div class="drop-zone" id="dropZone">
+            <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: #01605a;"></i>
+            <p>Drag & drop your image here<br>or click to select</p>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+        </div>
+        
+        <div class="preview" id="preview">
+            <img id="previewImg" style="width: 100%; border-radius: 10px;">
+        </div>
+        
+        <div class="sizes" id="sizes">
+            <span class="size-badge">72x72</span>
+            <span class="size-badge">96x96</span>
+            <span class="size-badge">128x128</span>
+            <span class="size-badge">144x144</span>
+            <span class="size-badge">152x152</span>
+            <span class="size-badge">192x192</span>
+            <span class="size-badge">384x384</span>
+            <span class="size-badge">512x512</span>
+        </div>
+        
+        <button id="convertBtn" disabled>Generate PNG Icons</button>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('previewImg');
+        const convertBtn = document.getElementById('convertBtn');
+        let uploadedImage = null;
+        
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.background = '#e0e0e0';
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.style.background = '';
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.background = '';
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                handleImage(file);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                handleImage(e.target.files[0]);
+            }
+        });
+        
+        function handleImage(file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                uploadedImage = new Image();
+                uploadedImage.src = event.target.result;
+                uploadedImage.onload = () => {
+                    previewImg.src = event.target.result;
+                    preview.style.display = 'block';
+                    convertBtn.disabled = false;
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        convertBtn.addEventListener('click', async () => {
+            if (!uploadedImage) return;
+            
+            const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+            
+            Swal.fire({
+                title: 'Generating Icons...',
+                text: `Creating ${sizes.length} PNG icons`,
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+            
+            for (const size of sizes) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                
+                // Background color
+                ctx.fillStyle = '#01605a';
+                ctx.fillRect(0, 0, size, size);
+                
+                // Draw image centered
+                const scale = Math.min(size / uploadedImage.width, size / uploadedImage.height);
+                const x = (size - uploadedImage.width * scale) / 2;
+                const y = (size - uploadedImage.height * scale) / 2;
+                ctx.drawImage(uploadedImage, x, y, uploadedImage.width * scale, uploadedImage.height * scale);
+                
+                // Download
+                const link = document.createElement('a');
+                link.download = `icon-${size}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                
+                // Small delay between downloads
+                await new Promise(r => setTimeout(r, 300));
+            }
+            
+            Swal.close();
+            Swal.fire({
+                title: 'Success!',
+                html: 'All PNG icons have been downloaded.<br>Place them in an <strong>icons/</strong> folder.',
+                icon: 'success'
+            });
+        });
+    </script>
+</body>
+</html>
