@@ -1,7 +1,6 @@
 /* ============================================
-   ENHANCED RESPONSIVE CSS
-   Preserves ALL your original colors & design
-   Adds professional responsiveness
+   COMPLETE MOBILE OPTIMIZED CSS
+   Everything scales properly on phones
    ============================================ */
 
 /* ============================================
@@ -15,20 +14,16 @@
     z-index: 1001;
     background: linear-gradient(135deg, #01605a, #ff862d);
     border: none;
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     border-radius: 12px;
     color: white;
-    font-size: 22px;
+    font-size: 20px;
     cursor: pointer;
     align-items: center;
     justify-content: center;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     transition: all 0.3s ease;
-}
-
-.mobile-menu-toggle:active {
-    transform: scale(0.95);
 }
 
 .mobile-overlay {
@@ -41,7 +36,6 @@
     background: rgba(0,0,0,0.5);
     z-index: 999;
     backdrop-filter: blur(2px);
-    transition: all 0.3s ease;
 }
 
 .mobile-overlay.active {
@@ -49,11 +43,34 @@
 }
 
 /* ============================================
-   RESPONSIVE BREAKPOINTS
+   DASHBOARD CARDS - BEAUTIFUL GRADIENTS
    ============================================ */
-/* Mobile Devices (up to 768px) */
+.stat-card:nth-child(1) .stat-icon { background: linear-gradient(135deg, #01605a, #00b4a0) !important; }
+.stat-card:nth-child(2) .stat-icon { background: linear-gradient(135deg, #ff862d, #ff6b1a) !important; }
+.stat-card:nth-child(3) .stat-icon { background: linear-gradient(135deg, #4facfe, #00f2fe) !important; }
+.stat-card:nth-child(4) .stat-icon { background: linear-gradient(135deg, #43e97b, #38f9d7) !important; }
+.stat-card:nth-child(5) .stat-icon { background: linear-gradient(135deg, #fa709a, #fee140) !important; }
+.stat-card:nth-child(6) .stat-icon { background: linear-gradient(135deg, #ff6b6b, #ff8e53) !important; }
+.stat-card:nth-child(7) .stat-icon { background: linear-gradient(135deg, #11998e, #38ef7d) !important; }
+
+/* ============================================
+   BASE RESPONSIVE SETTINGS
+   ============================================ */
+html {
+    font-size: 16px;
+}
+
 @media (max-width: 768px) {
-    /* Sidebar - Slide Out Menu */
+    html {
+        font-size: 14px;
+    }
+}
+
+/* ============================================
+   MOBILE DEVICES (up to 768px)
+   ============================================ */
+@media (max-width: 768px) {
+    /* Sidebar */
     .sidebar {
         position: fixed !important;
         left: -280px !important;
@@ -61,9 +78,8 @@
         height: 100vh !important;
         width: 280px !important;
         z-index: 1000 !important;
-        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transition: left 0.3s ease !important;
         overflow-y: auto !important;
-        box-shadow: none !important;
     }
     
     .sidebar.mobile-open {
@@ -71,94 +87,153 @@
         box-shadow: 5px 0 25px rgba(0,0,0,0.15) !important;
     }
     
-    /* Show mobile menu button */
     .mobile-menu-toggle {
         display: flex !important;
     }
     
-    /* Main Content Adjustment */
+    /* Main Content */
     .main-content {
         margin-left: 0 !important;
-        padding: 70px 15px 20px 15px !important;
+        padding: 60px 12px 20px 12px !important;
         width: 100% !important;
-        transition: all 0.3s ease !important;
     }
     
-    /* Top Bar - Add spacing for mobile menu */
+    /* Top Bar */
     .top-bar {
-        margin-top: 5px !important;
         flex-direction: column !important;
         text-align: center !important;
-        gap: 12px !important;
-        padding: 15px !important;
+        gap: 10px !important;
+        padding: 12px !important;
+        margin-top: 0 !important;
     }
     
     .page-title {
-        font-size: 20px !important;
+        font-size: 18px !important;
+        margin: 0 !important;
     }
     
     .user-info {
         justify-content: center !important;
         flex-wrap: wrap !important;
+        gap: 8px !important;
     }
     
-    /* Level Badge - Stack vertically */
+    /* Level Badge */
     .level-badge {
-        flex-direction: column !important;
-        gap: 8px !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 10px !important;
         margin: 10px !important;
     }
     
     .level-badge-item {
-        width: 100% !important;
-        text-align: center !important;
-        padding: 10px !important;
+        flex: 0 1 auto !important;
+        padding: 6px 16px !important;
+        font-size: 12px !important;
     }
     
-    /* Stats Cards - Stack vertically */
+    /* ============================================ */
+    /* STATISTICS CARDS - PROPERLY SIZED */
+    /* ============================================ */
     .stats-grid {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 15px !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+        margin-bottom: 20px !important;
     }
     
     .stat-card {
-        width: 100% !important;
-        margin-bottom: 0 !important;
+        padding: 12px !important;
+        margin: 0 !important;
     }
     
     .stat-card-inner {
-        flex-direction: row !important;
-        text-align: left !important;
+        flex-direction: column !important;
+        text-align: center !important;
+        gap: 8px !important;
     }
     
-    /* Welcome Section - Stack on mobile */
+    .stat-icon {
+        width: 45px !important;
+        height: 45px !important;
+        margin: 0 auto !important;
+    }
+    
+    .stat-icon i {
+        font-size: 20px !important;
+    }
+    
+    .stat-value {
+        font-size: 20px !important;
+        margin: 0 !important;
+    }
+    
+    .stat-label {
+        font-size: 11px !important;
+        margin: 0 !important;
+    }
+    
+    .stat-extra {
+        font-size: 9px !important;
+    }
+    
+    /* ============================================ */
+    /* WELCOME SECTION */
+    /* ============================================ */
     .welcome-section {
         flex-direction: column !important;
         text-align: center !important;
-        padding: 20px !important;
-        gap: 15px !important;
+        padding: 16px !important;
+        gap: 12px !important;
+        margin-bottom: 20px !important;
     }
     
     .welcome-avatar {
+        width: 50px !important;
+        height: 50px !important;
         margin: 0 auto !important;
+    }
+    
+    .welcome-avatar i {
+        font-size: 24px !important;
+    }
+    
+    .welcome-info h2 {
+        font-size: 18px !important;
+        margin-bottom: 6px !important;
+    }
+    
+    .welcome-badges {
+        justify-content: center !important;
+    }
+    
+    .role-badge, .level-badge {
+        font-size: 10px !important;
+        padding: 3px 10px !important;
     }
     
     .welcome-actions {
         justify-content: center !important;
-        width: 100% !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
     }
     
     .welcome-btn {
-        flex: 1 !important;
-        justify-content: center !important;
+        padding: 6px 14px !important;
+        font-size: 12px !important;
     }
     
-    /* Dashboard Bottom Section - Stack */
+    .welcome-btn i {
+        font-size: 11px !important;
+    }
+    
+    /* ============================================ */
+    /* DASHBOARD BOTTOM SECTION */
+    /* ============================================ */
     .dashboard-bottom {
-        display: flex !important;
         flex-direction: column !important;
-        gap: 20px !important;
+        gap: 16px !important;
     }
     
     .recent-payments-card,
@@ -166,69 +241,224 @@
         width: 100% !important;
     }
     
-    /* Actions Grid - 2 columns on tablet, 1 on mobile */
+    .card-header-custom {
+        padding: 10px 12px !important;
+    }
+    
+    .card-header-custom h3 {
+        font-size: 14px !important;
+    }
+    
+    .card-header-custom i {
+        font-size: 14px !important;
+    }
+    
+    /* Actions Grid */
     .actions-grid {
         display: grid !important;
         grid-template-columns: repeat(2, 1fr) !important;
-        gap: 10px !important;
+        gap: 8px !important;
+        padding: 12px !important;
     }
     
-    /* Tables - Horizontal scroll */
+    .action-btn {
+        padding: 8px 10px !important;
+        font-size: 11px !important;
+        justify-content: center !important;
+    }
+    
+    .action-btn i {
+        font-size: 12px !important;
+    }
+    
+    /* Payment Items */
+    .payment-item {
+        padding: 8px 12px !important;
+    }
+    
+    .payment-date {
+        font-size: 10px !important;
+    }
+    
+    .payment-student {
+        font-size: 12px !important;
+    }
+    
+    .payment-amount {
+        font-size: 12px !important;
+    }
+    
+    /* ============================================ */
+    /* ALL BUTTONS - NORMAL SIZE, NOT FULL WIDTH */
+    /* ============================================ */
+    .btn, 
+    button:not(.mobile-menu-toggle):not(.action-btn):not(.welcome-btn) {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        padding: 6px 14px !important;
+        font-size: 12px !important;
+        border-radius: 6px !important;
+        width: auto !important;
+        white-space: nowrap !important;
+    }
+    
+    .btn i {
+        font-size: 11px !important;
+    }
+    
+    .btn-sm {
+        padding: 4px 10px !important;
+        font-size: 11px !important;
+    }
+    
+    /* Button Groups - Horizontal wrap */
+    .btn-group {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+    
+    .btn-group .btn {
+        width: auto !important;
+        flex: 0 0 auto !important;
+    }
+    
+    /* Table action buttons */
+    .btn-group.btn-group-sm {
+        display: inline-flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+    }
+    
+    .btn-group.btn-group-sm .btn {
+        padding: 3px 8px !important;
+        font-size: 10px !important;
+    }
+    
+    /* ============================================ */
+    /* TABLES */
+    /* ============================================ */
     .table-responsive {
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important;
-        margin-bottom: 15px !important;
     }
     
-    .data-table {
-        overflow-x: auto !important;
+    .data-table th,
+    .data-table td {
+        padding: 8px 10px !important;
+        font-size: 11px !important;
     }
     
-    table {
-        min-width: 650px !important;
+    /* ============================================ */
+    /* FORMS */
+    /* ============================================ */
+    .form-card {
+        padding: 15px !important;
     }
     
-    /* Forms - Stack inputs */
     .row {
-        display: flex !important;
         flex-direction: column !important;
     }
     
     .row > [class*="col-"] {
         width: 100% !important;
         margin-bottom: 12px !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        padding: 0 !important;
     }
     
-    /* Form Cards */
-    .form-card {
-        padding: 18px !important;
+    .form-label {
+        font-size: 12px !important;
+        margin-bottom: 4px !important;
     }
     
-    /* Buttons Group - Stack vertically */
-    .btn-group {
-        display: flex !important;
-        flex-direction: column !important;
-        width: 100% !important;
+    .form-control,
+    .form-select {
+        padding: 8px 12px !important;
+        font-size: 13px !important;
+        height: auto !important;
+    }
+    
+    /* ============================================ */
+    /* MODAL */
+    /* ============================================ */
+    .modal-dialog {
+        margin: 10px !important;
+        max-width: calc(100% - 20px) !important;
+    }
+    
+    .modal-header {
+        padding: 12px 15px !important;
+    }
+    
+    .modal-header h5 {
+        font-size: 16px !important;
+    }
+    
+    .modal-body {
+        padding: 15px !important;
+        max-height: 60vh !important;
+        overflow-y: auto !important;
+    }
+    
+    .modal-footer {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: flex-end !important;
         gap: 8px !important;
+        padding: 12px 15px !important;
     }
     
-    .btn-group .btn,
-    .btn-group .ms-2 {
-        margin-left: 0 !important;
-        width: 100% !important;
+    .modal-footer .btn {
+        width: auto !important;
     }
     
-    /* Action Buttons in Tables */
-    .btn-group.btn-group-sm {
+    /* ============================================ */
+    /* SETTINGS TABS */
+    /* ============================================ */
+    .settings-tabs {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+    
+    .settings-tab {
+        flex: 0 1 auto !important;
+        padding: 8px 16px !important;
+        font-size: 12px !important;
+    }
+    
+    /* ============================================ */
+    /* ATTENDANCE PAGE */
+    /* ============================================ */
+    .attendance-actions,
+    .btn-group[role="group"] {
         display: inline-flex !important;
         flex-direction: row !important;
         flex-wrap: wrap !important;
-        gap: 5px !important;
+        gap: 4px !important;
     }
     
-    /* Filter Section - Stack */
+    /* ============================================ */
+    /* MARKS PAGE */
+    /* ============================================ */
+    #batchTableBody input {
+        width: 60px !important;
+        font-size: 11px !important;
+        padding: 4px !important;
+    }
+    
+    #batchTableHeader th {
+        font-size: 10px !important;
+        padding: 6px 4px !important;
+    }
+    
+    /* ============================================ */
+    /* FILTERS */
+    /* ============================================ */
     .filter-bar .row,
     .card-body .row {
         flex-direction: column !important;
@@ -239,7 +469,7 @@
         margin-bottom: 10px !important;
     }
     
-    /* Search inputs - Full width */
+    /* Search inputs */
     #paymentSearchInput,
     #filterPaymentClass,
     #filterPaymentTerm,
@@ -251,100 +481,6 @@
     #markExamFilter,
     #markYearFilter {
         width: 100% !important;
-        margin-bottom: 8px !important;
-    }
-    
-    /* Modal - Full width on mobile */
-    .modal-dialog {
-        margin: 10px !important;
-        max-width: calc(100% - 20px) !important;
-    }
-    
-    .modal-body {
-        max-height: 60vh !important;
-        overflow-y: auto !important;
-    }
-    
-    .modal-footer {
-        flex-direction: column !important;
-        gap: 8px !important;
-    }
-    
-    .modal-footer .btn {
-        width: 100% !important;
-        margin: 0 !important;
-    }
-    
-    /* Settings Tabs - Stack */
-    .settings-tabs {
-        flex-direction: column !important;
-        gap: 5px !important;
-    }
-    
-    .settings-tab {
-        width: 100% !important;
-        text-align: center !important;
-        padding: 12px !important;
-    }
-    
-    /* Fee Structure Tables */
-    .fee-table {
-        min-width: 750px !important;
-    }
-    
-    /* Report Card */
-    .report-container {
-        padding: 15px !important;
-        margin: 10px !important;
-    }
-    
-    .report-container .signature {
-        flex-direction: column !important;
-        gap: 20px !important;
-        text-align: center !important;
-    }
-    
-    .report-container .signature div {
-        width: 100% !important;
-    }
-    
-    /* Attendance Actions */
-    .attendance-actions,
-    .btn-group[role="group"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: wrap !important;
-        gap: 5px !important;
-    }
-    
-    /* Payment Items */
-    .payment-item {
-        flex-direction: column !important;
-        text-align: center !important;
-        gap: 8px !important;
-    }
-    
-    .payment-info {
-        align-items: center !important;
-    }
-    
-    /* Card Headers */
-    .card-header-custom {
-        flex-direction: column !important;
-        text-align: center !important;
-        gap: 8px !important;
-    }
-    
-    /* Bulk Attendance Modal */
-    #bulkStudentsList table {
-        min-width: 500px !important;
-    }
-    
-    /* Batch Marks Table */
-    #batchTableBody input,
-    #batchTableHeader th {
-        font-size: 11px !important;
-        padding: 5px !important;
     }
 }
 
@@ -353,20 +489,30 @@
    ============================================ */
 @media (max-width: 480px) {
     .main-content {
-        padding: 60px 10px 15px 10px !important;
+        padding: 55px 8px 15px 8px !important;
     }
     
-    .page-title {
-        font-size: 18px !important;
+    /* Stats cards - single column on very small phones */
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
     }
     
-    .stat-card-inner {
-        flex-direction: column !important;
-        text-align: center !important;
+    .stat-card {
+        padding: 10px !important;
     }
     
     .stat-icon {
-        margin-bottom: 8px !important;
+        width: 40px !important;
+        height: 40px !important;
+    }
+    
+    .stat-icon i {
+        font-size: 18px !important;
+    }
+    
+    .stat-value {
+        font-size: 18px !important;
     }
     
     .actions-grid {
@@ -374,36 +520,36 @@
     }
     
     .welcome-btn {
-        width: 100% !important;
+        flex: 1 !important;
     }
     
-    .btn, 
-    .action-btn {
-        width: 100% !important;
-        justify-content: center !important;
-    }
-    
-    .badge {
-        font-size: 10px !important;
-        padding: 4px 8px !important;
-    }
-    
-    /* Table cell padding */
-    .data-table td,
-    .data-table th {
-        padding: 8px !important;
+    .btn {
+        padding: 5px 12px !important;
         font-size: 11px !important;
     }
     
-    /* Modal body padding */
-    .modal-body {
-        padding: 15px !important;
+    .btn-sm {
+        padding: 3px 8px !important;
+        font-size: 10px !important;
     }
     
-    .form-control, 
-    .form-select {
-        font-size: 14px !important;
-        padding: 8px 10px !important;
+    .modal-footer {
+        flex-direction: column !important;
+    }
+    
+    .modal-footer .btn {
+        width: 100% !important;
+    }
+    
+    .settings-tab {
+        padding: 6px 12px !important;
+        font-size: 11px !important;
+    }
+    
+    .data-table th,
+    .data-table td {
+        padding: 6px 8px !important;
+        font-size: 10px !important;
     }
 }
 
@@ -412,35 +558,16 @@
    ============================================ */
 @media (min-width: 481px) and (max-width: 768px) {
     .stats-grid {
-        display: grid !important;
         grid-template-columns: repeat(2, 1fr) !important;
-        gap: 15px !important;
-    }
-    
-    .dashboard-bottom {
-        display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 15px !important;
     }
     
     .actions-grid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
-    
-    .welcome-actions {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 10px !important;
-    }
-    
-    .welcome-btn {
-        flex: 1 !important;
-        min-width: 120px !important;
-    }
 }
 
 /* ============================================
-   LANDSCAPE MODE FIX
+   LANDSCAPE MODE
    ============================================ */
 @media (max-width: 900px) and (orientation: landscape) {
     .sidebar {
@@ -448,31 +575,24 @@
     }
     
     .sidebar-header {
-        padding: 15px !important;
+        padding: 12px !important;
     }
     
     .nav-item {
         padding: 8px 15px !important;
     }
     
-    .level-badge {
-        flex-direction: row !important;
+    .stats-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
     }
     
     .main-content {
-        margin-left: 0 !important;
         padding-top: 20px !important;
-    }
-    
-    @media (max-width: 768px) {
-        .main-content {
-            margin-left: 0 !important;
-        }
     }
 }
 
 /* ============================================
-   TOUCH FRIENDLY IMPROVEMENTS
+   TOUCH FRIENDLY
    ============================================ */
 @media (hover: none) and (pointer: coarse) {
     button, 
@@ -482,19 +602,16 @@
     .level-badge-item,
     .action-btn {
         cursor: pointer;
-        min-height: 44px;
+        min-height: 40px;
     }
     
-    /* Prevent zoom on iOS for inputs */
-    input, 
-    select, 
-    textarea {
+    input, select, textarea {
         font-size: 16px !important;
     }
 }
 
 /* ============================================
-   PRINT STYLES (Keep your existing)
+   PRINT STYLES
    ============================================ */
 @media print {
     .sidebar,
@@ -516,52 +633,337 @@
         margin: 0 !important;
         padding: 0 !important;
     }
-    
-    .report-container {
-        box-shadow: none !important;
-        border: 1px solid #ddd !important;
-    }
-    
-    .sidebar,
-    .app-container {
-        display: block !important;
-    }
 }
 
 /* ============================================
-   SMOOTH TRANSITIONS
+   TRANSITIONS
    ============================================ */
 .sidebar,
 .main-content,
 .stat-card,
 .btn,
 .welcome-btn,
-.action-btn,
-.modal-content {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+.action-btn {
+    transition: all 0.3s ease !important;
+}
+
+
+/* ============================================
+   ATTENDANCE STATISTICS CARDS - MOBILE FIX
+   ============================================ */
+
+/* Default styles for attendance cards */
+.attendance-stats,
+.row.mb-3 .col-md-3 {
+    transition: all 0.3s ease;
+}
+
+/* Mobile Devices (up to 768px) */
+@media (max-width: 768px) {
+    /* Attendance Statistics Cards Row */
+    .row.mb-3 {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+        margin-bottom: 20px !important;
+    }
+    
+    /* Each attendance card */
+    .row.mb-3 .col-md-3 {
+        width: 100% !important;
+        padding: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    
+    .row.mb-3 .card {
+        border-radius: 12px !important;
+        overflow: hidden !important;
+    }
+    
+    .row.mb-3 .card-body {
+        padding: 12px 8px !important;
+    }
+    
+    .row.mb-3 .card-body h3 {
+        font-size: 22px !important;
+        margin-bottom: 4px !important;
+    }
+    
+    .row.mb-3 .card-body p {
+        font-size: 11px !important;
+        margin-bottom: 2px !important;
+    }
+    
+    .row.mb-3 .card-body small {
+        font-size: 9px !important;
+    }
+    
+    /* Present Card (Green) */
+    .row.mb-3 .bg-success {
+        background: linear-gradient(135deg, #28a745, #20c997) !important;
+    }
+    
+    /* Absent Card (Red) */
+    .row.mb-3 .bg-danger {
+        background: linear-gradient(135deg, #dc3545, #e4606d) !important;
+    }
+    
+    /* Late Card (Yellow) */
+    .row.mb-3 .bg-warning {
+        background: linear-gradient(135deg, #ffc107, #ffda6a) !important;
+    }
+    
+    /* Excused Card (Info) */
+    .row.mb-3 .bg-info {
+        background: linear-gradient(135deg, #17a2b8, #48c7df) !important;
+    }
+}
+
+/* Small Phones (up to 480px) */
+@media (max-width: 480px) {
+    .row.mb-3 {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+    }
+    
+    .row.mb-3 .card-body {
+        padding: 10px 6px !important;
+    }
+    
+    .row.mb-3 .card-body h3 {
+        font-size: 18px !important;
+    }
+    
+    .row.mb-3 .card-body p {
+        font-size: 10px !important;
+    }
+    
+    .row.mb-3 .card-body small {
+        font-size: 8px !important;
+    }
 }
 
 /* ============================================
-   FLEXIBLE GRID UTILITIES (Mobile friendly)
+   ALSO FIX DASHBOARD STATS CARDS
    ============================================ */
 @media (max-width: 768px) {
-    .d-flex {
+    /* Dashboard Statistics Cards */
+    .stats-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .stat-card {
+        padding: 12px !important;
+    }
+    
+    .stat-card-inner {
         flex-direction: column !important;
-    }
-    
-    .flex-row {
-        flex-direction: row !important;
-    }
-    
-    .gap-2 {
+        text-align: center !important;
         gap: 8px !important;
     }
     
-    .text-start {
-        text-align: center !important;
+    .stat-icon {
+        width: 45px !important;
+        height: 45px !important;
+        margin: 0 auto !important;
     }
     
-    .justify-content-between {
-        justify-content: center !important;
+    .stat-icon i {
+        font-size: 20px !important;
+    }
+    
+    .stat-value {
+        font-size: 20px !important;
+    }
+    
+    .stat-label {
+        font-size: 11px !important;
+    }
+    
+    .stat-extra {
+        font-size: 9px !important;
     }
 }
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+    
+    .stat-card {
+        padding: 10px !important;
+    }
+    
+    .stat-icon {
+        width: 40px !important;
+        height: 40px !important;
+    }
+    
+    .stat-icon i {
+        font-size: 18px !important;
+    }
+    
+    .stat-value {
+        font-size: 18px !important;
+    }
+}
+
+
+/* ============================================
+   PAYMENTS MODULE BUTTONS - 2 PER ROW ON MOBILE
+   ============================================ */
+
+/* Payment action buttons container */
+.payment-buttons,
+.card-body .btn-group,
+.card-body .row.g-2 .col-md-12 {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+}
+
+/* All buttons in payments module */
+.payment-buttons .btn,
+.card-body .btn-group .btn,
+.card-body .row.g-2 .col-md-12 .btn {
+    flex: 0 0 calc(50% - 10px) !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    justify-content: center !important;
+}
+
+/* For tablet and desktop, keep original size */
+@media (min-width: 769px) {
+    .payment-buttons .btn,
+    .card-body .btn-group .btn,
+    .card-body .row.g-2 .col-md-12 .btn {
+        flex: 0 0 auto !important;
+        width: auto !important;
+    }
+}
+
+/* ============================================
+   COMPLETE PAYMENTS MODULE BUTTON ARRANGEMENT
+   ============================================ */
+@media (max-width: 768px) {
+    /* Target all button containers in payments */
+    .card-body .row.g-2,
+    .card-body .btn-group {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+    }
+    
+    /* Make buttons 2 per row */
+    .card-body .btn,
+    .card-body .btn-group .btn,
+    .card-body button:not(.mobile-menu-toggle) {
+        flex: 0 0 calc(50% - 10px) !important;
+        width: auto !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        text-align: center !important;
+        justify-content: center !important;
+        white-space: normal !important;
+        line-height: 1.3 !important;
+        padding: 8px 12px !important;
+    }
+    
+    /* Filter buttons section */
+    .card-body .row.g-2 .col-md-2 .btn,
+    .card-body .row.g-2 .col-md-3 .btn,
+    .card-body .row.g-2 .col-md-4 .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+    
+    /* Search input - full width */
+    .card-body #paymentSearchInput,
+    .card-body #filterPaymentClass,
+    .card-body #filterPaymentTerm,
+    .card-body #filterPaymentYear,
+    .card-body #filterPaymentMethod {
+        width: 100% !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* Filter row - stack vertically */
+    .card-body .row.g-2 .col-md-4,
+    .card-body .row.g-2 .col-md-3,
+    .card-body .row.g-2 .col-md-2 {
+        width: 100% !important;
+        margin-bottom: 10px !important;
+    }
+}
+
+/* ============================================
+   ALSO FIX OTHER MODULES BUTTONS
+   ============================================ */
+@media (max-width: 768px) {
+    /* Students Module Buttons */
+    .students-buttons .btn,
+    #studentsModule .card-body .btn-group .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+    
+    /* Marks Module Buttons */
+    .marks-buttons .btn,
+    #marksModule .card-body .btn-group .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+    
+    /* Attendance Module Buttons */
+    .attendance-buttons .btn,
+    #attendanceModule .card-body .btn-group .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+    
+    /* Library Module Buttons */
+    .library-buttons .btn,
+    #libraryModule .card-body .btn-group .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+    
+    /* Settings Module Buttons */
+    .settings-buttons .btn,
+    #settingsModule .card-body .btn-group .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+    
+    /* Bulk Upload Buttons */
+    .bulk-upload-buttons .btn {
+        flex: 0 0 calc(50% - 10px) !important;
+    }
+}
+
+/* ============================================
+   VERY SMALL PHONES (up to 480px)
+   ============================================ */
+@media (max-width: 480px) {
+    .card-body .btn,
+    .card-body .btn-group .btn {
+        flex: 0 0 calc(50% - 8px) !important;
+        padding: 7px 10px !important;
+        font-size: 11px !important;
+    }
+    
+    .card-body .btn i {
+        font-size: 11px !important;
+    }
+}
+
+/* ============================================
+   TABLET VIEW (481px - 768px)
+   ============================================ */
+@media (min-width: 481px) and (max-width: 768px) {
+    .card-body .btn,
+    .card-body .btn-group .btn {
+        flex: 0 0 calc(33.33% - 10px) !important;
+    }
+}
+
