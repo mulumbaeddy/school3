@@ -6,7 +6,37 @@ let currentUser = null;
 let currentUserRole = null;
 let currentLevel = 'olevel';
 let currentPage = 'dashboard';
+// ============================================
+// AUTO-REFRESH SESSION TOKEN
+// Prevents JWT expired errors
+// ============================================
 
+function startAutoRefresh() {
+    // Refresh token every 50 minutes (before 1 hour expiry)
+    setInterval(async () => {
+        if (sb && sb.auth) {
+            try {
+                const { data, error } = await sb.auth.refreshSession();
+                if (error) {
+                    console.log("Session refresh failed:", error.message);
+                    // Optional: Show warning to user
+                    if (error.message.includes("Invalid Refresh Token")) {
+                        console.log("Please login again");
+                        localStorage.clear();
+                        location.reload();
+                    }
+                } else {
+                    console.log("✅ Session token refreshed at:", new Date().toLocaleTimeString());
+                }
+            } catch (err) {
+                console.error("Refresh error:", err);
+            }
+        }
+    }, 50 * 60 * 1000); // 50 minutes
+}
+
+// Call this after Supabase is initialized
+startAutoRefresh();
 // Global data stores
 let students = [];
 let teachers = [];
@@ -1397,13 +1427,69 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function generateAdmissionNo() {
-    const year = new Date().getFullYear();
-    const prefix = currentLevel === 'olevel' ? 'O' : 'A';
-    const count = students.length + 1;
-    return `${prefix}/${year}/${String(count).padStart(4, '0')}`;
+// ============================================
+// REPLACE THIS ENTIRE FUNCTION
+// ============================================
+
+// OLD CODE - DELETE THIS:
+// function generateAdmissionNo() {
+//     const year = new Date().getFullYear();
+//     const prefix = currentLevel === 'olevel' ? 'O' : 'A';
+//     const count = students.length + 1;
+//     return `${prefix}/${year}/${String(count).padStart(4, '0')}`;
+// }
+
+// NEW CODE - PASTE THIS:
+let admissionNumberCache = new Set();
+
+function generateRandomChars(length) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
 }
 
+async function checkAdmissionNumberExists(admissionNo) {
+    try {
+        const { data, error } = await sb
+            .from('students')
+            .select('id')
+            .eq('admission_no', admissionNo)
+            .maybeSingle();
+        
+        if (error) throw error;
+        return data !== null;
+    } catch (error) {
+        console.error('Error checking admission number:', error);
+        return false;
+    }
+}
+
+async function generateAdmissionNo() {
+    const year = new Date().getFullYear();
+    const prefix = currentLevel === 'olevel' ? 'O' : 'A';
+    
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const part1 = generateRandomChars(4);
+        const part2 = generateRandomChars(4);
+        const uniqueCode = `${part1}-${part2}`;
+        const admissionNo = `${prefix}/${year}/${uniqueCode}`;
+        
+        if (admissionNumberCache.has(admissionNo)) continue;
+        
+        const exists = await checkAdmissionNumberExists(admissionNo);
+        
+        if (!exists) {
+            admissionNumberCache.add(admissionNo);
+            return admissionNo;
+        }
+    }
+    
+    const fallback = Date.now().toString(36).toUpperCase();
+    return `${prefix}/${year}/${fallback.slice(0, 4)}-${fallback.slice(4, 8)}`;
+}
 // ============================================
 // DATABASE FUNCTIONS
 // ============================================
@@ -1426,8 +1512,42 @@ async function getStudents() {
     }
 }
 
+// ============================================
+// REPLACE THIS ENTIRE FUNCTION
+// ============================================
+
+// OLD CODE - DELETE THIS:
+// async function addStudent(studentData) {
+//     const { data, error } = await sb.from('students').insert([studentData]).select();
+//     if (error) throw error;
+//     return data[0];
+// }
+
+// NEW CODE - PASTE THIS:
 async function addStudent(studentData) {
-    const { data, error } = await sb.from('students').insert([studentData]).select();
+    const uniqueAdmissionNo = await generateAdmissionNo();
+    studentData.admission_no = uniqueAdmissionNo;
+    
+    const { data, error } = await sb
+        .from('students')
+        .insert([{
+            name: studentData.name,
+            admission_no: studentData.admission_no,
+            class: studentData.class,
+            stream: studentData.stream,
+            gender: studentData.gender,
+            house_id: studentData.house_id || null,
+            student_type: studentData.student_type,
+            parent_name: studentData.parent_name,
+            parent_phone: studentData.parent_phone,
+            parent_email: studentData.parent_email,
+            address: studentData.address,
+            level: studentData.level,
+            combination: studentData.combination || null,
+            created_at: new Date().toISOString()
+        }])
+        .select();
+    
     if (error) throw error;
     return data[0];
 }
@@ -1456,13 +1576,22 @@ async function renderStudents() {
                     <button class="btn btn-sm btn-primary" onclick="showAddStudentModal()"><i class="fas fa-plus"></i> Add</button>
                     <button class="btn btn-sm btn-info" onclick="showBulkUploadModal()"><i class="fas fa-upload"></i> Bulk CSV</button>
                     <button class="btn btn-sm btn-success" onclick="exportStudents()"><i class="fas fa-download"></i> Excel</button>
-                    <button class="btn btn-sm btn-info" onclick="printAllStudents()"><i class="fas fa-print"></i> Print All</button>
-                    <button class="btn btn-sm btn-warning" onclick="printStudentsByClass()"><i class="fas fa-print"></i> Print by Class</button>
+<button class="btn btn-sm btn-info" onclick="printFilteredStudents()"><i class="fas fa-print"></i> Print Filtered</button>                    <button class="btn btn-sm btn-warning" onclick="printStudentsByClass()"><i class="fas fa-print"></i> Print by Class</button>
                     <button class="btn btn-sm btn-secondary" onclick="printStudentIdCards()"><i class="fas fa-id-card"></i> ID Cards</button>
                     <button class="btn btn-sm btn-danger" onclick="bulkDeleteStudents()"><i class="fas fa-trash"></i> Bulk Delete</button>
                     <button class="btn btn-sm btn-dark" onclick="refreshStudents()"><i class="fas fa-sync-alt"></i></button>
                 </div>
-                <input type="text" id="studentSearch" class="form-control form-control-sm" placeholder="🔍 Search by name, admission..." onkeyup="filterStudents()">
+                <input type="text" id="studentSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Search by name, admission..." onkeyup="filterStudents()">
+                
+                <!-- House Filter -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <select id="houseFilter" class="form-select form-select-sm" onchange="filterStudents()">
+                            <option value="">🏠 All Houses</option>
+                            ${housesList.map(house => `<option value="${house.id}">${escapeHtml(house.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="card shadow-sm">
@@ -1478,6 +1607,7 @@ async function renderStudents() {
                                 <th>Stream</th>
                                 <th>Gender</th>
                                 <th>Type</th>
+                                <th>🏠 House</th>
                                 ${currentLevel === 'alevel' ? '<th>Combo</th>' : ''}
                                 <th>Parent</th>
                                 <th>Phone</th>
@@ -1491,20 +1621,35 @@ async function renderStudents() {
         </div>
     `;
 }
-
 async function loadStudentsTable() {
     await getStudents();
     const tbody = document.getElementById('studentsTableBody');
     if (!tbody) return;
     
+    // Load houses for display
+    const { data: houses } = await sb.from('houses').select('id, name, color');
+    const housesMap = {};
+    if (houses) {
+        houses.forEach(house => {
+            housesMap[house.id] = house;
+        });
+    }
+    
     if (!students.length) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-3">No students found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-3">No students found</span>络';
         return;
     }
     
     let html = '';
     for (const s of students) {
         const typeBadge = s.student_type === 'Boarding' ? 'bg-info' : 'bg-success';
+        
+        // Get house info
+        const house = housesMap[s.house_id];
+        const houseHtml = house ? 
+            `<span class="badge" style="background: ${house.color}">🏠 ${escapeHtml(house.name)}</span>` : 
+            '<span class="text-muted">-</span>';
+        
         html += `
             <tr>
                 <td class="text-center"><input type="checkbox" class="studentCheck" data-id="${s.id}"></td>
@@ -1513,7 +1658,8 @@ async function loadStudentsTable() {
                 <td>${s.class || '-'}</td>
                 <td>${s.stream || '-'}</td>
                 <td>${s.gender || '-'}</td>
-                <td><span class="badge ${typeBadge}">${s.student_type || 'Day'}</span></td>
+                <td class="text-center"><span class="badge ${typeBadge}">${s.student_type || 'Day'}</span></td>
+                <td class="text-center">${houseHtml}</span></td>
                 ${currentLevel === 'alevel' ? `<td>${s.combination || '-'}</td>` : ''}
                 <td><small>${escapeHtml(s.parent_name || '-')}</small></td>
                 <td>${s.parent_phone || '-'}</td>
@@ -1521,7 +1667,7 @@ async function loadStudentsTable() {
                     <button class="btn btn-sm btn-warning py-0 px-1" onclick="editStudent('${s.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-sm btn-danger py-0 px-1" onclick="deleteStudentItem('${s.id}')"><i class="fas fa-trash"></i></button>
                     <button class="btn btn-sm btn-info py-0 px-1" onclick="viewStudent('${s.id}')"><i class="fas fa-eye"></i></button>
-                </td>
+                 </span></td>
             </tr>
         `;
     }
@@ -1534,12 +1680,22 @@ async function loadStudentsTable() {
         };
     }
 }
-
 window.filterStudents = function() {
     const search = document.getElementById('studentSearch')?.value.toLowerCase() || '';
+    const houseFilter = document.getElementById('houseFilter')?.value;
     const rows = document.querySelectorAll('#studentsTableBody tr');
+    
     rows.forEach(row => {
-        row.style.display = !search || row.innerText.toLowerCase().includes(search) ? '' : 'none';
+        if (row.cells && row.cells.length > 1) {
+            const text = row.innerText.toLowerCase();
+            const houseCell = row.cells[7]?.innerText || '';
+            
+            let show = true;
+            if (search && !text.includes(search)) show = false;
+            if (houseFilter && !houseCell.includes(houseFilter)) show = false;
+            
+            row.style.display = show ? '' : 'none';
+        }
     });
 };
 
@@ -1553,67 +1709,110 @@ window.refreshStudents = async function() {
 // ADD STUDENT MODAL
 // ============================================
 
-window.showAddStudentModal = function() {
+window.showAddStudentModal = async function() {
     const isAlevel = currentLevel === 'alevel';
     const availableClasses = isAlevel ? alevelClasses : olevelClasses;
     const availableStreams = isAlevel ? alevelStreams : olevelStreams;
+    
+    // Load houses from database
+    const { data: houses, error: housesError } = await sb
+        .from('houses')
+        .select('id, name, color')
+        .order('name', { ascending: true });
+    
+    if (housesError) {
+        console.error('Error loading houses:', housesError);
+    }
+    
+    const housesList = houses || [];
+    
+    // Generate house options HTML with color styling
+    const houseOptionsHtml = housesList.map(house => `
+        <option value="${house.id}" style="color: ${house.color}; font-weight: 500;">
+            🏠 ${escapeHtml(house.name)}
+        </option>
+    `).join('');
     
     Swal.fire({
         title: `Add ${isAlevel ? 'A-Level' : 'O-Level'} Student`,
         html: `
             <div class="row g-2">
                 <div class="col-12 mb-2">
+                    <label class="form-label fw-bold">Full Name *</label>
                     <input type="text" id="addName" class="form-control" placeholder="Full Name *">
                 </div>
                 <div class="col-6">
-                    <input type="text" id="addAdm" class="form-control" placeholder="Admission No (auto)">
+                    <label class="form-label fw-bold">Admission No</label>
+                    <input type="text" id="addAdm" class="form-control" placeholder="Admission No (auto)" readonly>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Class *</label>
                     <select id="addClass" class="form-select">
-                        <option value="">Select Class *</option>
+                        <option value="">-- Select Class --</option>
                         ${availableClasses.map(c => `<option value="${c}">${c}</option>`).join('')}
                     </select>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Stream</label>
                     <select id="addStream" class="form-select">
-                        <option value="">Stream</option>
+                        <option value="">-- Select Stream --</option>
                         ${availableStreams.map(s => `<option value="${s}">${s}</option>`).join('')}
                     </select>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Gender</label>
                     <select id="addGender" class="form-select">
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                     </select>
                 </div>
+                <div class="col-6">
+                    <label class="form-label fw-bold">🏠 House</label>
+                    <select id="addHouse" class="form-select">
+                        <option value="">-- Select House --</option>
+                        ${houseOptionsHtml}
+                    </select>
+                </div>
                 ${isAlevel ? `
                 <div class="col-12">
+                    <label class="form-label fw-bold">Combination</label>
                     <input type="text" id="addCombination" class="form-control" placeholder="Combination (PCM, PCB, HEG)">
                 </div>
                 ` : ''}
                 <div class="col-6">
+                    <label class="form-label fw-bold">Student Type</label>
                     <select id="addType" class="form-select">
                         <option value="Day">Day</option>
                         <option value="Boarding">Boarding</option>
                     </select>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Parent/Guardian</label>
                     <input type="text" id="addParentName" class="form-control" placeholder="Parent Name">
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Parent Phone</label>
                     <input type="text" id="addParentPhone" class="form-control" placeholder="Parent Phone">
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Parent Email</label>
                     <input type="email" id="addParentEmail" class="form-control" placeholder="Parent Email">
                 </div>
                 <div class="col-12">
+                    <label class="form-label fw-bold">Address</label>
                     <textarea id="addAddress" class="form-control" rows="2" placeholder="Address"></textarea>
                 </div>
             </div>
         `,
-        width: '500px',
+        width: '550px',
         showCancelButton: true,
         confirmButtonText: 'Add Student',
+        didOpen: async () => {
+            // Generate preview admission number
+            const preview = await generateAdmissionNo();
+            const admField = document.getElementById('addAdm');
+            if (admField) admField.value = preview;
+        },
         preConfirm: () => {
             const name = document.getElementById('addName')?.value.trim();
             const className = document.getElementById('addClass')?.value;
@@ -1627,15 +1826,12 @@ window.showAddStudentModal = function() {
                 return false;
             }
             
-            let admNo = document.getElementById('addAdm')?.value.trim();
-            if (!admNo) admNo = generateAdmissionNo();
-            
             const data = {
-                admission_no: admNo,
                 name: name,
                 class: className,
                 stream: document.getElementById('addStream')?.value || '',
                 gender: document.getElementById('addGender')?.value,
+                house_id: document.getElementById('addHouse')?.value || null,
                 student_type: document.getElementById('addType')?.value,
                 parent_name: document.getElementById('addParentName')?.value || '',
                 parent_phone: document.getElementById('addParentPhone')?.value || '',
@@ -1666,150 +1862,345 @@ window.showAddStudentModal = function() {
 // ============================================
 // BULK UPLOAD - FULLY WORKING
 // ============================================
+// ============================================
+// EXCEL BULK UPLOAD - WORKING VERSION
+// ============================================
 
 window.showBulkUploadModal = function() {
     const isAlevel = currentLevel === 'alevel';
     
     Swal.fire({
-        title: '<i class="fas fa-upload"></i> Bulk Upload Students',
+        title: '<i class="fas fa-upload"></i> Bulk Upload Students (Excel)',
         html: `
             <div class="text-start">
                 <div class="alert alert-info small p-2 mb-3">
                     <i class="fas fa-info-circle"></i> <strong>Instructions:</strong><br>
                     1. Click "Download Template" below<br>
                     2. Fill in student data (Name and Class are required)<br>
-                    3. Save as CSV file<br>
+                    3. Save as Excel file (.xlsx)<br>
                     4. Select and upload the file
                 </div>
                 
-                <button class="btn btn-info btn-sm w-100 mb-3" onclick="downloadStudentTemplate()">
-                    <i class="fas fa-download"></i> Download CSV Template
+                <button class="btn btn-info btn-sm w-100 mb-3" onclick="downloadExcelTemplate()">
+                    <i class="fas fa-download"></i> Download Excel Template
                 </button>
                 
                 <div class="mb-3">
-                    <label class="fw-bold">Select CSV File</label>
-                    <input type="file" id="bulkCsvFile" accept=".csv" class="form-control">
+                    <label class="fw-bold">Select Excel File</label>
+                    <input type="file" id="bulkExcelFile" accept=".xlsx, .xls" class="form-control">
                 </div>
             </div>
         `,
-        width: '500px',
+        width: '550px',
         showCancelButton: true,
         confirmButtonText: '<i class="fas fa-upload"></i> Upload',
         preConfirm: () => {
-            const file = document.getElementById('bulkCsvFile')?.files[0];
+            const file = document.getElementById('bulkExcelFile')?.files[0];
             if (!file) {
-                Swal.showValidationMessage('Please select a CSV file');
+                Swal.showValidationMessage('Please select an Excel file');
                 return false;
             }
             return file;
         }
     }).then(async (result) => {
         if (result.value) {
-            const file = result.value;
-            const reader = new FileReader();
-            
-            reader.onload = async (e) => {
-                const content = e.target.result;
-                const lines = content.split('\n');
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-                
-                const studentsData = [];
-                const errors = [];
-                
-                for (let i = 1; i < lines.length; i++) {
-                    if (!lines[i].trim()) continue;
-                    
-                    const values = lines[i].split(',');
-                    const student = {};
-                    headers.forEach((header, idx) => {
-                        student[header] = values[idx]?.trim() || '';
-                    });
-                    
-                    if (!student.name) {
-                        errors.push(`Row ${i}: Name required`);
-                        continue;
-                    }
-                    if (!student.class) {
-                        errors.push(`Row ${i}: Class required`);
-                        continue;
-                    }
-                    
-                    student.admission_no = student.admission_no || generateAdmissionNo();
-                    student.stream = student.stream || '';
-                    student.gender = student.gender || 'Male';
-                    student.student_type = student.student_type || 'Day';
-                    student.parent_name = student.parent_name || '';
-                    student.parent_phone = student.parent_phone || '';
-                    student.parent_email = student.parent_email || '';
-                    student.address = student.address || '';
-                    student.level = currentLevel;
-                    
-                    if (isAlevel && student.combination) {
-                        student.combination = student.combination.toUpperCase();
-                    }
-                    
-                    studentsData.push(student);
-                }
-                
-                if (studentsData.length === 0) {
-                    Swal.fire('Error', 'No valid data found', 'error');
-                    return;
-                }
-                
-                Swal.fire({ title: 'Uploading...', text: `Processing ${studentsData.length} students`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                
-                let success = 0;
-                for (const student of studentsData) {
-                    try {
-                        await addStudent(student);
-                        success++;
-                    } catch (err) {
-                        errors.push(`${student.name}: ${err.message}`);
-                    }
-                }
-                
-                Swal.close();
-                
-                if (errors.length > 0) {
-                    Swal.fire('Partial Success', `✅ Added: ${success} | ❌ Failed: ${errors.length}`, 'warning');
-                } else {
-                    Swal.fire('Success', `✅ ${success} students added!`, 'success');
-                }
-                
-                await refreshStudents();
-            };
-            
-            reader.readAsText(file);
+            await processExcelUpload(result.value);
         }
     });
 };
 
-// Download CSV Template
-window.downloadStudentTemplate = function() {
+// ============================================
+// DOWNLOAD EXCEL TEMPLATE
+// ============================================
+
+window.downloadExcelTemplate = function() {
     const isAlevel = currentLevel === 'alevel';
     
-    let headers = ['name', 'class', 'stream', 'gender', 'student_type', 'parent_name', 'parent_phone', 'parent_email', 'address'];
-    let sample = ['John Doe', isAlevel ? 'S.5' : 'S.3', isAlevel ? 'Sciences' : 'A', 'Male', 'Day', 'Mr. Doe', '0772123456', 'john@email.com', 'Kampala'];
+    // Prepare data for template
+    const headers = [
+        'Name', 'Class', 'Stream', 'Gender', 'Student Type', 
+        'House', 'Parent Name', 'Parent Phone', 'Parent Email', 'Address'
+    ];
     
     if (isAlevel) {
-        headers.splice(5, 0, 'combination');
-        sample.splice(5, 0, 'PCM');
+        headers.splice(6, 0, 'Combination');
     }
     
-    let csv = headers.join(',') + '\n';
-    csv += sample.join(',') + '\n';
-    csv += ['Jane Smith', isAlevel ? 'S.6' : 'S.4', isAlevel ? 'Arts' : 'B', 'Female', 'Boarding', isAlevel ? 'HEG' : '', 'Mrs. Smith', '0772987654', 'jane@email.com', 'Entebbe'].slice(0, headers.length).join(',');
+    const sampleData = [
+        [
+            'John Doe',
+            isAlevel ? 'S.5' : 'S.3',
+            isAlevel ? 'Sciences' : 'A',
+            'Male',
+            'Day',
+            isAlevel ? 'PCM' : '',
+            'Red House',
+            'Mr. Doe',
+            '0772123456',
+            'john@email.com',
+            'Kampala'
+        ],
+        [
+            'Jane Smith',
+            isAlevel ? 'S.6' : 'S.4',
+            isAlevel ? 'Arts' : 'B',
+            'Female',
+            'Boarding',
+            isAlevel ? 'HEG' : '',
+            'Blue House',
+            'Mrs. Smith',
+            '0772987654',
+            'jane@email.com',
+            'Entebbe'
+        ]
+    ];
     
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `student_template_${currentLevel}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Create worksheet
+    const wsData = [headers, ...sampleData];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
     
-    Swal.fire('Template Downloaded', 'Fill the template and upload back', 'success');
+    // Set column widths
+    ws['!cols'] = [
+        { wch: 25 }, // Name
+        { wch: 10 }, // Class
+        { wch: 12 }, // Stream
+        { wch: 8 },  // Gender
+        { wch: 12 }, // Student Type
+        ...(isAlevel ? [{ wch: 12 }] : []), // Combination (if A-Level)
+        { wch: 15 }, // House
+        { wch: 20 }, // Parent Name
+        { wch: 15 }, // Parent Phone
+        { wch: 25 }, // Parent Email
+        { wch: 30 }  // Address
+    ];
+    
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students Template');
+    
+    // Add instructions sheet
+    const instructionsData = [
+        ['INSTRUCTIONS FOR BULK UPLOAD'],
+        [''],
+        ['Required Fields:', 'Name, Class'],
+        ['Optional Fields:', 'Stream, Gender, Student Type, House, Parent Name, Parent Phone, Parent Email, Address'],
+        ...(isAlevel ? [['For A-Level:', 'Combination is optional (e.g., PCM, HEG, BAM)']] : []),
+        [''],
+        ['Valid Values:'],
+        ['Class (O-Level):', 'S.1, S.2, S.3, S.4'],
+        ['Class (A-Level):', 'S.5, S.6'],
+        ['Gender:', 'Male, Female'],
+        ['Student Type:', 'Day, Boarding'],
+        ['House:', 'Red House, Blue House, Green House, Yellow House (must match existing)'],
+        ...(isAlevel ? [['Combination Examples:', 'PCM (Physics, Chemistry, Math), PCB (Physics, Chemistry, Biology), HEG (History, Economics, Geography)']] : []),
+        [''],
+        ['NOTE: House names must exactly match existing houses in the system!']
+    ];
+    
+    const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
+    wsInstructions['!cols'] = [{ wch: 25 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+    
+    // Export
+    XLSX.writeFile(wb, `student_template_${currentLevel}.xlsx`);
+    
+    Swal.fire('Template Downloaded', 'Fill the Excel template and upload back', 'success');
 };
+
+// ============================================
+// PROCESS EXCEL UPLOAD
+// ============================================
+
+async function processExcelUpload(file) {
+    Swal.fire({ 
+        title: 'Processing...', 
+        text: 'Reading Excel file...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            
+            console.log("Excel data:", jsonData);
+            
+            if (!jsonData || jsonData.length === 0) {
+                Swal.fire('Error', 'No data found in Excel file', 'error');
+                return;
+            }
+            
+            // Load houses for mapping
+            const { data: houses } = await sb.from('houses').select('id, name');
+            const houseMap = {};
+            if (houses) {
+                houses.forEach(house => {
+                    houseMap[house.name.toLowerCase()] = house.id;
+                });
+            }
+            
+            let successCount = 0;
+            let errorCount = 0;
+            const errors = [];
+            
+            for (let i = 0; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const rowNum = i + 2; // +2 because Excel starts at row 2
+                
+                try {
+                    // Get values (handle different case variations)
+                    const name = row.Name || row.name || row.NAME || '';
+                    const className = row.Class || row.class || row.CLASS || '';
+                    const stream = row.Stream || row.stream || '';
+                    const gender = row.Gender || row.gender || 'Male';
+                    const studentType = row['Student Type'] || row.student_type || row['Student_Type'] || 'Day';
+                    const house = row.House || row.house || '';
+                    const parentName = row['Parent Name'] || row.parent_name || row['Parent_Name'] || '';
+                    const parentPhone = row['Parent Phone'] || row.parent_phone || row['Parent_Phone'] || '';
+                    const parentEmail = row['Parent Email'] || row.parent_email || row['Parent_Email'] || '';
+                    const address = row.Address || row.address || '';
+                    let combination = row.Combination || row.combination || '';
+                    
+                    // Validate required fields
+                    if (!name) {
+                        errors.push(`Row ${rowNum}: Name is required`);
+                        errorCount++;
+                        continue;
+                    }
+                    if (!className) {
+                        errors.push(`Row ${rowNum}: Class is required`);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    // Validate class
+                    const validClasses = currentLevel === 'olevel' 
+                        ? ['S.1', 'S.2', 'S.3', 'S.4']
+                        : ['S.5', 'S.6'];
+                    
+                    if (!validClasses.includes(className)) {
+                        errors.push(`Row ${rowNum}: Invalid class "${className}". Valid: ${validClasses.join(', ')}`);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    // Map house name to ID
+                    let houseId = null;
+                    if (house) {
+                        const houseName = house.toLowerCase();
+                        if (houseMap[houseName]) {
+                            houseId = houseMap[houseName];
+                        } else {
+                            errors.push(`Row ${rowNum}: House "${house}" not found. Available: ${houses?.map(h => h.name).join(', ') || 'None'}`);
+                            errorCount++;
+                            continue;
+                        }
+                    }
+                    
+                    // Generate admission number
+                    const year = new Date().getFullYear();
+                    const prefix = currentLevel === 'olevel' ? 'O' : 'A';
+                    const timestamp = Date.now().toString().slice(-8);
+                    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+                    const admissionNo = `${prefix}/${year}/${timestamp}${random}`;
+                    
+                    // Prepare data for insertion
+                    const studentData = {
+                        admission_no: admissionNo,
+                        name: name,
+                        class: className,
+                        stream: stream || '',
+                        gender: gender === 'Male' ? 'Male' : 'Female',
+                        student_type: studentType === 'Boarding' ? 'Boarding' : 'Day',
+                        house_id: houseId,
+                        parent_name: parentName,
+                        parent_phone: parentPhone,
+                        parent_email: parentEmail,
+                        address: address,
+                        level: currentLevel,
+                        created_at: new Date().toISOString()
+                    };
+                    
+                    // Add combination for A-Level
+                    if (currentLevel === 'alevel' && combination) {
+                        studentData.combination = combination.toUpperCase();
+                    }
+                    
+                    console.log(`Inserting row ${rowNum}:`, studentData);
+                    
+                    // Insert into database
+                    const { error } = await sb.from('students').insert([studentData]);
+                    
+                    if (error) {
+                        console.error("Insert error:", error);
+                        errors.push(`Row ${rowNum}: ${error.message}`);
+                        errorCount++;
+                    } else {
+                        successCount++;
+                    }
+                    
+                } catch (err) {
+                    console.error(`Error processing row ${rowNum}:`, err);
+                    errors.push(`Row ${rowNum}: ${err.message}`);
+                    errorCount++;
+                }
+            }
+            
+            Swal.close();
+            
+            // Show results
+            let message = `<div class="text-start">`;
+            message += `<p><strong>✅ Successfully added:</strong> ${successCount} students</p>`;
+            if (errorCount > 0) {
+                message += `<p><strong>❌ Failed:</strong> ${errorCount} students</p>`;
+                if (errors.length > 0) {
+                    message += `<hr><strong>Errors:</strong><ul>`;
+                    errors.slice(0, 10).forEach(err => {
+                        message += `<li>${escapeHtml(err)}</li>`;
+                    });
+                    if (errors.length > 10) {
+                        message += `<li>... and ${errors.length - 10} more errors</li>`;
+                    }
+                    message += `</ul>`;
+                }
+            }
+            message += `</div>`;
+            
+            Swal.fire({
+                title: 'Upload Complete',
+                html: message,
+                icon: errorCount > 0 ? 'warning' : 'success',
+                width: '600px'
+            });
+            
+            // Refresh the students table
+            if (typeof refreshStudents === 'function') {
+                await refreshStudents();
+            } else if (typeof loadStudentsTable === 'function') {
+                await loadStudentsTable();
+            }
+            
+        } catch (error) {
+            Swal.close();
+            console.error("Excel processing error:", error);
+            Swal.fire('Error', 'Failed to process Excel file: ' + error.message, 'error');
+        }
+    };
+    
+    reader.onerror = (error) => {
+        Swal.close();
+        console.error("File reading error:", error);
+        Swal.fire('Error', 'Failed to read the file', 'error');
+    };
+    
+    reader.readAsArrayBuffer(file);
+}
 
 // ============================================
 // EDIT, DELETE, VIEW FUNCTIONS
@@ -1823,49 +2214,98 @@ window.editStudent = async function(id) {
     const availableClasses = isAlevel ? alevelClasses : olevelClasses;
     const availableStreams = isAlevel ? alevelStreams : olevelStreams;
     
+    // Load houses from database
+    const { data: houses, error: housesError } = await sb
+        .from('houses')
+        .select('id, name, color')
+        .order('name', { ascending: true });
+    
+    if (housesError) {
+        console.error('Error loading houses:', housesError);
+    }
+    
+    const housesList = houses || [];
+    
+    // Generate house options HTML with color styling and selected attribute
+    const houseOptionsHtml = housesList.map(house => `
+        <option value="${house.id}" style="color: ${house.color}; font-weight: 500;" ${student.house_id === house.id ? 'selected' : ''}>
+            🏠 ${escapeHtml(house.name)}
+        </option>
+    `).join('');
+    
     Swal.fire({
         title: `Edit Student`,
         html: `
             <div class="row g-2">
                 <div class="col-12 mb-2">
+                    <label class="form-label fw-bold">Full Name *</label>
                     <input type="text" id="editName" class="form-control" value="${escapeHtml(student.name)}" placeholder="Full Name *">
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Admission No</label>
                     <input type="text" id="editAdm" class="form-control" value="${student.admission_no || ''}" readonly>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Class *</label>
                     <select id="editClass" class="form-select">
                         ${availableClasses.map(c => `<option ${student.class === c ? 'selected' : ''}>${c}</option>`).join('')}
                     </select>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Stream</label>
                     <select id="editStream" class="form-select">
-                        <option value="">Stream</option>
+                        <option value="">-- Select Stream --</option>
                         ${availableStreams.map(s => `<option ${student.stream === s ? 'selected' : ''}>${s}</option>`).join('')}
                     </select>
                 </div>
                 <div class="col-6">
+                    <label class="form-label fw-bold">Gender</label>
                     <select id="editGender" class="form-select">
                         <option ${student.gender === 'Male' ? 'selected' : ''}>Male</option>
                         <option ${student.gender === 'Female' ? 'selected' : ''}>Female</option>
                     </select>
                 </div>
-                ${isAlevel ? `<div class="col-12"><input type="text" id="editCombination" class="form-control" value="${student.combination || ''}" placeholder="Combination"></div>` : ''}
                 <div class="col-6">
+                    <label class="form-label fw-bold">🏠 House</label>
+                    <select id="editHouse" class="form-select">
+                        <option value="">-- Select House --</option>
+                        ${houseOptionsHtml}
+                    </select>
+                </div>
+                ${isAlevel ? `
+                <div class="col-12">
+                    <label class="form-label fw-bold">Combination</label>
+                    <input type="text" id="editCombination" class="form-control" value="${student.combination || ''}" placeholder="Combination">
+                </div>
+                ` : ''}
+                <div class="col-6">
+                    <label class="form-label fw-bold">Student Type</label>
                     <select id="editType" class="form-select">
                         <option ${student.student_type === 'Day' ? 'selected' : ''}>Day</option>
                         <option ${student.student_type === 'Boarding' ? 'selected' : ''}>Boarding</option>
                     </select>
                 </div>
-                <div class="col-6"><input type="text" id="editParentName" class="form-control" value="${escapeHtml(student.parent_name || '')}" placeholder="Parent Name"></div>
-                <div class="col-6"><input type="text" id="editParentPhone" class="form-control" value="${student.parent_phone || ''}" placeholder="Parent Phone"></div>
-                <div class="col-6"><input type="email" id="editParentEmail" class="form-control" value="${student.parent_email || ''}" placeholder="Parent Email"></div>
-                <div class="col-12"><textarea id="editAddress" class="form-control" rows="2" placeholder="Address">${escapeHtml(student.address || '')}</textarea></div>
+                <div class="col-6">
+                    <label class="form-label fw-bold">Parent/Guardian</label>
+                    <input type="text" id="editParentName" class="form-control" value="${escapeHtml(student.parent_name || '')}" placeholder="Parent Name">
+                </div>
+                <div class="col-6">
+                    <label class="form-label fw-bold">Parent Phone</label>
+                    <input type="text" id="editParentPhone" class="form-control" value="${student.parent_phone || ''}" placeholder="Parent Phone">
+                </div>
+                <div class="col-6">
+                    <label class="form-label fw-bold">Parent Email</label>
+                    <input type="email" id="editParentEmail" class="form-control" value="${student.parent_email || ''}" placeholder="Parent Email">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-bold">Address</label>
+                    <textarea id="editAddress" class="form-control" rows="2" placeholder="Address">${escapeHtml(student.address || '')}</textarea>
+                </div>
             </div>
         `,
-        width: '500px',
+        width: '550px',
         showCancelButton: true,
-        confirmButtonText: 'Save',
+        confirmButtonText: 'Save Changes',
         preConfirm: () => {
             const name = document.getElementById('editName')?.value.trim();
             if (!name) {
@@ -1877,6 +2317,7 @@ window.editStudent = async function(id) {
                 class: document.getElementById('editClass')?.value,
                 stream: document.getElementById('editStream')?.value || '',
                 gender: document.getElementById('editGender')?.value,
+                house_id: document.getElementById('editHouse')?.value || null,
                 student_type: document.getElementById('editType')?.value,
                 parent_name: document.getElementById('editParentName')?.value || '',
                 parent_phone: document.getElementById('editParentPhone')?.value || '',
@@ -1918,71 +2359,1391 @@ window.bulkDeleteStudents = async function() {
     }
 };
 
+// ============================================
+// VIEW STUDENT DETAILS - ADDITIONAL INFO REMOVED
+// ============================================
+
 window.viewStudent = async function(id) {
-    const s = students.find(s => s.id === id);
-    Swal.fire({ title: s.name, html: `<div class="text-start"><p><strong>Admission:</strong> ${s.admission_no}</p><p><strong>Class:</strong> ${s.class}</p><p><strong>Parent:</strong> ${s.parent_name || '-'}</p><p><strong>Phone:</strong> ${s.parent_phone || '-'}</p></div>` });
+    const student = students.find(s => s.id === id);
+    if (!student) return;
+    
+    // Load house information if assigned
+    let houseInfo = '';
+    if (student.house_id) {
+        const { data: house } = await sb
+            .from('houses')
+            .select('name, color')
+            .eq('id', student.house_id)
+            .single();
+        
+        if (house) {
+            houseInfo = `
+                <div class="detail-row">
+                    <div class="detail-label">🏠 House:</div>
+                    <div class="detail-value">
+                        <span style="background: ${house.color}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px;">
+                            ${escapeHtml(house.name)}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    // Get class teacher if available
+    let classTeacher = 'Not Assigned';
+    if (student.class) {
+        const classNumber = student.class.replace('S.', '');
+        const streamLower = (student.stream || 'a').toLowerCase();
+        const teacherKey = `teacher_s${classNumber}_${streamLower}`;
+        
+        const { data: settings } = await sb
+            .from('school_settings')
+            .select(teacherKey)
+            .limit(1)
+            .maybeSingle();
+        
+        if (settings && settings[teacherKey]) {
+            classTeacher = settings[teacherKey];
+        }
+    }
+    
+    const isAlevel = student.class === 'S.5' || student.class === 'S.6';
+    
+    Swal.fire({
+        title: `<i class="fas fa-user-graduate"></i> Student Details`,
+        html: `
+            <div class="text-start" style="max-width: 500px;">
+                <div style="display: flex; justify-content: center; margin-bottom: 15px;">
+                    <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #01605a, #ff862d); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-user-graduate" style="font-size: 40px; color: white;"></i>
+                    </div>
+                </div>
+                
+                <div style="background: #f0f8ff; padding: 12px; border-radius: 10px; margin-bottom: 15px;">
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Student Name:</div>
+                        <div class="detail-value">${escapeHtml(student.name)}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Admission No:</div>
+                        <div class="detail-value">${student.admission_no || '-'}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Class:</div>
+                        <div class="detail-value">${student.class} ${student.stream ? '- ' + student.stream : ''}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Student Type:</div>
+                        <div class="detail-value">${student.student_type || 'Day'}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Gender:</div>
+                        <div class="detail-value">${student.gender || '-'}</div>
+                    </div>
+                    ${houseInfo}
+                    ${isAlevel ? `
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Combination:</div>
+                        <div class="detail-value">${student.combination || '-'}</div>
+                    </div>
+                    ` : ''}
+                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
+                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Class Teacher:</div>
+                        <div class="detail-value">${escapeHtml(classTeacher)}</div>
+                    </div>
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 15px;">
+                    <h6 style="color: #01605a; margin-bottom: 10px;"><i class="fas fa-parent"></i> Parent/Guardian Information</h6>
+                    <div class="detail-row" style="display: flex; margin-bottom: 6px;">
+                        <div class="detail-label" style="width: 100px; font-weight: bold;">Name:</div>
+                        <div class="detail-value">${escapeHtml(student.parent_name || '-')}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex; margin-bottom: 6px;">
+                        <div class="detail-label" style="width: 100px; font-weight: bold;">Phone:</div>
+                        <div class="detail-value">${student.parent_phone || '-'}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex; margin-bottom: 6px;">
+                        <div class="detail-label" style="width: 100px; font-weight: bold;">Email:</div>
+                        <div class="detail-value">${student.parent_email || '-'}</div>
+                    </div>
+                    <div class="detail-row" style="display: flex;">
+                        <div class="detail-label" style="width: 100px; font-weight: bold;">Address:</div>
+                        <div class="detail-value">${escapeHtml(student.address || '-')}</div>
+                    </div>
+                </div>
+            </div>
+        `,
+        width: '550px',
+        confirmButtonText: '<i class="fas fa-times"></i> Close',
+        showCloseButton: true,
+        customClass: {
+            popup: 'student-details-modal'
+        }
+    });
 };
 
 // ============================================
 // PRINT FUNCTIONS
 // ============================================
 
-window.printAllStudents = function() {
-    if (!students.length) { Swal.fire('Error', 'No students', 'error'); return; }
-    const win = window.open('', '_blank');
-    win.document.write(`
-        <html><head><title>All Students</title>
-        <style>body{font-family:Arial;padding:20px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background:#01605a;color:white}</style>
-        </head><body><h1>STUDENTS REGISTER</h1><p>Total: ${students.length}</p>
-        <table><thead><tr><th>#</th><th>Adm No</th><th>Name</th><th>Class</th><th>Parent</th><th>Phone</th></tr></thead><tbody>
-        ${students.map((s, i) => `<tr><td>${i+1}</td><td>${s.admission_no}</td><td>${s.name}</td><td>${s.class}</td><td>${s.parent_name || '-'}</td><td>${s.parent_phone || '-'}</td></tr>`).join('')}
-        </tbody></table><button onclick="window.print()">Print</button></body></html>
+// ============================================
+// PRINT ALL STUDENTS WITH SCHOOL INFO & WATERMARK
+// ============================================
+
+// ============================================
+// PRINT FILTERED STUDENTS (Respects Search & Filters)
+// ============================================
+
+window.printFilteredStudents = async function() {
+    // Get filtered students from the current table view
+    const rows = document.querySelectorAll('#studentsTableBody tr');
+    const visibleRows = Array.from(rows).filter(row => row.style.display !== 'none');
+    
+    if (visibleRows.length === 0) {
+        Swal.fire('Error', 'No students to print', 'error');
+        return;
+    }
+    
+    // Extract student IDs from visible rows
+    const visibleStudentIds = [];
+    visibleRows.forEach(row => {
+        const checkbox = row.querySelector('.studentCheck');
+        if (checkbox && checkbox.dataset.id) {
+            visibleStudentIds.push(checkbox.dataset.id);
+        }
+    });
+    
+    // Get filtered students data
+    const filteredStudents = students.filter(s => visibleStudentIds.includes(s.id));
+    
+    if (filteredStudents.length === 0) {
+        Swal.fire('Error', 'No students found to print', 'error');
+        return;
+    }
+    
+    // Load school settings for logo and info
+    const { data: schoolData } = await sb
+        .from('school_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+    
+    const schoolInfo = schoolData || {
+        school_name: 'Uganda School System',
+        school_motto: 'Education for All',
+        school_address: 'Kampala, Uganda',
+        school_phone: '+256 XXX XXX XXX',
+        school_email: 'info@school.ug',
+        school_logo: '',
+        principal_name: 'Principal'
+    };
+    
+    // Load houses for display
+    const { data: houses } = await sb.from('houses').select('id, name, color');
+    const housesMap = {};
+    if (houses) {
+        houses.forEach(house => {
+            housesMap[house.id] = house;
+        });
+    }
+    
+    const printWindow = window.open('', '_blank');
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+    });
+    const logoUrl = schoolInfo.school_logo || '';
+    const levelName = currentLevel === 'olevel' ? 'O-Level (UCE)' : 'A-Level (UACE)';
+    
+    // Get search term and house filter for display
+    const searchTerm = document.getElementById('studentSearch')?.value || '';
+    const houseFilter = document.getElementById('houseFilter')?.value;
+    const houseFilterName = houseFilter ? housesMap[houseFilter]?.name || '' : '';
+    
+    // Group filtered students by class
+    const studentsByClass = {};
+    filteredStudents.forEach(student => {
+        if (!studentsByClass[student.class]) {
+            studentsByClass[student.class] = [];
+        }
+        studentsByClass[student.class].push(student);
+    });
+    
+    const sortedClasses = Object.keys(studentsByClass).sort();
+    
+    // Generate HTML for all classes
+    let allClassesHtml = '';
+    
+    sortedClasses.forEach((className, classIndex) => {
+        const classStudents = studentsByClass[className];
+        const maleCount = classStudents.filter(s => s.gender === 'Male').length;
+        const femaleCount = classStudents.filter(s => s.gender === 'Female').length;
+        const dayCount = classStudents.filter(s => s.student_type === 'Day').length;
+        const boardingCount = classStudents.filter(s => s.student_type === 'Boarding').length;
+        
+        // Generate table rows for this class
+        let tableRows = '';
+        classStudents.forEach((student, index) => {
+            const house = housesMap[student.house_id];
+            const houseHtml = house ? 
+                `<span style="display: inline-block; background: ${house.color}; color: white; padding: 2px 10px; border-radius: 15px; font-size: 11px;">🏠 ${escapeHtml(house.name)}</span>` : 
+                '<span style="color: #999;">-</span>';
+            
+            tableRows += `
+                <tr>
+                    <td style="padding: 8px; text-align: center;">${index + 1}</span></td>
+                    <td style="padding: 8px;">${escapeHtml(student.name)}</span></td>
+                    <td style="padding: 8px; text-align: center;">${student.admission_no || '-'}</span></td>
+                    <td style="padding: 8px; text-align: center;">${student.gender || '-'}</span></td>
+                    <td style="padding: 8px; text-align: center;">${houseHtml}</span></td>
+                    <td style="padding: 8px;">${escapeHtml(student.parent_name || '-')}</span></td>
+                    <td style="padding: 8px;">${student.parent_phone || '-'}</span></td>
+                </tr>
+            `;
+        });
+        
+        allClassesHtml += `
+            <div class="class-section" ${classIndex > 0 ? 'style="page-break-before: always;"' : ''}>
+                <div class="class-header">
+                    <h3>${escapeHtml(className)}</h3>
+                    <div class="class-stats">
+                        <span class="class-stat">📚 Total: ${classStudents.length}</span>
+                        <span class="class-stat">♂️ Male: ${maleCount}</span>
+                        <span class="class-stat">♀️ Female: ${femaleCount}</span>
+                        <span class="class-stat">☀️ Day: ${dayCount}</span>
+                        <span class="class-stat">🏠 Boarding: ${boardingCount}</span>
+                    </div>
+                </div>
+                <table class="student-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">#</th>
+                            <th>Student Name</th>
+                            <th style="width: 110px;">Admission No</th>
+                            <th style="width: 60px;">Gender</th>
+                            <th style="width: 100px;">House</th>
+                            <th>Parent/Guardian</th>
+                            <th style="width: 100px;">Phone</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    });
+    
+    // Calculate totals for filtered students
+    const totalStudents = filteredStudents.length;
+    const totalMale = filteredStudents.filter(s => s.gender === 'Male').length;
+    const totalFemale = filteredStudents.filter(s => s.gender === 'Female').length;
+    const totalDay = filteredStudents.filter(s => s.student_type === 'Day').length;
+    const totalBoarding = filteredStudents.filter(s => s.student_type === 'Boarding').length;
+    
+    // Build filter info text
+    let filterInfo = '';
+    if (searchTerm) filterInfo += `Search: "${searchTerm}" | `;
+    if (houseFilterName) filterInfo += `House: ${houseFilterName} | `;
+    if (filterInfo) filterInfo = filterInfo.slice(0, -3);
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Filtered Students - ${escapeHtml(schoolInfo.school_name)}</title>
+            <style>
+                @media print {
+                    body { margin: 0; padding: 0; }
+                    .no-print { display: none; }
+                    .class-section {
+                        page-break-inside: avoid;
+                    }
+                }
+                
+                body {
+                    font-family: 'Times New Roman', Arial, sans-serif;
+                    padding: 20px;
+                    font-size: 12px;
+                    position: relative;
+                    background: white;
+                }
+                
+                .watermark {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    opacity: 0.08;
+                    z-index: -1;
+                    width: 60%;
+                    max-width: 400px;
+                }
+                
+                .header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                    border-bottom: 2px solid #01605a;
+                    padding-bottom: 15px;
+                }
+                
+                .school-logo {
+                    max-width: 80px;
+                    max-height: 80px;
+                    margin-bottom: 10px;
+                }
+                
+                .school-name {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #01605a;
+                    margin: 0;
+                }
+                
+                .school-motto {
+                    font-size: 12px;
+                    font-style: italic;
+                    color: #666;
+                    margin: 5px 0;
+                }
+                
+                .school-address {
+                    font-size: 10px;
+                    color: #666;
+                    margin: 5px 0;
+                }
+                
+                .report-title {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin: 15px 0 5px;
+                }
+                
+                .filter-info {
+                    text-align: center;
+                    font-size: 11px;
+                    color: #ff862d;
+                    margin-bottom: 10px;
+                    font-style: italic;
+                }
+                
+                .report-info {
+                    text-align: center;
+                    font-size: 11px;
+                    color: #666;
+                    margin-bottom: 15px;
+                }
+                
+                .summary-box {
+                    display: flex;
+                    justify-content: space-around;
+                    margin: 15px 0 25px;
+                    padding: 15px;
+                    background: linear-gradient(135deg, #f5f5f5, #e8e8e8);
+                    border-radius: 10px;
+                    flex-wrap: wrap;
+                    gap: 15px;
+                }
+                
+                .summary-item {
+                    text-align: center;
+                    min-width: 100px;
+                }
+                
+                .summary-value {
+                    font-size: 22px;
+                    font-weight: bold;
+                    color: #01605a;
+                }
+                
+                .summary-label {
+                    font-size: 11px;
+                    color: #666;
+                }
+                
+                .class-section {
+                    margin-bottom: 30px;
+                    page-break-inside: avoid;
+                }
+                
+                .class-header {
+                    background: #01605a;
+                    color: white;
+                    padding: 10px 15px;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    gap: 10px;
+                }
+                
+                .class-header h3 {
+                    margin: 0;
+                    font-size: 16px;
+                }
+                
+                .class-stats {
+                    display: flex;
+                    gap: 15px;
+                    flex-wrap: wrap;
+                }
+                
+                .class-stat {
+                    font-size: 11px;
+                    background: rgba(255,255,255,0.2);
+                    padding: 3px 10px;
+                    border-radius: 15px;
+                }
+                
+                .student-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                
+                .student-table th {
+                    background: #ff862d;
+                    color: white;
+                    padding: 10px;
+                    font-weight: bold;
+                    text-align: center;
+                    border: 1px solid #e0761a;
+                }
+                
+                .student-table td {
+                    padding: 8px;
+                    border: 1px solid #ddd;
+                    vertical-align: middle;
+                }
+                
+                .student-table tr:nth-child(even) {
+                    background: #f9f9f9;
+                }
+                
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    font-size: 10px;
+                    color: #999;
+                    border-top: 1px solid #ddd;
+                    padding-top: 15px;
+                }
+                
+                .signature {
+                    margin-top: 40px;
+                    display: flex;
+                    justify-content: space-between;
+                }
+                
+                .signature-line {
+                    text-align: center;
+                    width: 30%;
+                }
+                
+                .signature-line .line {
+                    border-bottom: 1px solid #000;
+                    margin-bottom: 5px;
+                    padding-top: 20px;
+                }
+                
+                @media (max-width: 768px) {
+                    .class-header {
+                        flex-direction: column;
+                        text-align: center;
+                    }
+                    
+                    .student-table th, 
+                    .student-table td {
+                        font-size: 10px;
+                        padding: 5px;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${logoUrl ? `<img src="${logoUrl}" class="watermark" alt="Watermark">` : ''}
+            
+            <div class="header">
+                ${logoUrl ? `<img src="${logoUrl}" class="school-logo" alt="School Logo">` : ''}
+                <div class="school-name">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
+                <div class="school-motto">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</div>
+                <div class="school-address">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</div>
+                <div class="report-title">FILTERED STUDENTS REGISTER</div>
+                ${filterInfo ? `<div class="filter-info">🎯 Filtered by: ${filterInfo}</div>` : ''}
+                <div class="report-info">${levelName} | Generated: ${currentDate} | Total: ${totalStudents} students</div>
+            </div>
+            
+            <div class="summary-box">
+                <div class="summary-item">
+                    <div class="summary-value">${totalStudents}</div>
+                    <div class="summary-label">Total Students</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${totalMale}</div>
+                    <div class="summary-label">Male</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${totalFemale}</div>
+                    <div class="summary-label">Female</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${totalDay}</div>
+                    <div class="summary-label">Day Scholars</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${totalBoarding}</div>
+                    <div class="summary-label">Boarding</div>
+                </div>
+            </div>
+            
+            ${allClassesHtml}
+            
+            <div class="signature">
+                <div class="signature-line">
+                    <div class="line"></div>
+                    <div>Class Teacher</div>
+                </div>
+                <div class="signature-line">
+                    <div class="line"></div>
+                    <div>Head Teacher</div>
+                </div>
+                <div class="signature-line">
+                    <div class="line"></div>
+                    <div>Bursar</div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                This is a system-generated report. For any corrections, please contact the school administration.
+            </div>
+            
+            <div class="no-print" style="text-align: center; margin-top: 20px;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #01605a; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    🖨️ Print Report
+                </button>
+                <button onclick="window.close()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">
+                    ❌ Close
+                </button>
+            </div>
+        </body>
+        </html>
     `);
-    win.document.close();
+    
+    printWindow.document.close();
 };
+
+// Update the button in renderStudents to use the new function
+// Change the button from onclick="printAllStudents()" to onclick="printFilteredStudents()"
+
+// ============================================
+// PRINT STUDENTS BY CLASS WITH SCHOOL INFO & WATERMARK
+// ============================================
 
 window.printStudentsByClass = async function() {
-    const classes = [...new Set(students.map(s => s.class))];
-    const { value: className } = await Swal.fire({ title: 'Select Class', input: 'select', inputOptions: Object.fromEntries(classes.map(c => [c, c])), showCancelButton: true });
+    // Load school settings for logo and info
+    const { data: schoolData } = await sb
+        .from('school_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+    
+    const schoolInfo = schoolData || {
+        school_name: 'Uganda School System',
+        school_motto: 'Education for All',
+        school_address: 'Kampala, Uganda',
+        school_phone: '+256 XXX XXX XXX',
+        school_email: 'info@school.ug',
+        school_logo: '',
+        principal_name: 'Principal'
+    };
+    
+    // Get unique classes
+    const classes = [...new Set(students.map(s => s.class))].sort();
+    
+    if (classes.length === 0) {
+        Swal.fire('Error', 'No students found', 'error');
+        return;
+    }
+    
+    const { value: className } = await Swal.fire({
+        title: 'Print Students by Class',
+        input: 'select',
+        inputOptions: Object.fromEntries(classes.map(c => [c, c])),
+        inputPlaceholder: 'Select Class',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-print"></i> Print',
+        cancelButtonText: 'Cancel'
+    });
+    
     if (!className) return;
-    const filtered = students.filter(s => s.class === className);
-    const win = window.open('', '_blank');
-    win.document.write(`
-        <html><head><title>${className} Students</title>
-        <style>body{font-family:Arial;padding:20px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background:#01605a;color:white}</style>
-        </head><body><h1>${className} CLASS LIST</h1><p>Total: ${filtered.length}</p>
-        <table><thead><tr><th>#</th><th>Adm No</th><th>Name</th><th>Gender</th><th>Parent</th><th>Phone</th></tr></thead><tbody>
-        ${filtered.map((s, i) => `<tr><td>${i+1}</td><td>${s.admission_no}</td><td>${s.name}</td><td>${s.gender}</td><td>${s.parent_name || '-'}</td><td>${s.parent_phone || '-'}</td></tr>`).join('')}
-        </tbody></table><button onclick="window.print()">Print</button></body></html>
+    
+    // Filter students by selected class
+    const filteredStudents = students.filter(s => s.class === className);
+    
+    if (filteredStudents.length === 0) {
+        Swal.fire('No Students', `No students found in class ${className}`, 'info');
+        return;
+    }
+    
+    // Load houses for display
+    const { data: houses } = await sb.from('houses').select('id, name, color');
+    const housesMap = {};
+    if (houses) {
+        houses.forEach(house => {
+            housesMap[house.id] = house;
+        });
+    }
+    
+    const printWindow = window.open('', '_blank');
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+    });
+    const logoUrl = schoolInfo.school_logo || '';
+    
+    // Generate table rows
+    let tableRows = '';
+    filteredStudents.forEach((student, index) => {
+        const house = housesMap[student.house_id];
+        const houseHtml = house ? 
+            `<span style="display: inline-block; background: ${house.color}; color: white; padding: 2px 10px; border-radius: 15px; font-size: 11px;">🏠 ${escapeHtml(house.name)}</span>` : 
+            '<span style="color: #999;">-</span>';
+        
+        tableRows += `
+            <tr>
+                <td style="padding: 8px; text-align: center;">${index + 1}</td>
+                <td style="padding: 8px;">${escapeHtml(student.name)}</td>
+                <td style="padding: 8px; text-align: center;">${student.admission_no || '-'}</td>
+                <td style="padding: 8px; text-align: center;">${student.gender || '-'}</td>
+                <td style="padding: 8px; text-align: center;">${houseHtml}</td>
+                <td style="padding: 8px;">${escapeHtml(student.parent_name || '-')}</td>
+                <td style="padding: 8px;">${student.parent_phone || '-'}</td>
+            </tr>
+        `;
+    });
+    
+    // Count statistics
+    const maleCount = filteredStudents.filter(s => s.gender === 'Male').length;
+    const femaleCount = filteredStudents.filter(s => s.gender === 'Female').length;
+    const dayCount = filteredStudents.filter(s => s.student_type === 'Day').length;
+    const boardingCount = filteredStudents.filter(s => s.student_type === 'Boarding').length;
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>${escapeHtml(className)} Students - ${escapeHtml(schoolInfo.school_name)}</title>
+            <style>
+                @media print {
+                    body { margin: 0; padding: 0; }
+                    .no-print { display: none; }
+                    .page-break { page-break-before: always; }
+                }
+                
+                body {
+                    font-family: 'Times New Roman', Arial, sans-serif;
+                    padding: 20px;
+                    font-size: 12px;
+                    position: relative;
+                    background: white;
+                }
+                
+                .watermark {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    opacity: 0.08;
+                    z-index: -1;
+                    width: 60%;
+                    max-width: 400px;
+                }
+                
+                .header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                    border-bottom: 2px solid #01605a;
+                    padding-bottom: 15px;
+                }
+                
+                .school-logo {
+                    max-width: 80px;
+                    max-height: 80px;
+                    margin-bottom: 10px;
+                }
+                
+                .school-name {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #01605a;
+                    margin: 0;
+                }
+                
+                .school-motto {
+                    font-size: 12px;
+                    font-style: italic;
+                    color: #666;
+                    margin: 5px 0;
+                }
+                
+                .school-address {
+                    font-size: 10px;
+                    color: #666;
+                    margin: 5px 0;
+                }
+                
+                .report-title {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin: 15px 0 5px;
+                }
+                
+                .report-info {
+                    text-align: center;
+                    font-size: 11px;
+                    color: #666;
+                    margin-bottom: 15px;
+                }
+                
+                .stats-box {
+                    display: flex;
+                    justify-content: space-around;
+                    margin: 15px 0;
+                    padding: 10px;
+                    background: #f5f5f5;
+                    border-radius: 8px;
+                }
+                
+                .stat-item {
+                    text-align: center;
+                }
+                
+                .stat-label {
+                    font-size: 11px;
+                    color: #666;
+                }
+                
+                .stat-value {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #01605a;
+                }
+                
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 15px;
+                }
+                
+                th {
+                    background: #01605a;
+                    color: white;
+                    padding: 10px;
+                    font-weight: bold;
+                    text-align: center;
+                    border: 1px solid #0a4d48;
+                }
+                
+                td {
+                    padding: 8px;
+                    border: 1px solid #ddd;
+                    vertical-align: middle;
+                }
+                
+                tr:nth-child(even) {
+                    background: #f9f9f9;
+                }
+                
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    font-size: 10px;
+                    color: #999;
+                    border-top: 1px solid #ddd;
+                    padding-top: 15px;
+                }
+                
+                .signature {
+                    margin-top: 40px;
+                    display: flex;
+                    justify-content: space-between;
+                }
+                
+                .signature-line {
+                    text-align: center;
+                    width: 30%;
+                }
+                
+                .signature-line .line {
+                    border-bottom: 1px solid #000;
+                    margin-bottom: 5px;
+                    padding-top: 20px;
+                }
+                
+                .badge {
+                    display: inline-block;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    font-size: 10px;
+                    font-weight: normal;
+                }
+            </style>
+        </head>
+        <body>
+            ${logoUrl ? `<img src="${logoUrl}" class="watermark" alt="Watermark">` : ''}
+            
+            <div class="header">
+                ${logoUrl ? `<img src="${logoUrl}" class="school-logo" alt="School Logo">` : ''}
+                <div class="school-name">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
+                <div class="school-motto">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</div>
+                <div class="school-address">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</div>
+                <div class="report-title">STUDENTS LIST - ${escapeHtml(className)}</div>
+                <div class="report-info">Generated: ${currentDate} | Total Students: ${filteredStudents.length}</div>
+            </div>
+            
+            <div class="stats-box">
+                <div class="stat-item">
+                    <div class="stat-value">${filteredStudents.length}</div>
+                    <div class="stat-label">Total Students</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${maleCount}</div>
+                    <div class="stat-label">Male</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${femaleCount}</div>
+                    <div class="stat-label">Female</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${dayCount}</div>
+                    <div class="stat-label">Day</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${boardingCount}</div>
+                    <div class="stat-label">Boarding</div>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">#</th>
+                        <th>Student Name</th>
+                        <th style="width: 100px;">Admission No</th>
+                        <th style="width: 60px;">Gender</th>
+                        <th style="width: 100px;">House</th>
+                        <th>Parent/Guardian</th>
+                        <th style="width: 100px;">Phone</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+            
+            <div class="signature">
+                <div class="signature-line">
+                    <div class="line"></div>
+                    <div>Class Teacher</div>
+                </div>
+                <div class="signature-line">
+                    <div class="line"></div>
+                    <div>Head Teacher</div>
+                </div>
+                <div class="signature-line">
+                    <div class="line"></div>
+                    <div>Parent's Signature</div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                This is a system-generated report. For any corrections, please contact the school administration.
+            </div>
+            
+            <div class="no-print" style="text-align: center; margin-top: 20px;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #01605a; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    🖨️ Print Report
+                </button>
+                <button onclick="window.close()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">
+                    ❌ Close
+                </button>
+            </div>
+        </body>
+        </html>
     `);
-    win.document.close();
+    
+    printWindow.document.close();
 };
+// ============================================
+// PRINT STUDENT ID CARDS WITH SCHOOL INFO & WATERMARK
+// ============================================
 
 window.printStudentIdCards = async function() {
-    const selected = Array.from(document.querySelectorAll('.studentCheck:checked')).map(cb => students.find(s => s.id === cb.dataset.id)).filter(s => s);
-    let toPrint = selected;
-    if (!toPrint.length) {
-        const { value: id } = await Swal.fire({ title: 'Select Student', input: 'select', inputOptions: Object.fromEntries(students.map(s => [s.id, s.name])), showCancelButton: true });
-        if (id) toPrint = [students.find(s => s.id === id)];
-        else return;
+    // Load school settings for logo and info
+    const { data: schoolData } = await sb
+        .from('school_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+    
+    const schoolInfo = schoolData || {
+        school_name: 'Uganda School System',
+        school_motto: 'Education for All',
+        school_address: 'Kampala, Uganda',
+        school_phone: '+256 XXX XXX XXX',
+        school_email: 'info@school.ug',
+        school_logo: '',
+        principal_name: 'Principal'
+    };
+    
+    // Get selected students from checkboxes
+    const selected = Array.from(document.querySelectorAll('.studentCheck:checked'))
+        .map(cb => students.find(s => s.id === cb.dataset.id))
+        .filter(s => s);
+    
+    let studentsToPrint = selected;
+    
+    if (!studentsToPrint.length) {
+        const { value: studentId } = await Swal.fire({
+            title: 'Select Student',
+            input: 'select',
+            inputOptions: Object.fromEntries(students.map(s => [s.id, `${s.name} (${s.class}) - ${s.admission_no || 'No ADM'}`])),
+            inputPlaceholder: '-- Select Student --',
+            showCancelButton: true,
+            confirmButtonText: 'Generate ID Card'
+        });
+        
+        if (studentId) {
+            studentsToPrint = [students.find(s => s.id === studentId)];
+        } else {
+            return;
+        }
     }
-    const win = window.open('', '_blank');
-    win.document.write(`
-        <html><head><title>ID Cards</title>
-        <style>.card{width:350px;border:1px solid #ddd;border-radius:10px;margin:10px auto;padding:15px;text-align:center}.header{background:#01605a;color:white;padding:10px}.name{font-size:18px;font-weight:bold;margin:10px}</style>
-        </head><body>
-        ${toPrint.map(s => `<div class="card"><div class="header"><h3>STUDENT ID CARD</h3></div><div class="name">${s.name}</div><p><strong>Adm:</strong> ${s.admission_no}</p><p><strong>Class:</strong> ${s.class}</p><p><strong>Parent:</strong> ${s.parent_name || '-'}</p><p><strong>Phone:</strong> ${s.parent_phone || '-'}</p></div>`).join('')}
-        <button onclick="window.print()">Print</button></body></html>
+    
+    if (!studentsToPrint.length) {
+        Swal.fire('Error', 'No students selected', 'error');
+        return;
+    }
+    
+    // Load houses for display
+    const { data: houses } = await sb.from('houses').select('id, name, color');
+    const housesMap = {};
+    if (houses) {
+        houses.forEach(house => {
+            housesMap[house.id] = house;
+        });
+    }
+    
+    const printWindow = window.open('', '_blank');
+    const currentDate = new Date().toLocaleDateString('en-GB');
+    const logoUrl = schoolInfo.school_logo || '';
+    
+    let allCardsHtml = '';
+    
+    for (const student of studentsToPrint) {
+        const house = housesMap[student.house_id];
+        const houseHtml = house ? 
+            `<span style="background: ${house.color}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; display: inline-block;">🏠 ${escapeHtml(house.name)}</span>` : 
+            '<span style="color: #999;">No House Assigned</span>';
+        
+        // Generate a unique card ID
+        const cardId = `CARD-${student.admission_no || student.id.slice(0, 8)}`;
+        
+        allCardsHtml += `
+            <div class="id-card">
+                <div class="id-card-inner">
+                    <div class="card-header">
+                        ${logoUrl ? `<img src="${logoUrl}" class="card-logo" alt="Logo">` : '<div class="card-logo-placeholder"><i class="fas fa-school"></i></div>'}
+                        <div class="school-title">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
+                        <div class="card-type">STUDENT IDENTIFICATION CARD</div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <div class="photo-placeholder">
+                            <i class="fas fa-user-graduate"></i>
+                        </div>
+                        <div class="student-info">
+                            <div class="info-row">
+                                <span class="info-label">Name:</span>
+                                <span class="info-value">${escapeHtml(student.name)}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Admission No:</span>
+                                <span class="info-value">${student.admission_no || '-'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Class:</span>
+                                <span class="info-value">${student.class} ${student.stream ? '- ' + student.stream : ''}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Student Type:</span>
+                                <span class="info-value">${student.student_type || 'Day'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">House:</span>
+                                <span class="info-value">${house ? house.name : '-'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Parent:</span>
+                                <span class="info-value">${escapeHtml(student.parent_name || '-')}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Phone:</span>
+                                <span class="info-value">${student.parent_phone || '-'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-footer">
+                        <div class="validity">Valid for Academic Year ${new Date().getFullYear()}</div>
+                        <div class="signature-area">
+                            <div class="signature-line"></div>
+                            <div class="signature-label">Authorized Signature</div>
+                        </div>
+                        <div class="card-id">${cardId}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Student ID Cards - ${escapeHtml(schoolInfo.school_name)}</title>
+            <style>
+                @media print {
+                    body { margin: 0; padding: 0; }
+                    .no-print { display: none; }
+                    .id-card {
+                        page-break-after: always;
+                    }
+                }
+                
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    background: #e0e0e0;
+                    padding: 20px;
+                    margin: 0;
+                }
+                
+                .id-card {
+                    width: 350px;
+                    margin: 10px auto;
+                    background: white;
+                    border-radius: 15px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+                    overflow: hidden;
+                    page-break-after: always;
+                    position: relative;
+                }
+                
+                .id-card::before {
+                    content: "";
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: url('${logoUrl}') center center no-repeat;
+                    background-size: 80%;
+                    opacity: 0.05;
+                    pointer-events: none;
+                    z-index: 0;
+                }
+                
+                .id-card-inner {
+                    position: relative;
+                    z-index: 1;
+                }
+                
+                .card-header {
+                    background: linear-gradient(135deg, #01605a, #ff862d);
+                    color: white;
+                    text-align: center;
+                    padding: 15px;
+                }
+                
+                .card-logo {
+                    width: 50px;
+                    height: 50px;
+                    border-radius: 50%;
+                    object-fit: cover;
+                    margin-bottom: 8px;
+                    border: 2px solid white;
+                }
+                
+                .card-logo-placeholder {
+                    width: 50px;
+                    height: 50px;
+                    background: rgba(255,255,255,0.2);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 8px;
+                }
+                
+                .card-logo-placeholder i {
+                    font-size: 28px;
+                    color: white;
+                }
+                
+                .school-title {
+                    font-size: 14px;
+                    font-weight: bold;
+                    margin-bottom: 4px;
+                }
+                
+                .card-type {
+                    font-size: 10px;
+                    opacity: 0.9;
+                    letter-spacing: 1px;
+                }
+                
+                .card-body {
+                    padding: 15px;
+                    display: flex;
+                    gap: 15px;
+                    background: white;
+                }
+                
+                .photo-placeholder {
+                    width: 100px;
+                    height: 100px;
+                    background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    border: 2px solid #ff862d;
+                }
+                
+                .photo-placeholder i {
+                    font-size: 48px;
+                    color: #01605a;
+                }
+                
+                .student-info {
+                    flex: 1;
+                }
+                
+                .info-row {
+                    margin-bottom: 6px;
+                    font-size: 10px;
+                }
+                
+                .info-label {
+                    font-weight: bold;
+                    color: #01605a;
+                    width: 65px;
+                    display: inline-block;
+                }
+                
+                .info-value {
+                    color: #333;
+                }
+                
+                .card-footer {
+                    background: #f8f9fa;
+                    padding: 12px 15px;
+                    text-align: center;
+                    border-top: 1px solid #e0e0e0;
+                }
+                
+                .validity {
+                    font-size: 9px;
+                    color: #28a745;
+                    font-weight: bold;
+                    margin-bottom: 8px;
+                }
+                
+                .signature-area {
+                    margin-top: 8px;
+                }
+                
+                .signature-line {
+                    width: 120px;
+                    height: 1px;
+                    border-bottom: 1px solid #333;
+                    margin: 0 auto 4px;
+                }
+                
+                .signature-label {
+                    font-size: 8px;
+                    color: #666;
+                }
+                
+                .card-id {
+                    font-size: 8px;
+                    color: #999;
+                    margin-top: 8px;
+                    font-family: monospace;
+                }
+                
+                .no-print {
+                    text-align: center;
+                    margin-top: 20px;
+                }
+                
+                .no-print button {
+                    padding: 10px 20px;
+                    margin: 0 5px;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                }
+                
+                .print-btn {
+                    background: #01605a;
+                    color: white;
+                }
+                
+                .close-btn {
+                    background: #dc3545;
+                    color: white;
+                }
+                
+                @media (max-width: 400px) {
+                    .id-card {
+                        width: 95%;
+                        margin: 10px auto;
+                    }
+                    
+                    .card-body {
+                        flex-direction: column;
+                        text-align: center;
+                    }
+                    
+                    .photo-placeholder {
+                        margin: 0 auto;
+                    }
+                    
+                    .info-label {
+                        width: auto;
+                        display: block;
+                        text-align: center;
+                    }
+                    
+                    .info-value {
+                        display: block;
+                        text-align: center;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${allCardsHtml}
+            
+            <div class="no-print">
+                <button class="print-btn" onclick="window.print()">
+                    <i class="fas fa-print"></i> Print All Cards
+                </button>
+                <button class="close-btn" onclick="window.close()">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </body>
+        </html>
     `);
-    win.document.close();
+    
+    printWindow.document.close();
 };
+// ============================================
+// EXPORT STUDENTS TO EXCEL WITH HOUSE & SCHOOL INFO
+// ============================================
 
 window.exportStudents = async function() {
-    const ws = XLSX.utils.json_to_sheet(students.map(s => ({ 'Admission No': s.admission_no, Name: s.name, Class: s.class, Stream: s.stream, Gender: s.gender, 'Parent Name': s.parent_name, 'Parent Phone': s.parent_phone })));
+    if (!students.length) {
+        Swal.fire('Error', 'No students to export', 'error');
+        return;
+    }
+    
+    // Load houses for display
+    const { data: houses } = await sb.from('houses').select('id, name, color');
+    const housesMap = {};
+    if (houses) {
+        houses.forEach(house => {
+            housesMap[house.id] = house;
+        });
+    }
+    
+    // Prepare data for export
+    const exportData = students.map(s => {
+        const house = housesMap[s.house_id];
+        
+        return {
+            'Admission No': s.admission_no || '',
+            'Student Name': s.name || '',
+            'Class': s.class || '',
+            'Stream': s.stream || '',
+            'Gender': s.gender || '',
+            'Student Type': s.student_type || 'Day',
+            'House': house ? house.name : '',
+            'Parent/Guardian': s.parent_name || '',
+            'Parent Phone': s.parent_phone || '',
+            'Parent Email': s.parent_email || '',
+            'Address': s.address || '',
+            'Date Registered': s.created_at ? new Date(s.created_at).toLocaleDateString() : ''
+        };
+    });
+    
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // Set column widths
+    ws['!cols'] = [
+        { wch: 15 }, // Admission No
+        { wch: 25 }, // Student Name
+        { wch: 10 }, // Class
+        { wch: 12 }, // Stream
+        { wch: 8 },  // Gender
+        { wch: 12 }, // Student Type
+        { wch: 15 }, // House
+        { wch: 20 }, // Parent/Guardian
+        { wch: 15 }, // Parent Phone
+        { wch: 25 }, // Parent Email
+        { wch: 30 }, // Address
+        { wch: 15 }  // Date Registered
+    ];
+    
+    // Style the header row
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:L1');
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        const address = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[address]) continue;
+        ws[address].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "01605a" } },
+            alignment: { horizontal: "center" }
+        };
+    }
+    
+    // Create workbook
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Students');
-    XLSX.writeFile(wb, `Students_${new Date().toISOString().split('T')[0]}.xlsx`);
-    Swal.fire('Exported', `${students.length} students`, 'success');
+    XLSX.utils.book_append_sheet(wb, ws, `${currentLevel.toUpperCase()}_Students`);
+    
+    // Generate filename
+    const filename = `Students_${currentLevel.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    // Export
+    XLSX.writeFile(wb, filename);
+    
+    Swal.fire({
+        title: 'Exported!',
+        text: `${students.length} students exported successfully.`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+    });
 };
 
 // ============================================
@@ -7549,9 +9310,11 @@ console.log('✅ Payments Module Loaded - Final Masterpiece with School Info Int
 console.log('✅ Features: Search Filters, Clearance Cards, Print Defaulters Report');
 console.log('✅ School Info: Logo Watermark, Class Teacher, Principal, Bursar');
 
+
+
+
 // ============================================
-// ATTENDANCE MODULE - FINAL MASTERPIECE
-// Complete | No Duplicates | O-Level & A-Level | School Info & Watermark
+// FIXED ATTENDANCE MODULE - TABLE WORKING PROPERLY
 // ============================================
 
 // Global variables
@@ -7613,7 +9376,7 @@ async function loadSchoolSettingsForAttendance() {
 }
 
 // ============================================
-// CHECK IF ATTENDANCE EXISTS FOR STUDENT ON DATE
+// CHECK IF ATTENDANCE EXISTS
 // ============================================
 
 async function checkExistingAttendance(studentId, date) {
@@ -7712,7 +9475,7 @@ async function getStudentsForAttendance() {
 }
 
 // ============================================
-// GET STUDENTS BY CURRENT LEVEL
+// GET STUDENTS BY LEVEL
 // ============================================
 
 function getStudentsByLevel() {
@@ -7883,17 +9646,15 @@ async function renderAttendance() {
                             <tr>
                                 <th width="30"><input type="checkbox" id="selectAllAttendance"></th>
                                 <th>Student Name</th>
-                                <th>Admission No</th>
                                 <th>Class</th>
-                                <th>Stream</th>
                                 <th>Date</th>
                                 <th>Status</th>
                                 <th>Remarks</th>
-                                <th width="180">Actions</th>
+                                <th width="200">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="attendanceTableBody">
-                            <tr><td colspan="9" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</span>络</tbody>
+                            <tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</span>络</tbody>
                     </table>
                 </div>
             </div>
@@ -7902,7 +9663,7 @@ async function renderAttendance() {
 }
 
 // ============================================
-// LOAD ATTENDANCE TABLE
+// LOAD ATTENDANCE TABLE - FIXED
 // ============================================
 
 async function loadAttendanceTable() {
@@ -7914,36 +9675,66 @@ async function loadAttendanceTable() {
     
     const currentLevelStudents = getStudentsByLevel();
     const currentLevelStudentIds = new Set(currentLevelStudents.map(s => s.id));
-    const levelAttendance = allAttendance.filter(a => currentLevelStudentIds.has(a.student_id));
     
-    if (levelAttendance.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4">No attendance records found. Click "Bulk Mark" to get started. </span>络</tbody>';
+    // Get current filter values
+    const fromDate = document.getElementById('filterFromDate')?.value;
+    const toDate = document.getElementById('filterToDate')?.value;
+    const statusFilter = document.getElementById('filterStatus')?.value;
+    const classFilter = document.getElementById('filterClass')?.value;
+    const studentFilter = document.getElementById('filterStudent')?.value?.toLowerCase() || '';
+    
+    // Apply filters
+    let filtered = allAttendance.filter(a => currentLevelStudentIds.has(a.student_id));
+    
+    if (fromDate) filtered = filtered.filter(a => a.attendance_date >= fromDate);
+    if (toDate) filtered = filtered.filter(a => a.attendance_date <= toDate);
+    if (statusFilter) filtered = filtered.filter(a => a.status === statusFilter);
+    if (classFilter) {
+        filtered = filtered.filter(a => {
+            const student = allStudentsList.find(s => s.id === a.student_id);
+            return student && student.class === classFilter;
+        });
+    }
+    if (studentFilter) {
+        filtered = filtered.filter(a => {
+            const student = allStudentsList.find(s => s.id === a.student_id);
+            return student && student.name.toLowerCase().includes(studentFilter);
+        });
+    }
+    
+    currentFilteredAttendance = filtered;
+    
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4">No attendance records found. Use "Bulk Mark" to get started.</span>络</tbody>`;
         updateStatisticsCards();
         return;
     }
     
     let html = '';
-    for (const a of levelAttendance) {
+    for (const a of filtered) {
         const student = allStudentsList.find(s => s.id === a.student_id);
         if (!student) continue;
+        
+        const currentStatus = a.status;
         
         html += `
             <tr>
                 <td class="text-center"><input type="checkbox" class="attendanceCheck" data-id="${a.id}"></td>
-                <td><strong>${escapeHtml(student.name)}</strong></td>
-                <td>${student.admission_no || '-'}</td>
-                <td>${student.class}</td>
-                <td>${student.stream || '-'}</td>
+                <td>
+                    <strong>${escapeHtml(student.name)}</strong>
+                    <br><small class="text-muted">${student.admission_no || '-'}</small>
+                 </span></td>
+                <td>${student.class}${student.stream ? ' - ' + student.stream : ''}</span></td>
                 <td>${formatDate(a.attendance_date)}</span></td>
                 <td class="text-center">
-                    <span class="badge ${a.status === 'Present' ? 'bg-success' : a.status === 'Absent' ? 'bg-danger' : a.status === 'Late' ? 'bg-warning text-dark' : 'bg-info'}">
+                    <span class="badge ${a.status === 'Present' ? 'bg-success' : a.status === 'Absent' ? 'bg-danger' : a.status === 'Late' ? 'bg-warning text-dark' : 'bg-info'}" style="font-size: 12px; padding: 5px 10px;">
                         ${a.status === 'Present' ? '✅' : a.status === 'Absent' ? '❌' : a.status === 'Late' ? '⏰' : '📝'} ${a.status}
                     </span>
                  </span></td>
                 <td>
                     <input type="text" class="form-control form-control-sm" 
                            id="remark_${a.id}" value="${escapeHtml(a.remarks || '')}" 
-                           style="min-width: 120px;" placeholder="Add remark..."
+                           style="min-width: 100px;" placeholder="Add remark..."
                            onblur="updateRemarkRecord('${a.id}', this.value)">
                  </span></td>
                 <td class="text-center">
@@ -7968,7 +9759,6 @@ async function loadAttendanceTable() {
         };
     }
     
-    currentFilteredAttendance = [...levelAttendance];
     updateStatisticsCards();
 }
 
@@ -7977,14 +9767,10 @@ async function loadAttendanceTable() {
 // ============================================
 
 function updateStatisticsCards() {
-    const currentLevelStudents = getStudentsByLevel();
-    const currentLevelStudentIds = new Set(currentLevelStudents.map(s => s.id));
-    const levelAttendance = currentFilteredAttendance.filter(a => currentLevelStudentIds.has(a.student_id));
-    
     let present = 0, absent = 0, late = 0, excused = 0;
-    const total = levelAttendance.length;
+    const total = currentFilteredAttendance.length;
     
-    for (const a of levelAttendance) {
+    for (const a of currentFilteredAttendance) {
         if (a.status === 'Present') present++;
         else if (a.status === 'Absent') absent++;
         else if (a.status === 'Late') late++;
@@ -8038,6 +9824,30 @@ window.markAsExcused = async function(id) {
 
 window.updateRemarkRecord = async function(id, remark) {
     await updateAttendance(id, { remarks: remark });
+};
+
+// ============================================
+// FILTER FUNCTIONS
+// ============================================
+
+window.filterAttendanceRecords = function() {
+    loadAttendanceTable();
+};
+
+window.clearAttendanceFilters = function() {
+    document.getElementById('filterFromDate').value = '';
+    document.getElementById('filterToDate').value = '';
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterClass').value = '';
+    document.getElementById('filterStudent').value = '';
+    loadAttendanceTable();
+};
+
+window.refreshAttendanceTable = async function() {
+    Swal.fire({ title: 'Refreshing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    await loadAttendanceTable();
+    Swal.close();
+    Swal.fire('Refreshed!', 'Attendance table updated.', 'success');
 };
 
 // ============================================
@@ -8119,9 +9929,8 @@ window.showSingleAttendanceModal = async function() {
         }
     });
 };
-
 // ============================================
-// BULK ATTENDANCE MODAL
+// BULK MARK ATTENDANCE MODAL - COMPLETE WORKING
 // ============================================
 
 window.showBulkAttendanceModal = async function() {
@@ -8340,7 +10149,7 @@ window.applyRemarksToAll = function() {
 };
 
 // ============================================
-// PRINT ATTENDANCE REPORT WITH WATERMARK & SCHOOL INFO
+// PRINT ATTENDANCE REPORT - COMPLETE WORKING
 // ============================================
 
 window.printAttendanceReport = async function() {
@@ -8506,89 +10315,6 @@ window.printAttendanceReport = async function() {
 };
 
 // ============================================
-// FILTER FUNCTIONS
-// ============================================
-
-window.filterAttendanceRecords = function() {
-    const fromDate = document.getElementById('filterFromDate')?.value;
-    const toDate = document.getElementById('filterToDate')?.value;
-    const statusFilter = document.getElementById('filterStatus')?.value;
-    const classFilter = document.getElementById('filterClass')?.value;
-    const studentFilter = document.getElementById('filterStudent')?.value.toLowerCase() || '';
-    
-    const currentLevelStudents = getStudentsByLevel();
-    const currentLevelStudentIds = new Set(currentLevelStudents.map(s => s.id));
-    
-    let filtered = allAttendance.filter(a => currentLevelStudentIds.has(a.student_id));
-    
-    if (fromDate) filtered = filtered.filter(a => a.attendance_date >= fromDate);
-    if (toDate) filtered = filtered.filter(a => a.attendance_date <= toDate);
-    if (statusFilter) filtered = filtered.filter(a => a.status === statusFilter);
-    if (classFilter) {
-        filtered = filtered.filter(a => {
-            const student = allStudentsList.find(s => s.id === a.student_id);
-            return student && student.class === classFilter;
-        });
-    }
-    if (studentFilter) {
-        filtered = filtered.filter(a => {
-            const student = allStudentsList.find(s => s.id === a.student_id);
-            return student && student.name.toLowerCase().includes(studentFilter);
-        });
-    }
-    
-    currentFilteredAttendance = filtered;
-    
-    const tbody = document.getElementById('attendanceTableBody');
-    if (!tbody) return;
-    
-    if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4">No matching records</span>络</tbody>';
-        updateStatisticsCards();
-        return;
-    }
-    
-    let html = '';
-    for (const a of filtered) {
-        const student = allStudentsList.find(s => s.id === a.student_id);
-        if (!student) continue;
-        
-        html += `
-            <tr>
-                <td class="text-center"><input type="checkbox" class="attendanceCheck" data-id="${a.id}"></td>
-                <td><strong>${escapeHtml(student.name)}</strong></td>
-                <td>${student.admission_no || '-'}</td>
-                <td>${student.class}</td>
-                <td>${student.stream || '-'}</td>
-                <td>${formatDate(a.attendance_date)}</span></td>
-                <td class="text-center"><span class="badge ${a.status === 'Present' ? 'bg-success' : a.status === 'Absent' ? 'bg-danger' : a.status === 'Late' ? 'bg-warning' : 'bg-info'}">${a.status === 'Present' ? '✅' : a.status === 'Absent' ? '❌' : a.status === 'Late' ? '⏰' : '📝'} ${a.status}</span></td>
-                <td>${escapeHtml(a.remarks || '-')}</span></td>
-                <td class="text-center"><div class="btn-group btn-group-sm">${a.status !== 'Present' ? '<button class="btn btn-success" onclick="markAsPresent(\'' + a.id + '\')"><i class="fas fa-check-circle"></i></button>' : ''}${a.status !== 'Absent' ? '<button class="btn btn-danger" onclick="markAsAbsent(\'' + a.id + '\')"><i class="fas fa-times-circle"></i></button>' : ''}${a.status !== 'Late' ? '<button class="btn btn-warning" onclick="markAsLate(\'' + a.id + '\')"><i class="fas fa-clock"></i></button>' : ''}${a.status !== 'Excused' ? '<button class="btn btn-info" onclick="markAsExcused(\'' + a.id + '\')"><i class="fas fa-comment"></i></button>' : ''}<button class="btn btn-danger" onclick="deleteAttendanceRecord(\'' + a.id + '\')"><i class="fas fa-trash"></i></button></div></span></td>
-            </tr>
-        `;
-    }
-    
-    tbody.innerHTML = html;
-    updateStatisticsCards();
-};
-
-window.clearAttendanceFilters = function() {
-    document.getElementById('filterFromDate').value = '';
-    document.getElementById('filterToDate').value = '';
-    document.getElementById('filterStatus').value = '';
-    document.getElementById('filterClass').value = '';
-    document.getElementById('filterStudent').value = '';
-    loadAttendanceTable();
-};
-
-window.refreshAttendanceTable = async function() {
-    Swal.fire({ title: 'Refreshing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    await loadAttendanceTable();
-    Swal.close();
-    Swal.fire('Refreshed!', 'Attendance table updated.', 'success');
-};
-
-// ============================================
 // DELETE FUNCTIONS
 // ============================================
 
@@ -8636,8 +10362,7 @@ window.bulkDeleteAttendanceRecords = async function() {
 // INITIALIZATION
 // ============================================
 
-console.log('✅ ATTENDANCE MODULE - FINAL MASTERPIECE LOADED');
-console.log('✅ Features: No Duplicates | O-Level & A-Level | School Info | Watermark');
+console.log('✅ Attendance Module Loaded - Table Working Properly');
 // ============================================
 // SCHOOL MANAGEMENT SYSTEM - REPORTS MODULE
 // FINAL MASTERPIECE
@@ -9919,12 +11644,9 @@ console.log('✅ Reports Module Loaded - Final Masterpiece');
 console.log('✅ Fee Calculation: Past Debts → Current Term → Forward Credit');
 console.log('✅ Class Teacher from School Settings');
 
-// ==================== PROMOTION MODULE ====================
 // ============================================
-// PROMOTION MODULE - COMPLETE WITH DEMOTE
-// O-Level: Based on Average Percentage (≥50%)
-// A-Level: Based on Total Points (from Settings)
-// Supports: Promote, Demote, Repeat
+// PROMOTION MODULE - WITH A-LEVEL STREAM SELECTION
+// O-Level to A-Level: Prompts for Arts or Sciences
 // ============================================
 
 // Global variables
@@ -9956,7 +11678,6 @@ async function loadPromotionGradingRules() {
             if (error) throw error;
             promotionGradingRules = data || [];
             
-            // Load university entry requirements for A-Level
             const { data: uniData, error: uniError } = await sb
                 .from('alevel_university_entry')
                 .select('*')
@@ -10098,7 +11819,6 @@ async function calculateTerm3Results(studentId, year) {
             }
             totalPercentage += percentage;
             
-            // Calculate points based on grading rules
             let points = 0;
             for (const rule of promotionGradingRules) {
                 if (percentage >= rule.min_percentage && percentage <= rule.max_percentage) {
@@ -10111,7 +11831,6 @@ async function calculateTerm3Results(studentId, year) {
         
         const average = marks.length > 0 ? totalPercentage / marks.length : 0;
         
-        // Determine performance level
         let performance = '';
         let grade = '';
         
@@ -10165,7 +11884,6 @@ function getRecommendation(studentClass, results, currentYear) {
         const average = results.average;
         
         if (average >= 50) {
-            // Promote
             let nextClass = '';
             if (studentClass === 'S.1') nextClass = 'S.2';
             else if (studentClass === 'S.2') nextClass = 'S.3';
@@ -10182,7 +11900,6 @@ function getRecommendation(studentClass, results, currentYear) {
                 canDemote: false
             };
         } else if (average >= 40) {
-            // Repeat (stay in same class)
             return {
                 action: 'REPEAT',
                 nextClass: studentClass,
@@ -10192,7 +11909,6 @@ function getRecommendation(studentClass, results, currentYear) {
                 canDemote: true
             };
         } else {
-            // Demote (go back one class)
             let prevClass = '';
             if (studentClass === 'S.2') prevClass = 'S.1';
             else if (studentClass === 'S.3') prevClass = 'S.2';
@@ -10209,12 +11925,10 @@ function getRecommendation(studentClass, results, currentYear) {
             };
         }
     } else {
-        // A-Level: Based on total points
         const totalPoints = results.totalPoints;
         const minPromotionPoints = promotionUniversityEntry.minimum_points || 12;
         
         if (totalPoints >= minPromotionPoints) {
-            // Promote
             let nextClass = '';
             if (studentClass === 'S.5') nextClass = 'S.6';
             else if (studentClass === 'S.6') nextClass = 'Completed';
@@ -10229,7 +11943,6 @@ function getRecommendation(studentClass, results, currentYear) {
                 canDemote: false
             };
         } else if (totalPoints >= minPromotionPoints - 3) {
-            // Repeat
             return {
                 action: 'REPEAT',
                 nextClass: studentClass,
@@ -10239,7 +11952,6 @@ function getRecommendation(studentClass, results, currentYear) {
                 canDemote: true
             };
         } else {
-            // Demote
             let prevClass = '';
             if (studentClass === 'S.6') prevClass = 'S.5';
             else prevClass = studentClass;
@@ -10340,7 +12052,11 @@ async function loadPromotionTable() {
 }
 
 // ============================================
-// PROMOTE SINGLE STUDENT
+// PROMOTE SINGLE STUDENT (WITH STREAM SELECTION FOR S.4 TO S.5)
+// ============================================
+
+// ============================================
+// PROMOTE SINGLE STUDENT (CLASS WITHOUT STREAM)
 // ============================================
 
 window.promoteStudent = async function(studentId) {
@@ -10356,20 +12072,83 @@ window.promoteStudent = async function(studentId) {
         return;
     }
     
+    let selectedStream = null;
+    let selectedCombination = null;
+    let finalClass = recommendation.nextClass;
+    
+    // For O-Level to A-Level promotion (S.4 to S.5)
+    if (student.class === 'S.4' && recommendation.nextClass === 'S.5') {
+        const selectionResult = await Swal.fire({
+            title: 'Promote to A-Level - Select Stream & Enter Combination',
+            html: `
+                <div class="text-start">
+                    <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
+                    <p><strong>From Class:</strong> ${student.class}</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Stream *</label>
+                        <select id="streamSelect" class="form-select">
+                            <option value="">-- Select Stream --</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Sciences">Sciences</option>
+                            <option value="Business">Business</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Combination (Type Manually) *</label>
+                        <input type="text" id="combinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
+                        <small class="text-muted">Enter combination code (e.g., PCM for Physics, Chemistry, Math)</small>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Common Combinations:</strong><br>
+                        Arts: HEG, HEM, PEM, ICT<br>
+                        Sciences: PCM, PCB, BCM, PEM<br>
+                        Business: BAM, HEB
+                    </div>
+                </div>
+            `,
+            width: '500px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-arrow-up"></i> Promote',
+            cancelButtonText: 'Cancel',
+            preConfirm: () => {
+                const stream = document.getElementById('streamSelect').value;
+                const combination = document.getElementById('combinationInput').value.trim().toUpperCase();
+                if (!stream) {
+                    Swal.showValidationMessage('Please select a stream');
+                    return false;
+                }
+                if (!combination) {
+                    Swal.showValidationMessage('Please enter a combination');
+                    return false;
+                }
+                return { stream, combination };
+            }
+        });
+        
+        if (!selectionResult.value) return;
+        selectedStream = selectionResult.value.stream;
+        selectedCombination = selectionResult.value.combination;
+        
+        // IMPORTANT: Class stays as "S.5" (without stream)
+        finalClass = 'S.5';
+    }
+    
     const confirmResult = await Swal.fire({
-        title: 'Promote Student?',
+        title: 'Confirm Promotion',
         html: `
             <div class="text-start">
                 <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
                 <p><strong>From Class:</strong> ${student.class}</p>
-                <p><strong>To Class:</strong> ${recommendation.nextClass}</p>
-                <p><strong>${currentLevel === 'olevel' ? 'Average' : 'Total Points'}:</strong> ${currentLevel === 'olevel' ? results.average.toFixed(1) + '%' : results.totalPoints + ' points'}</p>
-                <p><strong>Reason:</strong> ${recommendation.reason}</p>
+                <p><strong>To Class:</strong> ${finalClass}</p>
+                ${selectedStream ? `<p><strong>Stream:</strong> ${selectedStream}</p>` : ''}
+                ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
+                <p><strong>Average:</strong> ${results.average.toFixed(1)}%</p>
             </div>
         `,
         icon: 'question',
         showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-arrow-up"></i> Promote',
+        confirmButtonText: 'Promote',
         cancelButtonText: 'Cancel'
     });
     
@@ -10377,17 +12156,22 @@ window.promoteStudent = async function(studentId) {
         Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         
         try {
+            // Update student: class = "S.5", stream = selectedStream, combination = entered
+            const updateData = { 
+                class: finalClass,
+                stream: selectedStream || student.stream,
+                combination: selectedCombination || student.combination,
+                updated_at: new Date().toISOString()
+            };
+            
             const { error } = await sb
                 .from('students')
-                .update({ 
-                    class: recommendation.nextClass,
-                    updated_at: new Date().toISOString()
-                })
+                .update(updateData)
                 .eq('id', studentId);
             
             if (error) throw error;
             
-            Swal.fire('Success!', `${student.name} promoted to ${recommendation.nextClass}`, 'success');
+            Swal.fire('Success!', `${student.name} promoted to ${finalClass} (${selectedStream} - ${selectedCombination})`, 'success');
             await loadPromotionTable();
             
         } catch (error) {
@@ -10396,6 +12180,152 @@ window.promoteStudent = async function(studentId) {
     }
 };
 
+// ============================================
+// EXECUTE BULK PROMOTION (CLASS WITHOUT STREAM)
+// ============================================
+
+async function executeBulkPromotion(fromClass) {
+    let selectedStream = null;
+    let selectedCombination = null;
+    
+    if (fromClass === 'S.4') {
+        const selectionResult = await Swal.fire({
+            title: 'Bulk Promote S.4 to A-Level',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i>
+                        Students promoted from S.4 will be placed in the selected stream with the entered combination.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Stream *</label>
+                        <select id="bulkStreamSelect" class="form-select">
+                            <option value="">-- Select Stream --</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Sciences">Sciences</option>
+                            <option value="Business">Business</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Combination (Type Manually) *</label>
+                        <input type="text" id="bulkCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
+                        <small class="text-muted">All promoted students will get this combination</small>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Common Combinations:</strong><br>
+                        Arts: HEG, HEM, PEM, ICT<br>
+                        Sciences: PCM, PCB, BCM, PEM<br>
+                        Business: BAM, HEB
+                    </div>
+                </div>
+            `,
+            width: '500px',
+            showCancelButton: true,
+            confirmButtonText: 'Continue Promotion',
+            cancelButtonText: 'Cancel',
+            preConfirm: () => {
+                const stream = document.getElementById('bulkStreamSelect').value;
+                const combination = document.getElementById('bulkCombinationInput').value.trim().toUpperCase();
+                if (!stream) {
+                    Swal.showValidationMessage('Please select a stream');
+                    return false;
+                }
+                if (!combination) {
+                    Swal.showValidationMessage('Please enter a combination');
+                    return false;
+                }
+                return { stream, combination };
+            }
+        });
+        
+        if (!selectionResult.value) return;
+        selectedStream = selectionResult.value.stream;
+        selectedCombination = selectionResult.value.combination;
+    }
+    
+    Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const students = promotionStudentsList.filter(s => s.class === fromClass);
+        const year = new Date().getFullYear().toString();
+        
+        let promoted = 0;
+        let notEligible = [];
+        let promotedList = [];
+        
+        for (const student of students) {
+            const results = await calculateTerm3Results(student.id, year);
+            const recommendation = getRecommendation(student.class, results, year);
+            
+            if (recommendation.canPromote && recommendation.action === 'PROMOTE') {
+                let finalClass = recommendation.nextClass;
+                const updateData = { class: finalClass };
+                
+                // For S.4 to S.5 promotion
+                if (fromClass === 'S.4' && finalClass === 'S.5' && selectedStream) {
+                    updateData.class = 'S.5';
+                    updateData.stream = selectedStream;
+                    updateData.combination = selectedCombination;
+                }
+                
+                const { error } = await sb
+                    .from('students')
+                    .update(updateData)
+                    .eq('id', student.id);
+                
+                if (!error) {
+                    promoted++;
+                    promotedList.push({ 
+                        name: student.name, 
+                        newClass: updateData.class,
+                        stream: updateData.stream,
+                        combination: updateData.combination 
+                    });
+                }
+            } else {
+                notEligible.push({ name: student.name, reason: recommendation.reason });
+            }
+        }
+        
+        let message = `<div class="text-start">
+            <p><strong>Class:</strong> ${fromClass}</p>
+            ${selectedStream ? `<p><strong>A-Level Stream:</strong> ${selectedStream}</p>` : ''}
+            ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
+            <p><strong>Promoted:</strong> ${promoted} out of ${students.length} students</p>`;
+        
+        if (promotedList.length > 0) {
+            message += `<hr><strong>Promoted Students:</strong><ul>`;
+            promotedList.slice(0, 10).forEach(s => {
+                message += `<li>${escapeHtml(s.name)} → ${s.newClass} (${s.stream} - ${s.combination})</li>`;
+            });
+            if (promotedList.length > 10) message += `<li>... and ${promotedList.length - 10} more</li>`;
+            message += `</ul>`;
+        }
+        
+        if (notEligible.length > 0) {
+            message += `<hr class="text-danger"><strong class="text-danger">Not Eligible (${notEligible.length}):</strong><ul>`;
+            notEligible.slice(0, 5).forEach(s => {
+                message += `<li>${escapeHtml(s.name)} - ${s.reason}</li>`;
+            });
+            if (notEligible.length > 5) message += `<li>... and ${notEligible.length - 5} more</li>`;
+            message += `</ul>`;
+        }
+        
+        message += `</div>`;
+        
+        Swal.fire({
+            title: 'Promotion Complete',
+            html: message,
+            icon: 'success'
+        });
+        
+        await loadPromotionTable();
+        
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
 // ============================================
 // DEMOTE STUDENT
 // ============================================
@@ -10407,7 +12337,6 @@ window.demoteStudent = async function(studentId) {
     const year = new Date().getFullYear().toString();
     const results = await calculateTerm3Results(studentId, year);
     
-    // Get possible demotion classes
     let demotionOptions = '';
     
     if (currentLevel === 'olevel') {
@@ -10420,7 +12349,6 @@ window.demoteStudent = async function(studentId) {
         else demotionOptions = `<option value="${student.class}">${student.class} (Repeat)</option>`;
     }
     
-    // Add repeat option
     demotionOptions += `<option value="${student.class}">${student.class} (Repeat - Stay in same class)</option>`;
     
     const result = await Swal.fire({
@@ -10471,18 +12399,6 @@ window.demoteStudent = async function(studentId) {
             
             if (error) throw error;
             
-            // Record demotion history
-            await sb.from('promotion_history').insert([{
-                student_id: studentId,
-                from_class: student.class,
-                to_class: result.value.newClass,
-                action: 'DEMOTE',
-                reason: result.value.reason,
-                year: year,
-                created_at: new Date().toISOString()
-            }]).catch(() => {});
-            
-            Swal.fire('Success!', `${student.name} moved to ${result.value.newClass}`, 'success');
             await loadPromotionTable();
             
         } catch (error) {
@@ -10495,13 +12411,29 @@ window.demoteStudent = async function(studentId) {
 // BULK PROMOTE MODAL
 // ============================================
 
+// ============================================
+// BULK PROMOTE MODAL - COMPLETELY FIXED
+// ============================================
+
 window.showPromotionModal = function() {
-    const uniqueClasses = [...new Set(promotionStudentsList.map(s => s.class))];
+    // Get unique classes with student counts
+    const classMap = {};
+    for (const student of promotionStudentsList) {
+        if (!classMap[student.class]) {
+            classMap[student.class] = 0;
+        }
+        classMap[student.class]++;
+    }
+    
+    const uniqueClasses = Object.keys(classMap).sort();
     
     let classOptions = '<option value="">-- Select Class --</option>';
     for (const c of uniqueClasses) {
-        classOptions += `<option value="${c}">${c}</option>`;
+        classOptions += `<option value="${c}">${c} (${classMap[c]} students)</option>`;
     }
+    
+    // Create a unique ID for this modal instance
+    const modalId = 'promoteModal_' + Date.now();
     
     Swal.fire({
         title: '<i class="fas fa-arrow-up"></i> Bulk Promote Students',
@@ -10515,7 +12447,7 @@ window.showPromotionModal = function() {
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">From Class *</label>
-                    <select id="promoteFrom" class="form-select">
+                    <select id="promoteFromSelect" class="form-select">
                         ${classOptions}
                     </select>
                 </div>
@@ -10529,8 +12461,19 @@ window.showPromotionModal = function() {
         showCancelButton: true,
         confirmButtonText: '<i class="fas fa-arrow-up"></i> Promote Eligible',
         cancelButtonText: 'Cancel',
+        didOpen: () => {
+            // Ensure the select element exists
+            const selectEl = document.getElementById('promoteFromSelect');
+            if (selectEl) {
+                console.log('Select element found');
+            } else {
+                console.log('Select element not found');
+            }
+        },
         preConfirm: () => {
-            const fromClass = document.getElementById('promoteFrom').value;
+            const fromClass = document.getElementById('promoteFromSelect')?.value;
+            console.log('Selected class:', fromClass);
+            
             if (!fromClass) {
                 Swal.showValidationMessage('Please select a class!');
                 return false;
@@ -10543,17 +12486,88 @@ window.showPromotionModal = function() {
         }
     });
 };
+// ============================================
+// EXECUTE BULK PROMOTION (WITH STREAM SELECTION FOR S.4)
+// ============================================
 
 // ============================================
-// EXECUTE BULK PROMOTION
+// EXECUTE BULK PROMOTION - WITH DEBUGGING
 // ============================================
 
 async function executeBulkPromotion(fromClass) {
+    console.log('Bulk promoting from class:', fromClass);
+    
+    // For S.4 to S.5 promotion, ask for stream and combination
+    let selectedStream = null;
+    let selectedCombination = null;
+    
+    if (fromClass === 'S.4') {
+        const selectionResult = await Swal.fire({
+            title: 'Promote S.4 Students to A-Level',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i>
+                        Students promoted from ${fromClass} will be placed in the selected stream with the entered combination.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Stream *</label>
+                        <select id="bulkStreamSelect" class="form-select">
+                            <option value="">-- Select Stream --</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Sciences">Sciences</option>
+                            <option value="Business">Business</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Combination (Type Manually) *</label>
+                        <input type="text" id="bulkCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
+                        <small class="text-muted">All promoted students will get this combination</small>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Common Combinations:</strong><br>
+                        Arts: HEG, HEM, PEM, ICT<br>
+                        Sciences: PCM, PCB, BCM, PEM<br>
+                        Business: BAM, HEB
+                    </div>
+                </div>
+            `,
+            width: '500px',
+            showCancelButton: true,
+            confirmButtonText: 'Continue Promotion',
+            cancelButtonText: 'Cancel',
+            preConfirm: () => {
+                const stream = document.getElementById('bulkStreamSelect')?.value;
+                const combination = document.getElementById('bulkCombinationInput')?.value.trim().toUpperCase();
+                
+                if (!stream) {
+                    Swal.showValidationMessage('Please select a stream');
+                    return false;
+                }
+                if (!combination) {
+                    Swal.showValidationMessage('Please enter a combination');
+                    return false;
+                }
+                return { stream, combination };
+            }
+        });
+        
+        if (!selectionResult.value) return;
+        selectedStream = selectionResult.value.stream;
+        selectedCombination = selectionResult.value.combination;
+        
+        console.log('Selected stream:', selectedStream);
+        console.log('Selected combination:', selectedCombination);
+    }
+    
     Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
         const students = promotionStudentsList.filter(s => s.class === fromClass);
         const year = new Date().getFullYear().toString();
+        
+        console.log(`Found ${students.length} students in class ${fromClass}`);
         
         let promoted = 0;
         let notEligible = [];
@@ -10563,36 +12577,63 @@ async function executeBulkPromotion(fromClass) {
             const results = await calculateTerm3Results(student.id, year);
             const recommendation = getRecommendation(student.class, results, year);
             
+            console.log(`Student: ${student.name}, Average: ${results.average.toFixed(1)}%, Action: ${recommendation.action}`);
+            
             if (recommendation.canPromote && recommendation.action === 'PROMOTE') {
+                let finalClass = recommendation.nextClass;
+                const updateData = { 
+                    class: finalClass,
+                    updated_at: new Date().toISOString()
+                };
+                
+                // For S.4 to S.5 promotion
+                if (fromClass === 'S.4' && finalClass === 'S.5') {
+                    updateData.class = 'S.5';
+                    updateData.stream = selectedStream;
+                    updateData.combination = selectedCombination;
+                    finalClass = `S.5 (${selectedStream})`;
+                }
+                
                 const { error } = await sb
                     .from('students')
-                    .update({ class: recommendation.nextClass })
+                    .update(updateData)
                     .eq('id', student.id);
                 
                 if (!error) {
                     promoted++;
-                    promotedList.push({ name: student.name, nextClass: recommendation.nextClass });
+                    promotedList.push({ 
+                        name: student.name, 
+                        nextClass: finalClass,
+                        stream: updateData.stream,
+                        combination: updateData.combination 
+                    });
+                    console.log(`✅ Promoted: ${student.name}`);
+                } else {
+                    console.log(`❌ Error promoting ${student.name}:`, error);
                 }
             } else {
                 notEligible.push({ name: student.name, reason: recommendation.reason });
+                console.log(`❌ Not eligible: ${student.name} - ${recommendation.reason}`);
             }
         }
         
         let message = `<div class="text-start">
             <p><strong>Class:</strong> ${fromClass}</p>
+            ${selectedStream ? `<p><strong>A-Level Stream:</strong> ${selectedStream}</p>` : ''}
+            ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
             <p><strong>Promoted:</strong> ${promoted} out of ${students.length} students</p>`;
         
         if (promotedList.length > 0) {
-            message += `<hr><strong>Promoted Students:</strong><ul>`;
+            message += `<hr><strong>✅ Promoted Students:</strong><ul>`;
             promotedList.slice(0, 10).forEach(s => {
-                message += `<li>${escapeHtml(s.name)} → ${s.nextClass}</li>`;
+                message += `<li>${escapeHtml(s.name)} → ${s.nextClass} ${s.stream ? '(' + s.stream + ')' : ''} ${s.combination ? '[' + s.combination + ']' : ''}</li>`;
             });
             if (promotedList.length > 10) message += `<li>... and ${promotedList.length - 10} more</li>`;
             message += `</ul>`;
         }
         
         if (notEligible.length > 0) {
-            message += `<hr class="text-danger"><strong class="text-danger">Not Eligible (${notEligible.length}):</strong><ul>`;
+            message += `<hr class="text-danger"><strong class="text-danger">❌ Not Eligible (${notEligible.length}):</strong><ul>`;
             notEligible.slice(0, 5).forEach(s => {
                 message += `<li>${escapeHtml(s.name)} - ${s.reason}</li>`;
             });
@@ -10605,16 +12646,17 @@ async function executeBulkPromotion(fromClass) {
         Swal.fire({
             title: 'Promotion Complete',
             html: message,
-            icon: 'success'
+            icon: 'success',
+            width: '600px'
         });
         
         await loadPromotionTable();
         
     } catch (error) {
+        console.error('Bulk promotion error:', error);
         Swal.fire('Error', error.message, 'error');
     }
 }
-
 // ============================================
 // BULK DEMOTE MODAL
 // ============================================
@@ -10693,7 +12735,6 @@ async function executeBulkDemotion(fromClass, toClass) {
         for (const student of students) {
             const results = await calculateTerm3Results(student.id, year);
             
-            // Demote students with very poor performance
             let shouldDemote = false;
             if (currentLevel === 'olevel') {
                 shouldDemote = results.hasMarks && results.average < 40;
@@ -12182,6 +14223,7 @@ async function generateAlevelBoardHtml() {
                 <button class="tab-btn" onclick="showTab('alevel')">📈 A-Level</button>
                 <button class="tab-btn" onclick="showTab('fee')">💰 Fee Structure</button>
                 <button class="tab-btn" onclick="showTab('academic')">📅 Academic</button>
+                 <button class="tab-btn" onclick="showTab('houses')">🏠 Houses</button> 
             </div>
             
             <!-- SCHOOL INFO PANEL -->
@@ -12531,11 +14573,11 @@ async function generateAlevelBoardHtml() {
                 <i class="fas fa-file-excel"></i> Export to Excel
             </button>
         </div>
-    </div>
-</div>
+      </div>
+      </div>
             <!-- ACADEMIC CALENDAR PANEL - FINAL MASTERPIECE -->
-<div id="tab-academic" class="tab-panel">
-    <div class="info-card">
+      <div id="tab-academic" class="tab-panel">
+      <div class="info-card">
         <h5><i class="fas fa-calendar-alt text-primary"></i> Academic Calendar</h5>
         <div class="alert alert-info mb-4">
             <i class="fas fa-info-circle"></i> 
@@ -12683,12 +14725,53 @@ async function generateAlevelBoardHtml() {
                 <i class="fas fa-sync-alt"></i> Refresh All Data
             </button>
         </div>
-    </div>
-</div>
+      </div>
+      </div>
             
            
         </div>
+       
+
+
+
+
+
+
+
+        
+
+              <div id="tab-houses" class="tab-panel">
+      <div class="info-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="fas fa-home"></i> House Management</h5>
+            <button class="btn btn-sm btn-success" onclick="addNewHouse()">
+                <i class="fas fa-plus"></i> Add New House
+            </button>
+        </div>
+        
+        <div class="alert alert-info mb-3">
+            <i class="fas fa-info-circle"></i> 
+            Manage school houses with their respective House Heads (teachers in charge).
+        </div>
+        
+        <div id="housesListContainer">
+            <div class="text-center py-4">
+                <i class="fas fa-spinner fa-spin"></i> Loading houses...
+            </div>
+        </div>
+        
+        <div class="text-end mt-4">
+            <button class="save-btn" onclick="saveAllHouses()">
+                <i class="fas fa-save"></i> Save All Houses
+            </button>
+        </div>
+     </div>
+     </div>
+
+        
     `;
+
+    
 }
 
 // ============================================
@@ -14710,6 +16793,547 @@ if (typeof showTab === 'function') {
 }
 
 console.log('✅ Academic Calendar Module Loaded - FINAL MASTERPIECE');
+
+// ============================================
+// HOUSES MANAGEMENT - SEPARATE TABLE VERSION
+// ============================================
+
+let housesList = [];
+let teachersList = [];
+
+// Load teachers for dropdown
+async function loadTeachersForHouses() {
+    try {
+        const { data, error } = await sb
+            .from('teachers')
+            .select('id, name, staff_id')
+            .order('name', { ascending: true });
+        
+        if (error) throw error;
+        teachersList = data || [];
+        return teachersList;
+    } catch (error) {
+        console.error('Error loading teachers:', error);
+        return [];
+    }
+}
+
+// Load houses from database
+async function loadHousesFromTable() {
+    try {
+        await loadTeachersForHouses();
+        
+        const { data, error } = await sb
+            .from('houses')
+            .select('*')
+            .order('name', { ascending: true });
+        
+        if (error) throw error;
+        housesList = data || [];
+        
+        renderHousesTable();
+        return housesList;
+    } catch (error) {
+        console.error('Error loading houses:', error);
+        housesList = [];
+        renderHousesTable();
+        return [];
+    }
+}
+
+// Render houses table
+function renderHousesTable() {
+    const container = document.getElementById('housesListContainer');
+    if (!container) return;
+    
+    if (housesList.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-warning text-center py-4">
+                <i class="fas fa-home fa-2x mb-2 d-block"></i>
+                No houses configured. Click "Add New House" to get started.
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead class="table-primary">
+                    <tr>
+                        <th width="40">#</th>
+                        <th width="180">House Name</th>
+                        <th width="80">Color</th>
+                        <th width="100">Code</th>
+                        <th width="200">House Head</th>
+                        <th>Description</th>
+                        <th width="50">Students</th>
+                        <th width="100">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="housesTableBody">
+    `;
+    
+    housesList.forEach((house, index) => {
+        const teacherDropdown = getTeacherDropdownOptions(house.head_teacher_id);
+        
+        html += `
+            <tr data-house-id="${house.id}">
+                <td class="text-center">${index + 1}</td>
+                <td>
+                    <input type="text" class="form-control house-name" value="${escapeHtml(house.name)}" 
+                           placeholder="e.g., Red House" style="font-weight: bold;">
+                 </span></td>
+                <td>
+                    <div class="d-flex flex-column gap-1">
+                        <input type="color" class="form-control house-color" value="${house.color}" style="width: 60px; height: 40px;">
+                        <input type="text" class="form-control form-control-sm house-color-text" value="${house.color}" 
+                               placeholder="#HEX" style="width: 80px; font-size: 11px;">
+                    </div>
+                 </span></td>
+                <td>
+                    <input type="text" class="form-control house-code" value="${escapeHtml(house.code || '')}" 
+                           placeholder="e.g., RED" style="text-transform: uppercase;">
+                 </span></td>
+                <td>
+                    <select class="form-select house-head-teacher" data-house-id="${house.id}">
+                        ${teacherDropdown}
+                    </select>
+                    <div class="mt-1">
+                        <small class="text-muted house-head-display">
+                            ${house.head_teacher_name ? `<span class="badge bg-info">${escapeHtml(house.head_teacher_name)}</span>` : '<span class="text-muted">Not assigned</span>'}
+                        </small>
+                    </div>
+                 </span></td>
+                <td>
+                    <textarea class="form-control house-description" rows="2" placeholder="House description...">${escapeHtml(house.description || '')}</textarea>
+                 </span></td>
+                <td class="text-center">
+                    <span class="badge bg-secondary">${house.student_count || 0}</span>
+                 </span></td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-primary me-1" onclick="editHouse('${house.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteHouseFromTable('${house.id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                 </span></td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+        <div class="alert alert-success mt-3 small">
+            <i class="fas fa-lightbulb"></i> 
+            <strong>Tip:</strong> Students can be assigned to houses during registration or editing.
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    // Add event listeners for color picker sync
+    document.querySelectorAll('.house-color').forEach((colorPicker, idx) => {
+        const textInput = document.querySelectorAll('.house-color-text')[idx];
+        if (textInput) {
+            colorPicker.addEventListener('input', (e) => {
+                textInput.value = e.target.value;
+            });
+            textInput.addEventListener('input', (e) => {
+                colorPicker.value = e.target.value;
+            });
+        }
+    });
+}
+
+// Generate teacher dropdown options
+function getTeacherDropdownOptions(selectedId = null) {
+    let options = '<option value="">-- Select House Head --</option>';
+    for (const teacher of teachersList) {
+        const selected = selectedId === teacher.id ? 'selected' : '';
+        options += `<option value="${teacher.id}" ${selected}>${escapeHtml(teacher.name)} (${teacher.staff_id || 'No ID'})</option>`;
+    }
+    return options;
+}
+
+// Add new house
+window.addNewHouse = async function() {
+    const { value: formValues } = await Swal.fire({
+        title: 'Add New House',
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">House Name *</label>
+                    <input type="text" id="newHouseName" class="form-control" placeholder="e.g., Red House">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">House Code *</label>
+                    <input type="text" id="newHouseCode" class="form-control" placeholder="e.g., RED" style="text-transform: uppercase;">
+                    <small class="text-muted">Unique code for the house</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Color</label>
+                    <div class="d-flex gap-2">
+                        <input type="color" id="newHouseColor" class="form-control" value="#01605a" style="width: 60px;">
+                        <input type="text" id="newHouseColorText" class="form-control" value="#01605a" placeholder="#HEX">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">House Head Teacher</label>
+                    <select id="newHouseHead" class="form-select">
+                        <option value="">-- Select House Head --</option>
+                        ${teachersList.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${t.staff_id || 'No ID'})</option>`).join('')}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Description</label>
+                    <textarea id="newHouseDesc" class="form-control" rows="2" placeholder="House description..."></textarea>
+                </div>
+            </div>
+        `,
+        width: '500px',
+        showCancelButton: true,
+        confirmButtonText: 'Add House',
+        preConfirm: () => {
+            const name = document.getElementById('newHouseName')?.value.trim();
+            const code = document.getElementById('newHouseCode')?.value.trim().toUpperCase();
+            
+            if (!name) {
+                Swal.showValidationMessage('House name is required');
+                return false;
+            }
+            if (!code) {
+                Swal.showValidationMessage('House code is required');
+                return false;
+            }
+            
+            const color = document.getElementById('newHouseColorText')?.value || '#01605a';
+            const headTeacherId = document.getElementById('newHouseHead')?.value || null;
+            const description = document.getElementById('newHouseDesc')?.value || '';
+            
+            return { name, code, color, headTeacherId, description };
+        }
+    });
+    
+    if (formValues) {
+        Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        try {
+            const headTeacher = teachersList.find(t => t.id === formValues.headTeacherId);
+            
+            const { data, error } = await sb
+                .from('houses')
+                .insert([{
+                    name: formValues.name,
+                    code: formValues.code,
+                    color: formValues.color,
+                    head_teacher_id: formValues.headTeacherId || null,
+                    head_teacher_name: headTeacher?.name || null,
+                    description: formValues.description,
+                    created_at: new Date().toISOString()
+                }])
+                .select();
+            
+            if (error) throw error;
+            
+            Swal.fire('Success!', 'House added successfully.', 'success');
+            await loadHousesFromTable();
+            
+        } catch (error) {
+            Swal.fire('Error!', error.message, 'error');
+        }
+    }
+};
+
+// Edit house
+window.editHouse = async function(houseId) {
+    const house = housesList.find(h => h.id === houseId);
+    if (!house) return;
+    
+    const { value: formValues } = await Swal.fire({
+        title: 'Edit House',
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">House Name *</label>
+                    <input type="text" id="editHouseName" class="form-control" value="${escapeHtml(house.name)}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">House Code *</label>
+                    <input type="text" id="editHouseCode" class="form-control" value="${escapeHtml(house.code)}" style="text-transform: uppercase;">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Color</label>
+                    <div class="d-flex gap-2">
+                        <input type="color" id="editHouseColor" class="form-control" value="${house.color}" style="width: 60px;">
+                        <input type="text" id="editHouseColorText" class="form-control" value="${house.color}">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">House Head Teacher</label>
+                    <select id="editHouseHead" class="form-select">
+                        <option value="">-- Select House Head --</option>
+                        ${teachersList.map(t => `<option value="${t.id}" ${house.head_teacher_id === t.id ? 'selected' : ''}>${escapeHtml(t.name)} (${t.staff_id || 'No ID'})</option>`).join('')}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Description</label>
+                    <textarea id="editHouseDesc" class="form-control" rows="2">${escapeHtml(house.description || '')}</textarea>
+                </div>
+            </div>
+        `,
+        width: '500px',
+        showCancelButton: true,
+        confirmButtonText: 'Save Changes',
+        preConfirm: () => {
+            const name = document.getElementById('editHouseName')?.value.trim();
+            const code = document.getElementById('editHouseCode')?.value.trim().toUpperCase();
+            
+            if (!name) {
+                Swal.showValidationMessage('House name is required');
+                return false;
+            }
+            if (!code) {
+                Swal.showValidationMessage('House code is required');
+                return false;
+            }
+            
+            return {
+                name: name,
+                code: code,
+                color: document.getElementById('editHouseColorText')?.value || '#01605a',
+                headTeacherId: document.getElementById('editHouseHead')?.value || null,
+                description: document.getElementById('editHouseDesc')?.value || ''
+            };
+        }
+    });
+    
+    if (formValues) {
+        Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        try {
+            const headTeacher = teachersList.find(t => t.id === formValues.headTeacherId);
+            
+            const { error } = await sb
+                .from('houses')
+                .update({
+                    name: formValues.name,
+                    code: formValues.code,
+                    color: formValues.color,
+                    head_teacher_id: formValues.headTeacherId || null,
+                    head_teacher_name: headTeacher?.name || null,
+                    description: formValues.description,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', houseId);
+            
+            if (error) throw error;
+            
+            Swal.fire('Success!', 'House updated successfully.', 'success');
+            await loadHousesFromTable();
+            
+        } catch (error) {
+            Swal.fire('Error!', error.message, 'error');
+        }
+    }
+};
+
+// Delete house
+window.deleteHouseFromTable = async function(houseId) {
+    const house = housesList.find(h => h.id === houseId);
+    
+    // Check if house has students
+    if (house.student_count > 0) {
+        Swal.fire({
+            title: 'Cannot Delete',
+            html: `House "${house.name}" has <strong>${house.student_count} students</strong> assigned.<br><br>Please reassign or remove students first.`,
+            icon: 'warning',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    const result = await Swal.fire({
+        title: 'Delete House?',
+        html: `Are you sure you want to delete <strong>${escapeHtml(house.name)}</strong>?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (result.isConfirmed) {
+        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        try {
+            const { error } = await sb
+                .from('houses')
+                .delete()
+                .eq('id', houseId);
+            
+            if (error) throw error;
+            
+            Swal.fire('Deleted!', 'House has been removed.', 'success');
+            await loadHousesFromTable();
+            
+        } catch (error) {
+            Swal.fire('Error!', error.message, 'error');
+        }
+    }
+};
+// ============================================
+// SAVE ALL HOUSES - SAVE ALL CHANGES AT ONCE
+// ============================================
+
+window.saveAllHouses = async function() {
+    console.log("Save All Houses button clicked");
+    
+    // Collect all values from the table inputs
+    const rows = document.querySelectorAll('#housesTableBody tr');
+    
+    if (rows.length === 0) {
+        Swal.fire('Error', 'No houses to save', 'error');
+        return;
+    }
+    
+    const updatedHouses = [];
+    
+    for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
+        
+        // Get values from each input
+        const nameInput = row.querySelector('.house-name');
+        const colorInput = row.querySelector('.house-color');
+        const colorTextInput = row.querySelector('.house-color-text');
+        const codeInput = row.querySelector('.house-code');
+        const headTeacherSelect = row.querySelector('.house-head-teacher');
+        const descInput = row.querySelector('.house-description');
+        
+        const houseName = nameInput ? nameInput.value.trim() : '';
+        const houseColor = colorTextInput ? colorTextInput.value : (colorInput ? colorInput.value : '#01605a');
+        const houseCode = codeInput ? codeInput.value.trim().toUpperCase() : '';
+        const headTeacherId = headTeacherSelect ? headTeacherSelect.value : null;
+        const houseDescription = descInput ? descInput.value.trim() : '';
+        
+        // Get teacher name if selected
+        let headTeacherName = '';
+        if (headTeacherId) {
+            const selectedTeacher = teachersList.find(t => t.id == headTeacherId);
+            if (selectedTeacher) {
+                headTeacherName = selectedTeacher.name;
+            }
+        }
+        
+        // Get existing house ID
+        const houseId = row.getAttribute('data-house-id');
+        
+        if (houseName) {
+            updatedHouses.push({
+                id: houseId || null,
+                name: houseName,
+                color: houseColor,
+                code: houseCode || houseName.substring(0, 3).toUpperCase(),
+                head_teacher_id: headTeacherId || null,
+                head_teacher_name: headTeacherName,
+                description: houseDescription
+            });
+        }
+    }
+    
+    if (updatedHouses.length === 0) {
+        Swal.fire('Error', 'Please add at least one house before saving.', 'error');
+        return;
+    }
+    
+    Swal.fire({ 
+        title: 'Saving houses...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    try {
+        let saved = 0;
+        let errors = 0;
+        
+        for (const house of updatedHouses) {
+            if (house.id) {
+                // UPDATE existing house
+                const { error } = await sb
+                    .from('houses')
+                    .update({
+                        name: house.name,
+                        code: house.code,
+                        color: house.color,
+                        head_teacher_id: house.head_teacher_id,
+                        head_teacher_name: house.head_teacher_name,
+                        description: house.description,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', house.id);
+                
+                if (error) {
+                    console.error('Update error:', error);
+                    errors++;
+                } else {
+                    saved++;
+                }
+            } else {
+                // INSERT new house
+                const { error } = await sb
+                    .from('houses')
+                    .insert({
+                        name: house.name,
+                        code: house.code,
+                        color: house.color,
+                        head_teacher_id: house.head_teacher_id,
+                        head_teacher_name: house.head_teacher_name,
+                        description: house.description,
+                        created_at: new Date().toISOString()
+                    });
+                
+                if (error) {
+                    console.error('Insert error:', error);
+                    errors++;
+                } else {
+                    saved++;
+                }
+            }
+        }
+        
+        Swal.close();
+        
+        if (errors > 0) {
+            Swal.fire('Partial Success', `✅ ${saved} saved | ❌ ${errors} failed`, 'warning');
+        } else {
+            Swal.fire('Success!', `✅ ${saved} houses saved successfully!`, 'success');
+        }
+        
+        // Refresh the list to get new IDs and updated data
+        await loadHousesFromTable();
+        
+    } catch (error) {
+        Swal.close();
+        console.error('Save error:', error);
+        Swal.fire('Error!', error.message, 'error');
+    }
+};
+
+// Initialize houses tab
+if (typeof showTab === 'function') {
+    const originalShowTab = window.showTab;
+    window.showTab = function(tabName) {
+        originalShowTab(tabName);
+        if (tabName === 'houses') {
+            loadHousesFromTable();
+        }
+    };
+}
+
+console.log('✅ Houses Table Module Loaded');
 
 
 // ============================================
