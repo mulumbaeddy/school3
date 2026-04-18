@@ -8604,6 +8604,11 @@ window.showCompletedStudentsModal = async function() {
 // SHOW ADD PAYMENT MODAL
 // ============================================
 
+// ============================================
+// SHOW ADD PAYMENT MODAL - WITH NATIVE DATALIST
+// BEST SOLUTION - No complex CSS needed!
+// ============================================
+
 window.showAddPaymentModal = async function() {
     console.log("Opening Add Payment Modal...");
     
@@ -8611,7 +8616,10 @@ window.showAddPaymentModal = async function() {
     await getStudentsForPayments();
     await getPayments();
     
-    const filteredStudents = getStudentsByLevel();
+    // Get students and sort alphabetically by name
+    let filteredStudents = getStudentsByLevel();
+    filteredStudents = filteredStudents.sort((a, b) => a.name.localeCompare(b.name));
+    
     const currentYear = new Date().getFullYear().toString();
     const currentTerm = getCurrentTerm();
     
@@ -8620,11 +8628,18 @@ window.showAddPaymentModal = async function() {
         return;
     }
     
-    let studentOptions = '<option value="">-- Select Student --</option>';
+    // Generate datalist options (HTML5 native searchable dropdown)
+    let datalistOptions = '';
     for (const s of filteredStudents) {
         const fee = getStudentFeeAmount(s);
-        const feeDisplay = fee ? formatMoney(fee) : '⚠️ No Fee Set';
-        studentOptions += `<option value="${s.id}" data-fee="${fee || 0}">${escapeHtml(s.name)} (${s.class}) - ${s.admission_no || 'No ADM'} - Fee: ${feeDisplay}</option>`;
+        const feeDisplay = fee ? formatMoney(fee) : 'No Fee';
+        datalistOptions += `<option value="${s.id}">${s.name} (${s.class}) - ${s.admission_no || 'No ADM'} - ${feeDisplay}</option>`;
+    }
+    
+    // Also create a map for quick student lookup
+    const studentMap = {};
+    for (const s of filteredStudents) {
+        studentMap[s.id] = s;
     }
     
     const { value: result } = await Swal.fire({
@@ -8634,14 +8649,37 @@ window.showAddPaymentModal = async function() {
                 <div class="alert alert-info small mb-3">
                     <i class="fas fa-database"></i> <strong>Live Data:</strong> Fees loaded from fee_structure table
                 </div>
+                
+                <!-- NATIVE SEARCHABLE DROPDOWN - BEST SOLUTION -->
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Select Student *</label>
-                    <select id="paymentStudentSelect" class="form-select">${studentOptions}</select>
+                    <label class="form-label fw-bold">👨‍🎓 Search & Select Student *</label>
+                    <input type="text" id="paymentStudentInput" class="form-control" 
+                           list="studentList" 
+                           placeholder="🔍 Type student name or admission number..."
+                           autocomplete="off"
+                           onchange="onPaymentStudentSelect(this.value)"
+                           style="border: 2px solid #01605a; border-radius: 8px; padding: 10px;">
+                    <datalist id="studentList">
+                        ${datalistOptions}
+                    </datalist>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Start typing name or admission number - suggestions appear automatically
+                    </small>
                 </div>
+                
+                <div id="selectedStudentInfo" class="alert alert-success mb-3" style="display: none;">
+                    <strong>✅ Selected Student:</strong> 
+                    <span id="selectedStudentName"></span><br>
+                    <strong>Class:</strong> <span id="selectedStudentClass"></span> | 
+                    <strong>Admission:</strong> <span id="selectedStudentAdmission"></span>
+                </div>
+                
                 <div id="balanceInfo" class="alert alert-info mb-3" style="display: none;">
                     <strong>💰 Fee & Balance Information:</strong>
                     <div id="balanceDetails" style="margin-top: 8px;"></div>
                 </div>
+                
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Fee Type</label>
@@ -8661,6 +8699,7 @@ window.showAddPaymentModal = async function() {
                         <input type="number" id="amountInput" class="form-control" placeholder="0" min="0" step="1000">
                     </div>
                 </div>
+                
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Payment Method</label>
@@ -8676,6 +8715,7 @@ window.showAddPaymentModal = async function() {
                         <input type="text" id="receiptNoInput" class="form-control" value="${generateReceiptNo()}" readonly>
                     </div>
                 </div>
+                
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Payment Date</label>
@@ -8690,20 +8730,24 @@ window.showAddPaymentModal = async function() {
                         </select>
                     </div>
                 </div>
+                
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Year</label>
                         <input type="text" id="yearInput" class="form-control" value="${currentYear}">
                     </div>
                 </div>
+                
                 <div class="mb-3">
                     <label class="form-label fw-bold">Remarks</label>
-                    <textarea id="remarksInput" class="form-control" rows="2"></textarea>
+                    <textarea id="remarksInput" class="form-control" rows="2" placeholder="Optional remarks..."></textarea>
                 </div>
+                
                 <div class="alert alert-success small">
                     <i class="fas fa-info-circle"></i> 
                     <strong>Note:</strong> Excess payment automatically carries forward to next term.
                 </div>
+                
                 <div class="text-end mt-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshModalFees()">
                         <i class="fas fa-sync-alt"></i> Refresh Fees
@@ -8715,14 +8759,53 @@ window.showAddPaymentModal = async function() {
         showCancelButton: true,
         confirmButtonText: '<i class="fas fa-save"></i> Save Payment',
         didOpen: () => {
-            const studentSelect = document.getElementById('paymentStudentSelect');
+            const studentInput = document.getElementById('paymentStudentInput');
+            const selectedStudentInfo = document.getElementById('selectedStudentInfo');
+            const selectedStudentName = document.getElementById('selectedStudentName');
+            const selectedStudentClass = document.getElementById('selectedStudentClass');
+            const selectedStudentAdmission = document.getElementById('selectedStudentAdmission');
             const balanceInfo = document.getElementById('balanceInfo');
             const balanceDetails = document.getElementById('balanceDetails');
             const termSelect = document.getElementById('termSelect');
             const yearInput = document.getElementById('yearInput');
             
-            const updateBalanceInfo = async () => {
-                const studentId = studentSelect.value;
+            // Global function to handle student selection
+            window.onPaymentStudentSelect = async function(value) {
+                // Find student by ID or name
+                let studentId = value;
+                let student = studentMap[studentId];
+                
+                // If not found by ID, try to find by name
+                if (!student) {
+                    const searchName = value.toLowerCase();
+                    student = filteredStudents.find(s => 
+                        s.name.toLowerCase() === searchName || 
+                        s.name.toLowerCase().includes(searchName)
+                    );
+                    if (student) studentId = student.id;
+                }
+                
+                if (student && studentId) {
+                    // Display selected student info
+                    selectedStudentName.innerHTML = student.name;
+                    selectedStudentClass.innerHTML = student.class;
+                    selectedStudentAdmission.innerHTML = student.admission_no || '-';
+                    selectedStudentInfo.style.display = 'block';
+                    
+                    // Store selected ID in a data attribute
+                    studentInput.setAttribute('data-selected-id', student.id);
+                    
+                    // Update balance info
+                    await updateBalanceInfo(student.id);
+                } else {
+                    selectedStudentInfo.style.display = 'none';
+                    balanceInfo.style.display = 'none';
+                    studentInput.removeAttribute('data-selected-id');
+                }
+            };
+            
+            // Update balance info function
+            const updateBalanceInfo = async (studentId) => {
                 const term = termSelect.value;
                 const year = yearInput.value;
                 
@@ -8732,7 +8815,7 @@ window.showAddPaymentModal = async function() {
                 }
                 
                 balanceInfo.style.display = 'block';
-                balanceDetails.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading latest fee data...</div>';
+                balanceDetails.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading fee data...</div>';
                 
                 try {
                     await loadFeeStructure();
@@ -8753,7 +8836,6 @@ window.showAddPaymentModal = async function() {
                     
                     balanceDetails.innerHTML = `
                         <div class="small">
-                            <div><strong>👨‍🎓 Student:</strong> ${escapeHtml(status.student.name)}</div>
                             <div><strong>📚 Class:</strong> ${status.student.class}</div>
                             <div><strong>🏠 Type:</strong> ${status.student.student_type || 'Day'}</div>
                             <hr class="my-1">
@@ -8761,8 +8843,7 @@ window.showAddPaymentModal = async function() {
                             ${status.previousTermsBalance > 0 ? `<div class="text-warning"><strong>⚠️ Previous Balance:</strong> ${formatMoney(status.previousTermsBalance)}</div>` : ''}
                             <hr class="my-1">
                             <div><strong>💸 Paid This Term:</strong> ${formatMoney(status.currentTermPaid)}</div>
-                            <div><strong class="${status.balance > 0 ? 'text-danger' : 'text-success'}">💰 Current Balance: ${formatMoney(Math.abs(status.balance))} ${status.balance > 0 ? '(Due)' : '(Credit)'}</strong></div>
-                            <div class="text-muted small mt-2"><i class="fas fa-database"></i> Data from database @ ${new Date().toLocaleTimeString()}</div>
+                            <div><strong class="${status.balance > 0 ? 'text-danger' : 'text-success'}">💰 Balance: ${formatMoney(Math.abs(status.balance))} ${status.balance > 0 ? '(Due)' : '(Credit)'}</strong></div>
                         </div>
                     `;
                 } catch (error) {
@@ -8770,20 +8851,23 @@ window.showAddPaymentModal = async function() {
                 }
             };
             
-            studentSelect.onchange = updateBalanceInfo;
-            termSelect.onchange = updateBalanceInfo;
-            yearInput.onchange = updateBalanceInfo;
+            termSelect.onchange = () => {
+                const studentId = studentInput.getAttribute('data-selected-id');
+                if (studentId) updateBalanceInfo(studentId);
+            };
             
-            if (studentSelect.value) {
-                setTimeout(updateBalanceInfo, 100);
-            }
+            yearInput.onchange = () => {
+                const studentId = studentInput.getAttribute('data-selected-id');
+                if (studentId) updateBalanceInfo(studentId);
+            };
         },
-        preConfirm: async () => {
-            const studentId = document.getElementById('paymentStudentSelect').value;
+        preConfirm: () => {
+            const studentInput = document.getElementById('paymentStudentInput');
+            const studentId = studentInput.getAttribute('data-selected-id');
             const amount = parseInt(document.getElementById('amountInput').value) || 0;
             
             if (!studentId) {
-                Swal.showValidationMessage('Please select a student!');
+                Swal.showValidationMessage('Please select a valid student from the dropdown!');
                 return false;
             }
             if (amount <= 0) {
