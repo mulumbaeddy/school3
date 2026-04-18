@@ -967,3 +967,62 @@ html {
     }
 }
 
+/* Fix for batch marks table positioning */
+#batchMarksContainer {
+    position: relative;
+    z-index: 1;
+    clear: both;
+}
+
+#batchMarksContainer .card,
+#batchMarksContainer .table-responsive,
+#batchMarksContainer table {
+    position: relative;
+    z-index: 1;
+}
+
+/* Ensure sidebar stays above but table stays in its lane */
+#sidebar {
+    position: fixed;
+    z-index: 1000;
+}
+
+/* Main content area */
+#mainApp {
+    position: relative;
+    z-index: 1;
+}
+
+/* The actual page content container */
+#pageContent {
+    position: relative;
+    z-index: 1;
+    overflow-x: auto;
+}
+
+/* Fix for any absolute positioned elements inside batch marks */
+.batch-mark-input,
+.batch-ca,
+.batch-exam {
+    position: relative;
+    z-index: 1;
+}
+/* Close button styling */
+.btn-close-white {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.btn-close-white:hover {
+    opacity: 1;
+}
+
+/* Close button in footer */
+.p-2 .btn-danger {
+    margin-right: 10px;
+}

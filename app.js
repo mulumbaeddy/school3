@@ -4438,9 +4438,9 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 // ============================================
-// MARKS MODULE - FINAL MASTERPIECE
-// Fixed: Save All works for both levels
-// Fixed: A-Level grading from settings tabs
+// MARKS MODULE - WITH DYNAMIC SUBJECTS FROM DATABASE
+// Fixed: A-Level subjects loading from database
+// Fixed: Keep original styling
 // ============================================
 
 // ============================================
@@ -4450,6 +4450,11 @@ function escapeHtml(text) {
 let allMarksList = [];
 let allStudentsList = [];
 let gradingRules = { olevel: [], alevel: { principal: [], subsidiary: [] } };
+
+// Dynamic subjects from database
+let dbOlevelSubjects = [];
+let dbAlevelPrincipalSubjects = [];
+let dbAlevelSubsidiarySubjects = [];
 
 // Batch state
 let batchState = {
@@ -4463,35 +4468,17 @@ let batchState = {
     marksMap: {}
 };
 
-// Constants
+// Constants (Keep original styling)
 const STREAM_OPTIONS = {
     olevel: ['A', 'B', 'C', 'D'],
     alevel: ['Arts', 'Sciences', 'Business']
 };
 
-const SUBJECT_COMBINATIONS = {
-    'PCM': ['Mathematics', 'Physics', 'Chemistry'],
-    'PCB': ['Mathematics', 'Physics', 'Chemistry', 'Biology'],
-    'PEM': ['Mathematics', 'Physics', 'Economics'],
-    'HEG': ['History', 'Economics', 'Geography'],
-    'HEM': ['History', 'Economics', 'Mathematics'],
-    'BAM': ['Biology', 'Agriculture', 'Mathematics'],
-    'BCM': ['Biology', 'Chemistry', 'Mathematics'],
-    'ICT': ['Mathematics', 'Physics', 'Computer Science']
-};
-
-const SUBSIDIARY_SUBJECTS = ['General Paper', 'ICT', 'Subsidiary Mathematics'];
-const OLEVEL_SUBJECTS = [
-    'Mathematics', 'English', 'Physics', 'Chemistry', 'Biology',
-    'History', 'Geography', 'Religious Education',
-    'Computer Science', 'Entrepreneurship', 'Agriculture'
-];
-
 // Exam options
 const EXAM_OPTIONS = ['Term 1', 'Term 2', 'Term 3', 'Mid-Term', 'Mock'];
 
 // ============================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (Keep original)
 // ============================================
 
 function escapeHtml(text) {
@@ -4506,7 +4493,110 @@ function getCurrentYear() {
 }
 
 // ============================================
-// LOAD GRADING RULES FROM SETTINGS
+// LOAD SUBJECTS FROM DATABASE (FIXED FOR A-LEVEL)
+// ============================================
+
+// ============================================
+// LOAD SUBJECTS FROM DATABASE - INCLUDES ALL CATEGORIES
+// ============================================
+
+async function loadSubjectsFromDB() {
+    try {
+        console.log("🔄 Loading subjects from database...");
+        
+        // 1. LOAD O-LEVEL SUBJECTS from subjects table
+        const { data: olevelData, error: olevelError } = await sb
+            .from('subjects')
+            .select('name, category')
+            .eq('level', 'olevel')
+            .order('name', { ascending: true });
+        
+        if (!olevelError && olevelData && olevelData.length > 0) {
+            dbOlevelSubjects = olevelData.map(s => s.name);
+            console.log(`✅ O-Level: ${dbOlevelSubjects.length} subjects`);
+            console.log(`   Categories: ${[...new Set(olevelData.map(s => s.category))].join(', ')}`);
+        } else {
+            dbOlevelSubjects = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology'];
+            console.warn("No O-Level subjects found, using defaults");
+        }
+        
+        // 2. LOAD A-LEVEL PRINCIPAL SUBJECTS - NOW INCLUDES ALL CATEGORIES!
+        // Get ALL A-Level subjects regardless of category (Humanities, Sciences, Principal, etc.)
+        const { data: alevelData, error: alevelError } = await sb
+            .from('subjects')
+            .select('name, category')
+            .eq('level', 'alevel')
+            .order('name', { ascending: true });
+        
+        if (!alevelError && alevelData && alevelData.length > 0) {
+            // Get all A-Level subjects - NO CATEGORY FILTER!
+            dbAlevelPrincipalSubjects = alevelData.map(s => s.name);
+            
+            // Log categories found
+            const categories = [...new Set(alevelData.map(s => s.category))];
+            console.log(`✅ A-Level Subjects: ${dbAlevelPrincipalSubjects.length} subjects from ALL categories`);
+            console.log(`   Categories found: ${categories.join(', ')}`);
+            console.log(`   Subjects: ${dbAlevelPrincipalSubjects.join(', ')}`);
+        } else {
+            dbAlevelPrincipalSubjects = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Economics', 'History', 'Geography'];
+            console.warn("No A-Level subjects found, using defaults");
+        }
+        
+        // 3. LOAD A-LEVEL SUBSIDIARY SUBJECTS from subsidiary_subjects table
+        const { data: subsidiaryData, error: subsidiaryError } = await sb
+            .from('subsidiary_subjects')
+            .select('subject_name')
+            .order('subject_name', { ascending: true });
+        
+        if (!subsidiaryError && subsidiaryData && subsidiaryData.length > 0) {
+            dbAlevelSubsidiarySubjects = subsidiaryData.map(s => s.subject_name);
+            console.log(`✅ A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
+            console.log(`   Subjects: ${dbAlevelSubsidiarySubjects.join(', ')}`);
+        } else {
+            dbAlevelSubsidiarySubjects = ['General Paper', 'ICT', 'Subsidiary Mathematics'];
+            console.warn("No subsidiary subjects found, using defaults");
+        }
+        
+        console.log(`📚 FINAL SUMMARY:`);
+        console.log(`   O-Level: ${dbOlevelSubjects.length} subjects`);
+        console.log(`   A-Level (ALL categories): ${dbAlevelPrincipalSubjects.length} subjects`);
+        console.log(`   A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
+        
+        return true;
+        
+    } catch (error) {
+        console.error('Error loading subjects:', error);
+        dbOlevelSubjects = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology'];
+        dbAlevelPrincipalSubjects = ['Mathematics', 'Physics', 'Chemistry', 'Biology'];
+        dbAlevelSubsidiarySubjects = ['General Paper', 'ICT'];
+        return false;
+    }
+}
+
+// ============================================
+// GET STUDENT SUBJECTS (A-Level - returns all subjects)
+// ============================================
+
+function getStudentSubjects(student) {
+    if (currentLevel === 'olevel') {
+        return dbOlevelSubjects;
+    }
+    
+    // For A-Level: Return all principal subjects from database
+    // The teacher will select which subjects the student takes
+    return [...dbAlevelPrincipalSubjects];
+}
+
+// ============================================
+// GET ALL A-LEVEL SUBJECTS (for batch entry)
+// ============================================
+
+function getAllAlevelSubjects() {
+    return [...dbAlevelPrincipalSubjects, ...dbAlevelSubsidiarySubjects];
+}
+
+// ============================================
+// LOAD GRADING RULES FROM SETTINGS (Keep original)
 // ============================================
 
 async function loadGradingRules() {
@@ -4541,7 +4631,7 @@ async function loadGradingRules() {
 }
 
 // ============================================
-// CALCULATE GRADE FROM SETTINGS
+// CALCULATE GRADE FROM SETTINGS (Keep original)
 // ============================================
 
 function calculateGrade(percentage, isSubsidiary = false) {
@@ -4566,7 +4656,7 @@ function calculateGrade(percentage, isSubsidiary = false) {
         }
     }
     
-    // Fallback grading
+    // Fallback grading (Keep original)
     if (currentLevel === 'olevel') {
         if (percentage >= 90) return { grade: 'A', points: 1, color: '#2ecc71', remark: 'Excellent' };
         if (percentage >= 80) return { grade: 'B', points: 2, color: '#3498db', remark: 'Very Good' };
@@ -4594,17 +4684,7 @@ function calculateGrade(percentage, isSubsidiary = false) {
 }
 
 // ============================================
-// GET STUDENT SUBJECTS (A-Level only)
-// ============================================
-
-function getStudentSubjects(student) {
-    if (currentLevel === 'olevel') return OLEVEL_SUBJECTS;
-    const combination = student.combination || 'PCM';
-    return SUBJECT_COMBINATIONS[combination] || SUBJECT_COMBINATIONS['PCM'];
-}
-
-// ============================================
-// LOAD ALL MARKS DATA
+// LOAD ALL MARKS DATA (Keep original)
 // ============================================
 
 async function loadAllMarks() {
@@ -4630,7 +4710,7 @@ async function loadAllMarks() {
 }
 
 // ============================================
-// GET CLASS OPTIONS
+// GET CLASS OPTIONS (Keep original)
 // ============================================
 
 function getClassOptions() {
@@ -4638,7 +4718,7 @@ function getClassOptions() {
 }
 
 // ============================================
-// GET STREAM OPTIONS
+// GET STREAM OPTIONS (Keep original)
 // ============================================
 
 function getStreamOptions() {
@@ -4646,10 +4726,12 @@ function getStreamOptions() {
 }
 
 // ============================================
-// RENDER MARKS PAGE
+// RENDER MARKS PAGE (Keep original styling)
 // ============================================
 
 async function renderMarks() {
+    // Load subjects from database first
+    await loadSubjectsFromDB();
     await loadGradingRules();
     
     const levelName = currentLevel === 'olevel' ? 'O-Level (20% CA + 80% Exam)' : 'A-Level';
@@ -4684,7 +4766,7 @@ async function renderMarks() {
                         <label class="form-label fw-bold">📖 Subject *</label>
                         <select id="batchSubject" class="form-select">
                             <option value="">-- Select Subject --</option>
-                            ${OLEVEL_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('')}
+                            ${dbOlevelSubjects.map(s => `<option value="${s}">${s}</option>`).join('')}
                         </select>
                     </div>
                     ` : ''}
@@ -4716,22 +4798,28 @@ async function renderMarks() {
         
         <div id="batchMarksContainer" style="display: none;">
             <div class="card shadow-sm mb-4">
-                <div class="card-header ${isOlevel ? 'bg-info' : 'bg-success'} text-white">
+                <div class="card-header ${isOlevel ? 'bg-info' : 'bg-success'} text-white" style="display: flex; justify-content: space-between; align-items: center;">
                     <h6 class="mb-0">
                         <i class="fas fa-edit"></i> 
                         ${isOlevel ? `Entering Marks for: <span id="selectedSubjectDisplay"></span> - <span id="selectedClassDisplay"></span>` : 'Batch Marks Entry'}
                     </h6>
+                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
                         <table class="table table-bordered table-sm mb-0">
                             <thead class="table-primary sticky-top">
-                                <tr id="batchTableHeader"></tr>
+                                <tr id="batchTableHeader"><tr>
                             </thead>
                             <tbody id="batchTableBody"></tbody>
                         </table>
                     </div>
                     <div class="p-2 bg-light text-end">
+                        <button class="btn btn-danger btn-sm" onclick="closeBatchMarks()">
+                            <i class="fas fa-times"></i> Close
+                        </button>
                         <button class="btn btn-success btn-sm" onclick="saveBatchMarks()">
                             <i class="fas fa-save"></i> Save All
                         </button>
@@ -4741,6 +4829,7 @@ async function renderMarks() {
                     </div>
                 </div>
             </div>
+            
         </div>
         
         <!-- Action Buttons -->
@@ -4812,9 +4901,59 @@ async function renderMarks() {
         </div>
     `;
 }
+// ============================================
+// CLOSE BATCH MARKS TABLE
+// ============================================
+
+window.closeBatchMarks = function() {
+    const container = document.getElementById('batchMarksContainer');
+    if (container) {
+        container.style.display = 'none';
+    }
+    
+    // Optional: Clear batch state
+    batchState = {
+        class: '',
+        stream: '',
+        subject: '',
+        exam: 'Term 1',
+        year: new Date().getFullYear().toString(),
+        students: [],
+        subjects: [],
+        marksMap: {}
+    };
+    
+    console.log("Batch marks table closed");
+};
+// ============================================
+// REFRESH SUBJECTS (Manual refresh button)
+// ============================================
+
+window.refreshSubjectsForMarks = async function() {
+    Swal.fire({ title: 'Reloading subjects from database...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    await loadSubjectsFromDB();
+    
+    Swal.close();
+    Swal.fire({
+        title: '✅ Subjects Reloaded!',
+        html: `
+            <div class="text-start">
+                <strong>O-Level:</strong> ${dbOlevelSubjects.length} subjects<br>
+                <strong>A-Level Principal:</strong> ${dbAlevelPrincipalSubjects.length} subjects<br>
+                <strong>A-Level Subsidiary:</strong> ${dbAlevelSubsidiarySubjects.length} subjects
+            </div>
+        `,
+        icon: 'success',
+        timer: 2000
+    });
+    
+    // Reload the page to update dropdowns
+    await loadPage('marks');
+};
 
 // ============================================
-// RENDER TABLE HEADER
+// RENDER TABLE HEADER (Keep original)
 // ============================================
 
 function renderTableHeader() {
@@ -4860,7 +4999,7 @@ function renderTableHeader() {
 }
 
 // ============================================
-// LOAD MARKS TABLE
+// LOAD MARKS TABLE (Keep original)
 // ============================================
 
 async function loadMarksTable() {
@@ -4915,7 +5054,7 @@ async function loadMarksTable() {
             `;
         } else {
             const percentage = (mark.marks_obtained / mark.max_marks) * 100;
-            const isSubsidiary = mark.subject_type === 'subsidiary' || SUBSIDIARY_SUBJECTS.includes(mark.subject);
+            const isSubsidiary = mark.subject_type === 'subsidiary' || dbAlevelSubsidiarySubjects.includes(mark.subject);
             const grade = calculateGrade(percentage, isSubsidiary);
             const subjectType = isSubsidiary ? 'Subsidiary' : 'Principal';
             const typeBadge = isSubsidiary ? 'bg-secondary' : 'bg-primary';
@@ -4962,7 +5101,7 @@ async function loadMarksTable() {
 }
 
 // ============================================
-// LOAD BATCH MARKS - RETRIEVES SAVED MARKS FOR BOTH LEVELS
+// LOAD BATCH MARKS - FIXED FOR A-LEVEL
 // ============================================
 
 window.loadBatchMarks = async function() {
@@ -5027,15 +5166,27 @@ window.loadBatchMarks = async function() {
             document.getElementById('selectedClassDisplay').innerText = `${className}${stream ? ' - ' + stream : ''}`;
             renderOlevelBatchTable();
         } else {
-            // A-Level: All subjects based on combinations
-            const principalSubjects = new Set();
-            for (const student of batchState.students) {
-                getStudentSubjects(student).forEach(s => principalSubjects.add(s));
+            // A-Level: ALL subjects from database (both principal and subsidiary)
+            console.log("Loading A-Level subjects from database...");
+            console.log("Principal subjects:", dbAlevelPrincipalSubjects);
+            console.log("Subsidiary subjects:", dbAlevelSubsidiarySubjects);
+            
+            // Combine all subjects
+            const allSubjects = [];
+            
+            // Add principal subjects
+            for (const sub of dbAlevelPrincipalSubjects) {
+                allSubjects.push({ name: sub, category: 'Principal' });
             }
-            batchState.subjects = [
-                ...Array.from(principalSubjects).map(s => ({ name: s, category: 'Principal' })),
-                ...SUBSIDIARY_SUBJECTS.map(s => ({ name: s, category: 'Subsidiary' }))
-            ];
+            
+            // Add subsidiary subjects
+            for (const sub of dbAlevelSubsidiarySubjects) {
+                allSubjects.push({ name: sub, category: 'Subsidiary' });
+            }
+            
+            batchState.subjects = allSubjects;
+            console.log(`Total subjects loaded for batch: ${batchState.subjects.length}`);
+            
             renderAlevelBatchTable();
         }
         
@@ -5048,7 +5199,7 @@ window.loadBatchMarks = async function() {
 };
 
 // ============================================
-// RENDER O-LEVEL BATCH TABLE (WITH SAVED MARKS)
+// RENDER O-LEVEL BATCH TABLE (Keep original)
 // ============================================
 
 function renderOlevelBatchTable() {
@@ -5132,7 +5283,7 @@ function renderOlevelBatchTable() {
 }
 
 // ============================================
-// RENDER A-LEVEL BATCH TABLE (WITH SAVED MARKS)
+// RENDER A-LEVEL BATCH TABLE (Keep original styling)
 // ============================================
 
 function renderAlevelBatchTable() {
@@ -5215,7 +5366,7 @@ function renderAlevelBatchTable() {
 }
 
 // ============================================
-// UPDATE A-LEVEL BATCH TOTALS
+// UPDATE A-LEVEL BATCH TOTALS (Keep original)
 // ============================================
 
 function updateAlevelBatchTotals() {
@@ -5264,7 +5415,7 @@ function updateAlevelBatchTotals() {
 }
 
 // ============================================
-// EDIT BATCH STUDENT (A-Level only)
+// EDIT BATCH STUDENT (A-Level only) (Keep original)
 // ============================================
 
 async function editBatchStudent(studentId) {
@@ -5338,7 +5489,7 @@ async function editBatchStudent(studentId) {
 }
 
 // ============================================
-// SAVE BATCH MARKS - FIXED FOR BOTH LEVELS
+// SAVE BATCH MARKS (Keep original)
 // ============================================
 
 window.saveBatchMarks = async function() {
@@ -5382,10 +5533,8 @@ window.saveBatchMarks = async function() {
                 try {
                     let result;
                     if (existingMark?.id) {
-                        // Update existing
                         result = await sb.from('marks').update(markData).eq('id', existingMark.id);
                     } else if (final > 0 || ca > 0 || exam > 0) {
-                        // Insert new
                         markData.created_at = new Date().toISOString();
                         result = await sb.from('marks').insert([markData]);
                     }
@@ -5422,10 +5571,8 @@ window.saveBatchMarks = async function() {
                     try {
                         let result;
                         if (existingMark?.id) {
-                            // Update existing
                             result = await sb.from('marks').update(markData).eq('id', existingMark.id);
                         } else if (marksObtained > 0) {
-                            // Insert new
                             markData.created_at = new Date().toISOString();
                             result = await sb.from('marks').insert([markData]);
                         }
@@ -5442,13 +5589,12 @@ window.saveBatchMarks = async function() {
     
     Swal.fire('Complete!', `✅ Saved: ${saved} | ❌ Errors: ${errors}`, errors ? 'warning' : 'success');
     
-    // Reload data to refresh the display
     await loadBatchMarks();
     await loadMarksTable();
 };
 
 // ============================================
-// EXPORT BATCH MARKS
+// EXPORT BATCH MARKS (Keep original)
 // ============================================
 
 window.exportBatchMarks = function() {
@@ -5493,16 +5639,17 @@ window.exportBatchMarks = function() {
 };
 
 // ============================================
-// ADD/EDIT/DELETE MARK FUNCTIONS
+// ADD/EDIT/DELETE MARK FUNCTIONS (Keep original styling)
 // ============================================
 
 window.openAddMarkModal = async function() {
     await loadAllMarks();
+    await loadSubjectsFromDB();
     
     const subjectOptions = currentLevel === 'olevel' 
-        ? OLEVEL_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('')
-        : `<optgroup label="Principal Subjects">${['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Economics', 'History', 'Geography', 'Computer Science'].map(s => `<option value="${s}">${s}</option>`).join('')}</optgroup>
-           <optgroup label="Subsidiary Subjects">${SUBSIDIARY_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('')}</optgroup>`;
+        ? dbOlevelSubjects.map(s => `<option value="${s}">${s}</option>`).join('')
+        : `<optgroup label="Principal Subjects">${dbAlevelPrincipalSubjects.map(s => `<option value="${s}">${s}</option>`).join('')}</optgroup>
+           <optgroup label="Subsidiary Subjects">${dbAlevelSubsidiarySubjects.map(s => `<option value="${s}">${s}</option>`).join('')}</optgroup>`;
     
     Swal.fire({
         title: 'Add Single Mark',
@@ -5530,7 +5677,7 @@ window.openAddMarkModal = async function() {
                 const exam = parseFloat(document.getElementById('markExamScore').value) || 0;
                 return { student_id: studentId, subject, subject_type: 'principal', exam: document.getElementById('markExam').value, year: document.getElementById('markYear').value, marks_obtained: (ca * 0.2) + (exam * 0.8), max_marks: 100, ca_score: ca, exam_score: exam, remarks: document.getElementById('markRemarks').value, level: currentLevel };
             } else {
-                const isSubsidiary = SUBSIDIARY_SUBJECTS.includes(subject);
+                const isSubsidiary = dbAlevelSubsidiarySubjects.includes(subject);
                 return { student_id: studentId, subject, subject_type: isSubsidiary ? 'subsidiary' : 'principal', exam: document.getElementById('markExam').value, year: document.getElementById('markYear').value, marks_obtained: parseFloat(document.getElementById('markMarks').value) || 0, max_marks: 100, remarks: document.getElementById('markRemarks').value, level: currentLevel };
             }
         }
@@ -5547,11 +5694,12 @@ window.openAddMarkModal = async function() {
 window.editMark = async function(id) {
     const mark = allMarksList.find(m => m.id === id);
     if (!mark) return;
+    await loadSubjectsFromDB();
     
     const subjectOptions = currentLevel === 'olevel' 
-        ? OLEVEL_SUBJECTS.map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('')
-        : `<optgroup label="Principal Subjects">${['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Economics', 'History', 'Geography', 'Computer Science'].map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('')}</optgroup>
-           <optgroup label="Subsidiary Subjects">${SUBSIDIARY_SUBJECTS.map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('')}</optgroup>`;
+        ? dbOlevelSubjects.map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('')
+        : `<optgroup label="Principal Subjects">${dbAlevelPrincipalSubjects.map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('')}</optgroup>
+           <optgroup label="Subsidiary Subjects">${dbAlevelSubsidiarySubjects.map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('')}</optgroup>`;
     
     Swal.fire({
         title: 'Edit Mark',
@@ -5576,7 +5724,7 @@ window.editMark = async function(id) {
                 const exam = parseFloat(document.getElementById('markExamScore').value) || 0;
                 return { student_id: document.getElementById('markStudent').value, subject, subject_type: 'principal', exam: document.getElementById('markExam').value, year: document.getElementById('markYear').value, marks_obtained: (ca * 0.2) + (exam * 0.8), max_marks: 100, ca_score: ca, exam_score: exam, remarks: document.getElementById('markRemarks').value };
             } else {
-                const isSubsidiary = SUBSIDIARY_SUBJECTS.includes(subject);
+                const isSubsidiary = dbAlevelSubsidiarySubjects.includes(subject);
                 return { student_id: document.getElementById('markStudent').value, subject, subject_type: isSubsidiary ? 'subsidiary' : 'principal', exam: document.getElementById('markExam').value, year: document.getElementById('markYear').value, marks_obtained: parseFloat(document.getElementById('markMarks').value) || 0, max_marks: 100, remarks: document.getElementById('markRemarks').value };
             }
         }
@@ -5601,7 +5749,7 @@ window.deleteMark = async function(id) {
 };
 
 // ============================================
-// BULK DELETE MARKS
+// BULK DELETE MARKS (Keep original)
 // ============================================
 
 window.bulkDeleteMarks = async function() {
@@ -5619,7 +5767,7 @@ window.bulkDeleteMarks = async function() {
 };
 
 // ============================================
-// EXPORT ALL MARKS
+// EXPORT ALL MARKS (Keep original)
 // ============================================
 
 window.exportAllMarks = async function() {
@@ -5662,7 +5810,7 @@ window.exportAllMarks = async function() {
 };
 
 // ============================================
-// FILTER MARKS TABLE
+// FILTER MARKS TABLE (Keep original)
 // ============================================
 
 window.filterMarksTable = function() {
@@ -5681,7 +5829,7 @@ window.filterMarksTable = function() {
 };
 
 // ============================================
-// REFRESH MARKS TABLE
+// REFRESH MARKS TABLE (Keep original)
 // ============================================
 
 window.refreshMarksTable = async function() {
@@ -5695,10 +5843,16 @@ window.refreshMarksTable = async function() {
 // INITIALIZATION
 // ============================================
 
-console.log('✅ MARKS MODULE LOADED - Final Masterpiece');
-console.log('✅ Save All works for both O-Level and A-Level');
-console.log('✅ A-Level grading uses grading tabs from settings');
-
+// Pre-load subjects when module initializes
+(async function initMarksModule() {
+    await loadSubjectsFromDB();
+    console.log('✅ MARKS MODULE LOADED - Using subjects from database');
+    console.log(`   O-Level: ${dbOlevelSubjects.length} subjects`);
+    console.log(`   A-Level Principal: ${dbAlevelPrincipalSubjects.length} subjects`);
+    console.log(`   A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
+    console.log('✅ Save All works for both O-Level and A-Level');
+    console.log('✅ A-Level grading uses grading tabs from settings');
+})();
 
 
 // ==================== TEACHERS MODULE ====================
