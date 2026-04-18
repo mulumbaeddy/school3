@@ -8604,11 +8604,6 @@ window.showCompletedStudentsModal = async function() {
 // SHOW ADD PAYMENT MODAL
 // ============================================
 
-// ============================================
-// SHOW ADD PAYMENT MODAL - WITH NATIVE DATALIST
-// BEST SOLUTION - No complex CSS needed!
-// ============================================
-
 window.showAddPaymentModal = async function() {
     console.log("Opening Add Payment Modal...");
     
@@ -8628,19 +8623,25 @@ window.showAddPaymentModal = async function() {
         return;
     }
     
-    // Generate datalist options (HTML5 native searchable dropdown)
-    let datalistOptions = '';
-    for (const s of filteredStudents) {
-        const fee = getStudentFeeAmount(s);
-        const feeDisplay = fee ? formatMoney(fee) : 'No Fee';
-        datalistOptions += `<option value="${s.id}">${s.name} (${s.class}) - ${s.admission_no || 'No ADM'} - ${feeDisplay}</option>`;
-    }
-    
-    // Also create a map for quick student lookup
+    // Create a map for quick student lookup
     const studentMap = {};
     for (const s of filteredStudents) {
         studentMap[s.id] = s;
     }
+    
+    // Create name to ID mapping
+    const nameToIdMap = {};
+    for (const s of filteredStudents) {
+        nameToIdMap[s.name.toLowerCase()] = s.id;
+    }
+    
+    // Generate datalist options - ONLY STUDENT NAMES (no codes)
+    let datalistOptions = '';
+    for (const s of filteredStudents) {
+        datalistOptions += `<option value="${escapeHtml(s.name)}"></option>`;
+    }
+    
+    let currentStudentId = null;
     
     const { value: result } = await Swal.fire({
         title: `<i class="fas fa-credit-card"></i> Record Payment - ${currentLevel.toUpperCase()}`,
@@ -8650,23 +8651,24 @@ window.showAddPaymentModal = async function() {
                     <i class="fas fa-database"></i> <strong>Live Data:</strong> Fees loaded from fee_structure table
                 </div>
                 
-                <!-- NATIVE SEARCHABLE DROPDOWN - BEST SOLUTION -->
+                <!-- SEARCHABLE DROPDOWN - ONLY STUDENT NAMES -->
                 <div class="mb-3">
-                    <label class="form-label fw-bold">👨‍🎓 Search & Select Student *</label>
-                    <input type="text" id="paymentStudentInput" class="form-control" 
+                    <label class="form-label fw-bold">🔍 Search & Select Student *</label>
+                    <input type="text" id="studentSearchInput" class="form-control" 
                            list="studentList" 
-                           placeholder="🔍 Type student name or admission number..."
+                           placeholder="🔎 Type student name to search..."
                            autocomplete="off"
-                           onchange="onPaymentStudentSelect(this.value)"
-                           style="border: 2px solid #01605a; border-radius: 8px; padding: 10px;">
+                           style="border: 2px solid #01605a; border-radius: 8px; padding: 10px; font-size: 14px;">
                     <datalist id="studentList">
                         ${datalistOptions}
                     </datalist>
                     <small class="text-muted">
-                        <i class="fas fa-info-circle"></i> 
-                        Start typing name or admission number - suggestions appear automatically
+                        <i class="fas fa-search"></i> 
+                        Start typing student name - suggestions appear automatically
                     </small>
                 </div>
+                
+                <input type="hidden" id="selectedStudentId" value="">
                 
                 <div id="selectedStudentInfo" class="alert alert-success mb-3" style="display: none;">
                     <strong>✅ Selected Student:</strong> 
@@ -8740,7 +8742,7 @@ window.showAddPaymentModal = async function() {
                 
                 <div class="mb-3">
                     <label class="form-label fw-bold">Remarks</label>
-                    <textarea id="remarksInput" class="form-control" rows="2" placeholder="Optional remarks..."></textarea>
+                    <textarea id="remarksInput" class="form-control" rows="2"></textarea>
                 </div>
                 
                 <div class="alert alert-success small">
@@ -8759,7 +8761,8 @@ window.showAddPaymentModal = async function() {
         showCancelButton: true,
         confirmButtonText: '<i class="fas fa-save"></i> Save Payment',
         didOpen: () => {
-            const studentInput = document.getElementById('paymentStudentInput');
+            const searchInput = document.getElementById('studentSearchInput');
+            const hiddenStudentId = document.getElementById('selectedStudentId');
             const selectedStudentInfo = document.getElementById('selectedStudentInfo');
             const selectedStudentName = document.getElementById('selectedStudentName');
             const selectedStudentClass = document.getElementById('selectedStudentClass');
@@ -8769,42 +8772,58 @@ window.showAddPaymentModal = async function() {
             const termSelect = document.getElementById('termSelect');
             const yearInput = document.getElementById('yearInput');
             
-            // Global function to handle student selection
-            window.onPaymentStudentSelect = async function(value) {
-                // Find student by ID or name
-                let studentId = value;
-                let student = studentMap[studentId];
+            // Function to handle student selection by name
+            const selectStudentByName = (studentName) => {
+                const student = filteredStudents.find(s => s.name.toLowerCase() === studentName.toLowerCase());
                 
-                // If not found by ID, try to find by name
-                if (!student) {
-                    const searchName = value.toLowerCase();
-                    student = filteredStudents.find(s => 
-                        s.name.toLowerCase() === searchName || 
-                        s.name.toLowerCase().includes(searchName)
-                    );
-                    if (student) studentId = student.id;
-                }
-                
-                if (student && studentId) {
+                if (student) {
+                    currentStudentId = student.id;
+                    hiddenStudentId.value = student.id;
+                    
                     // Display selected student info
                     selectedStudentName.innerHTML = student.name;
                     selectedStudentClass.innerHTML = student.class;
                     selectedStudentAdmission.innerHTML = student.admission_no || '-';
                     selectedStudentInfo.style.display = 'block';
                     
-                    // Store selected ID in a data attribute
-                    studentInput.setAttribute('data-selected-id', student.id);
-                    
                     // Update balance info
-                    await updateBalanceInfo(student.id);
-                } else {
-                    selectedStudentInfo.style.display = 'none';
-                    balanceInfo.style.display = 'none';
-                    studentInput.removeAttribute('data-selected-id');
+                    updateBalanceInfo(student.id);
                 }
             };
             
-            // Update balance info function
+            // Handle input changes (when user types or selects from datalist)
+            searchInput.addEventListener('input', function(e) {
+                const value = this.value;
+                
+                // Find student by exact name match
+                const matchedStudent = filteredStudents.find(s => 
+                    s.name.toLowerCase() === value.toLowerCase()
+                );
+                
+                if (matchedStudent) {
+                    selectStudentByName(matchedStudent.name);
+                } else {
+                    // Clear selection if no match
+                    hiddenStudentId.value = '';
+                    selectedStudentInfo.style.display = 'none';
+                    balanceInfo.style.display = 'none';
+                    currentStudentId = null;
+                }
+            });
+            
+            // Handle selection from datalist
+            searchInput.addEventListener('change', function(e) {
+                const value = this.value;
+                const matchedStudent = filteredStudents.find(s => 
+                    s.name.toLowerCase() === value.toLowerCase()
+                );
+                
+                if (matchedStudent) {
+                    selectStudentByName(matchedStudent.name);
+                    searchInput.value = matchedStudent.name;
+                }
+            });
+            
             const updateBalanceInfo = async (studentId) => {
                 const term = termSelect.value;
                 const year = yearInput.value;
@@ -8815,7 +8834,7 @@ window.showAddPaymentModal = async function() {
                 }
                 
                 balanceInfo.style.display = 'block';
-                balanceDetails.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading fee data...</div>';
+                balanceDetails.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading latest fee data...</div>';
                 
                 try {
                     await loadFeeStructure();
@@ -8836,6 +8855,7 @@ window.showAddPaymentModal = async function() {
                     
                     balanceDetails.innerHTML = `
                         <div class="small">
+                            <div><strong>👨‍🎓 Student:</strong> ${escapeHtml(status.student.name)}</div>
                             <div><strong>📚 Class:</strong> ${status.student.class}</div>
                             <div><strong>🏠 Type:</strong> ${status.student.student_type || 'Day'}</div>
                             <hr class="my-1">
@@ -8843,7 +8863,8 @@ window.showAddPaymentModal = async function() {
                             ${status.previousTermsBalance > 0 ? `<div class="text-warning"><strong>⚠️ Previous Balance:</strong> ${formatMoney(status.previousTermsBalance)}</div>` : ''}
                             <hr class="my-1">
                             <div><strong>💸 Paid This Term:</strong> ${formatMoney(status.currentTermPaid)}</div>
-                            <div><strong class="${status.balance > 0 ? 'text-danger' : 'text-success'}">💰 Balance: ${formatMoney(Math.abs(status.balance))} ${status.balance > 0 ? '(Due)' : '(Credit)'}</strong></div>
+                            <div><strong class="${status.balance > 0 ? 'text-danger' : 'text-success'}">💰 Current Balance: ${formatMoney(Math.abs(status.balance))} ${status.balance > 0 ? '(Due)' : '(Credit)'}</strong></div>
+                            <div class="text-muted small mt-2"><i class="fas fa-database"></i> Data from database @ ${new Date().toLocaleTimeString()}</div>
                         </div>
                     `;
                 } catch (error) {
@@ -8852,22 +8873,19 @@ window.showAddPaymentModal = async function() {
             };
             
             termSelect.onchange = () => {
-                const studentId = studentInput.getAttribute('data-selected-id');
-                if (studentId) updateBalanceInfo(studentId);
+                if (currentStudentId) updateBalanceInfo(currentStudentId);
             };
             
             yearInput.onchange = () => {
-                const studentId = studentInput.getAttribute('data-selected-id');
-                if (studentId) updateBalanceInfo(studentId);
+                if (currentStudentId) updateBalanceInfo(currentStudentId);
             };
         },
         preConfirm: () => {
-            const studentInput = document.getElementById('paymentStudentInput');
-            const studentId = studentInput.getAttribute('data-selected-id');
+            const studentId = document.getElementById('selectedStudentId').value;
             const amount = parseInt(document.getElementById('amountInput').value) || 0;
             
             if (!studentId) {
-                Swal.showValidationMessage('Please select a valid student from the dropdown!');
+                Swal.showValidationMessage('Please search and select a student from the dropdown!');
                 return false;
             }
             if (amount <= 0) {
