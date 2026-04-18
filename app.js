@@ -16078,38 +16078,83 @@ setTimeout(() => {
 console.log('✅ Cell-Level Save Fee Structure Ready - Fixed for your database!');
 
 // ============================================
-// ACADEMIC CALENDAR - FINAL MASTERPIECE
-// Complete with Add, Edit, Delete, Refresh
-// Auto-load on page open
+// ACADEMIC CALENDAR - COMPLETE FUNCTIONS
 // ============================================
 
-let holidaysList = [];
-let examsList = [];
-let eventsList = [];
+// Global variables for academic data
+let academicTerms = [];
+let academicHolidays = [];
+let academicExams = [];
+let academicEvents = [];
 
 // ============================================
-// HELPER FUNCTIONS
+// UPDATE CURRENT STATUS (Dynamic)
 // ============================================
 
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB');
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function calculateDays(startDate, endDate) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays + 1;
+async function updateAcademicStatus() {
+    try {
+        const today = new Date();
+        const currentYear = today.getFullYear().toString();
+        
+        // Get active term from database
+        const { data: terms, error } = await sb
+            .from('academic_terms')
+            .select('*')
+            .order('year', { ascending: false })
+            .order('term_number', { ascending: true });
+        
+        if (error) throw error;
+        
+        if (!terms || terms.length === 0) {
+            document.getElementById('currentYear').innerText = currentYear;
+            document.getElementById('currentTerm').innerText = 'Not Set';
+            document.getElementById('weeksElapsed').innerText = '0';
+            document.getElementById('weeksRemaining').innerText = '0';
+            return;
+        }
+        
+        let activeTerm = null;
+        let weeksElapsed = 0;
+        let weeksRemaining = 0;
+        
+        for (const term of terms) {
+            const startDate = new Date(term.start_date);
+            const endDate = new Date(term.end_date);
+            
+            if (today >= startDate && today <= endDate) {
+                activeTerm = term;
+                const daysElapsed = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+                weeksElapsed = Math.floor(daysElapsed / 7);
+                if (weeksElapsed < 0) weeksElapsed = 0;
+                
+                const daysRemaining = Math.floor((endDate - today) / (1000 * 60 * 60 * 24));
+                weeksRemaining = Math.floor(daysRemaining / 7);
+                if (weeksRemaining < 0) weeksRemaining = 0;
+                break;
+            }
+        }
+        
+        if (!activeTerm) {
+            const upcomingTerms = terms.filter(t => new Date(t.start_date) > today);
+            if (upcomingTerms.length > 0) {
+                activeTerm = upcomingTerms[0];
+                weeksElapsed = 0;
+                const startDate = new Date(activeTerm.start_date);
+                const daysUntil = Math.floor((startDate - today) / (1000 * 60 * 60 * 24));
+                weeksRemaining = Math.floor(daysUntil / 7);
+            } else {
+                activeTerm = terms[0];
+            }
+        }
+        
+        document.getElementById('currentYear').innerText = activeTerm?.year || currentYear;
+        document.getElementById('currentTerm').innerText = activeTerm?.term_name || 'No Active Term';
+        document.getElementById('weeksElapsed').innerText = weeksElapsed;
+        document.getElementById('weeksRemaining').innerText = weeksRemaining;
+        
+    } catch (error) {
+        console.error("Error updating academic status:", error);
+    }
 }
 
 // ============================================
@@ -16118,179 +16163,57 @@ function calculateDays(startDate, endDate) {
 
 async function loadAcademicData() {
     try {
-        // Show loading in tables
-        const tables = ['termsTableBody', 'holidaysTableBody', 'examsTableBody', 'eventsTableBody'];
-        for (const tableId of tables) {
-            const tbody = document.getElementById(tableId);
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Loading data...</span>络</tbody>';
-            }
-        }
-        
-        // Load terms from database
+        // Load Terms
         const { data: termsData, error: termsError } = await sb
             .from('academic_terms')
             .select('*')
             .order('year', { ascending: false })
             .order('term_number', { ascending: true });
         
-        if (!termsError && termsData && termsData.length > 0) {
-            termsList = termsData;
-        } else {
-            // Default fallback data
-            termsList = [
-                { id: 'default_t1', year: 2026, term_number: 1, term_name: 'Term 1', start_date: '2026-02-01', end_date: '2026-04-30', status: 'Active' },
-                { id: 'default_t2', year: 2026, term_number: 2, term_name: 'Term 2', start_date: '2026-05-15', end_date: '2026-08-15', status: 'Upcoming' },
-                { id: 'default_t3', year: 2026, term_number: 3, term_name: 'Term 3', start_date: '2026-09-01', end_date: '2026-11-30', status: 'Upcoming' }
-            ];
+        if (!termsError && termsData) {
+            academicTerms = termsData;
+            renderTermsTable();
         }
         
-        // Load holidays from database
-        const { data: holsData, error: holsError } = await sb
+        // Load Holidays
+        const { data: holidaysData, error: holidaysError } = await sb
             .from('academic_holidays')
             .select('*')
             .order('start_date', { ascending: true });
         
-        if (!holsError && holsData && holsData.length > 0) {
-            holidaysList = holsData;
-        } else {
-            holidaysList = [
-                { id: 'default_h1', name: 'Easter Break', start_date: '2026-04-10', end_date: '2026-04-20', days: 11 },
-                { id: 'default_h2', name: 'August Holiday', start_date: '2026-08-16', end_date: '2026-08-31', days: 16 },
-                { id: 'default_h3', name: 'Christmas Break', start_date: '2026-12-01', end_date: '2027-01-31', days: 62 }
-            ];
+        if (!holidaysError && holidaysData) {
+            academicHolidays = holidaysData;
+            renderHolidaysTable();
         }
         
-        // Load exams from database
+        // Load Exams
         const { data: examsData, error: examsError } = await sb
             .from('academic_exams')
             .select('*')
             .order('start_date', { ascending: true });
         
-        if (!examsError && examsData && examsData.length > 0) {
-            examsList = examsData;
-        } else {
-            examsList = [
-                { id: 'default_e1', name: 'Mid-Term Exams', term: 'Term 1', year: 2026, start_date: '2026-03-15', end_date: '2026-03-25' },
-                { id: 'default_e2', name: 'End of Term Exams', term: 'Term 1', year: 2026, start_date: '2026-04-20', end_date: '2026-04-28' },
-                { id: 'default_e3', name: 'Mock Exams', term: 'Term 2', year: 2026, start_date: '2026-07-15', end_date: '2026-07-25' }
-            ];
+        if (!examsError && examsData) {
+            academicExams = examsData;
+            renderExamsTable();
         }
         
-        // Load events from database
+        // Load Events
         const { data: eventsData, error: eventsError } = await sb
             .from('academic_events')
             .select('*')
             .order('event_date', { ascending: true });
         
-        if (!eventsError && eventsData && eventsData.length > 0) {
-            eventsList = eventsData;
-        } else {
-            eventsList = [
-                { id: 'default_ev1', name: 'Opening Day', event_date: '2026-02-01', description: 'School reopens for Term 1' },
-                { id: 'default_ev2', name: 'Parents Meeting', event_date: '2026-03-10', description: 'PTA Meeting for all parents' },
-                { id: 'default_ev3', name: 'Sports Day', event_date: '2026-06-05', description: 'Annual inter-house sports competition' },
-                { id: 'default_ev4', name: 'Graduation Day', event_date: '2026-11-15', description: 'S.4 and S.6 graduation ceremony' }
-            ];
+        if (!eventsError && eventsData) {
+            academicEvents = eventsData;
+            renderEventsTable();
         }
         
-        // Render all tables
-        renderTermsTable();
-        renderHolidaysTable();
-        renderExamsTable();
-        renderEventsTable();
-        
-        // Update current status
-        updateCurrentStatus();
+        // Update status display
+        await updateAcademicStatus();
         
     } catch (error) {
         console.error('Error loading academic data:', error);
-        for (const tableId of ['termsTableBody', 'holidaysTableBody', 'examsTableBody', 'eventsTableBody']) {
-            const tbody = document.getElementById(tableId);
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Error loading data. Please refresh.</span>络</tbody>';
-            }
-        }
     }
-}
-
-// ============================================
-// REFRESH FUNCTION (WORKING)
-// ============================================
-
-async function refreshAcademicData() {
-    const refreshBtn = document.getElementById('academicRefreshBtn');
-    
-    try {
-        // Show loading on button
-        if (refreshBtn) {
-            refreshBtn.disabled = true;
-            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
-        }
-        
-        // Reload all data
-        await loadAcademicData();
-        
-        // Show success message
-        Swal.fire({
-            title: 'Refreshed!',
-            text: 'Academic calendar data has been updated.',
-            icon: 'success',
-            timer: 1500,
-            showConfirmButton: false
-        });
-        
-    } catch (error) {
-        Swal.fire({
-            title: 'Error!',
-            text: 'Failed to refresh data. Please try again.',
-            icon: 'error'
-        });
-    } finally {
-        // Restore button
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh All Data';
-        }
-    }
-}
-
-// ============================================
-// UPDATE CURRENT STATUS
-// ============================================
-
-function updateCurrentStatus() {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    
-    let currentTerm = null;
-    let weeksElapsed = 0;
-    let weeksRemaining = 0;
-    
-    for (const term of termsList) {
-        const start = new Date(term.start_date);
-        const end = new Date(term.end_date);
-        
-        if (today >= start && today <= end) {
-            currentTerm = term;
-            const diffDays = Math.ceil((today - start) / (1000 * 60 * 60 * 24));
-            const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-            weeksElapsed = Math.floor(diffDays / 7);
-            weeksRemaining = Math.floor((totalDays - diffDays) / 7);
-            if (weeksElapsed < 0) weeksElapsed = 0;
-            if (weeksRemaining < 0) weeksRemaining = 0;
-            term.status = 'Active';
-        } else if (today < start) {
-            term.status = 'Upcoming';
-        } else if (today > end) {
-            term.status = 'Completed';
-        }
-    }
-    
-    document.getElementById('currentYear').innerText = currentYear;
-    document.getElementById('currentTerm').innerText = currentTerm ? currentTerm.term_name : 'No Active Term';
-    document.getElementById('weeksElapsed').innerText = weeksElapsed;
-    document.getElementById('weeksRemaining').innerText = weeksRemaining;
 }
 
 // ============================================
@@ -16301,32 +16224,32 @@ function renderTermsTable() {
     const tbody = document.getElementById('termsTableBody');
     if (!tbody) return;
     
-    if (!termsList || termsList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No terms configured. Click "Add Term" to get started. </span>络</tbody>';
+    if (academicTerms.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No terms configured. Click "Add Term" to get started.</td></tr>';
         return;
     }
     
     let html = '';
-    for (const term of termsList) {
-        let statusBadge = '';
-        if (term.status === 'Active') statusBadge = '<span class="badge bg-success">Active</span>';
-        else if (term.status === 'Upcoming') statusBadge = '<span class="badge bg-warning">Upcoming</span>';
-        else statusBadge = '<span class="badge bg-secondary">Completed</span>';
+    for (const term of academicTerms) {
+        const today = new Date();
+        const startDate = new Date(term.start_date);
+        const endDate = new Date(term.end_date);
+        let status = '';
+        
+        if (today >= startDate && today <= endDate) status = '<span class="badge bg-success">Active</span>';
+        else if (today < startDate) status = '<span class="badge bg-warning">Upcoming</span>';
+        else status = '<span class="badge bg-secondary">Completed</span>';
         
         html += `
             <tr>
-                <td class="text-center">${term.year || '-'}</span></td>
-                <td class="text-center"><strong>${escapeHtml(term.term_name || 'Term ' + term.term_number)}</strong></span></td>
+                <td class="text-center">${term.year}</span></td>
+                <td class="text-center"><strong>${escapeHtml(term.term_name)}</strong></span></td>
                 <td class="text-center">${formatDate(term.start_date)}</span></td>
                 <td class="text-center">${formatDate(term.end_date)}</span></td>
-                <td class="text-center">${statusBadge}</span></td>
-                <td class="text-center text-nowrap">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editTerm('${term.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteTerm('${term.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                <td class="text-center">${status}</span></td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-primary me-1" onclick="editTerm('${term.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteTerm('${term.id}')"><i class="fas fa-trash"></i></button>
                 </span></td>
             </tr>
         `;
@@ -16342,26 +16265,26 @@ function renderHolidaysTable() {
     const tbody = document.getElementById('holidaysTableBody');
     if (!tbody) return;
     
-    if (!holidaysList || holidaysList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No holidays configured. Click "Add Holiday" to get started. </span>络</tbody>';
+    if (academicHolidays.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No holidays configured. Click "Add Holiday" to get started.</td></tr>';
         return;
     }
     
     let html = '';
-    for (const holiday of holidaysList) {
+    for (const holiday of academicHolidays) {
+        const start = new Date(holiday.start_date);
+        const end = new Date(holiday.end_date);
+        const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+        
         html += `
             <tr>
                 <td><strong>${escapeHtml(holiday.name)}</strong></span></td>
                 <td class="text-center">${formatDate(holiday.start_date)}</span></td>
                 <td class="text-center">${formatDate(holiday.end_date)}</span></td>
-                <td class="text-center">${holiday.days || calculateDays(holiday.start_date, holiday.end_date)}</span></td>
-                <td class="text-center text-nowrap">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editHoliday('${holiday.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteHoliday('${holiday.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                <td class="text-center">${days}</span></td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-primary me-1" onclick="editHoliday('${holiday.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteHoliday('${holiday.id}')"><i class="fas fa-trash"></i></button>
                 </span></td>
             </tr>
         `;
@@ -16377,13 +16300,13 @@ function renderExamsTable() {
     const tbody = document.getElementById('examsTableBody');
     if (!tbody) return;
     
-    if (!examsList || examsList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No exams scheduled. Click "Add Exam" to get started. </span>络</tbody>';
+    if (academicExams.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No exams scheduled. Click "Add Exam" to get started.</td></tr>';
         return;
     }
     
     let html = '';
-    for (const exam of examsList) {
+    for (const exam of academicExams) {
         html += `
             <tr>
                 <td><strong>${escapeHtml(exam.name)}</strong></span></td>
@@ -16391,13 +16314,9 @@ function renderExamsTable() {
                 <td class="text-center">${exam.year || '-'}</span></td>
                 <td class="text-center">${formatDate(exam.start_date)}</span></td>
                 <td class="text-center">${formatDate(exam.end_date)}</span></td>
-                <td class="text-center text-nowrap">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editExam('${exam.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteExam('${exam.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-primary me-1" onclick="editExam('${exam.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteExam('${exam.id}')"><i class="fas fa-trash"></i></button>
                 </span></td>
             </tr>
         `;
@@ -16413,25 +16332,21 @@ function renderEventsTable() {
     const tbody = document.getElementById('eventsTableBody');
     if (!tbody) return;
     
-    if (!eventsList || eventsList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No events scheduled. Click "Add Event" to get started. </span>络</tbody>';
+    if (academicEvents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No events scheduled. Click "Add Event" to get started.</td></tr>';
         return;
     }
     
     let html = '';
-    for (const event of eventsList) {
+    for (const event of academicEvents) {
         html += `
             <tr>
                 <td><strong>${escapeHtml(event.name)}</strong></span></td>
                 <td class="text-center">${formatDate(event.event_date)}</span></td>
                 <td>${escapeHtml(event.description || '-')}</span></td>
-                <td class="text-center text-nowrap">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editEvent('${event.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteEvent('${event.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-primary me-1" onclick="editEvent('${event.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteEvent('${event.id}')"><i class="fas fa-trash"></i></button>
                 </span></td>
             </tr>
         `;
@@ -16440,75 +16355,64 @@ function renderEventsTable() {
 }
 
 // ============================================
+// FORMAT DATE HELPER
+// ============================================
+
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB');
+}
+
+// ============================================
 // TERM CRUD OPERATIONS
 // ============================================
 
-async function addNewTerm() {
+window.addNewTerm = async function() {
     const { value: result } = await Swal.fire({
         title: 'Add New Term',
         html: `
             <div class="text-start">
                 <label class="form-label">Year</label>
-                <input type="number" id="termYear" class="form-control mb-3" value="2026" step="1">
-                <label class="form-label">Term Number</label>
-                <select id="termNumber" class="form-select mb-3">
-                    <option value="1">Term 1</option>
-                    <option value="2">Term 2</option>
-                    <option value="3">Term 3</option>
-                </select>
+                <input type="number" id="termYear" class="form-control mb-3" value="${new Date().getFullYear()}">
+                <label class="form-label">Term Name</label>
+                <input type="text" id="termName" class="form-control mb-3" placeholder="e.g., Term 1">
                 <label class="form-label">Start Date</label>
                 <input type="date" id="termStart" class="form-control mb-3">
                 <label class="form-label">End Date</label>
                 <input type="date" id="termEnd" class="form-control mb-3">
-                <label class="form-label">Status</label>
-                <select id="termStatus" class="form-select">
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Active">Active</option>
-                    <option value="Completed">Completed</option>
-                </select>
             </div>
         `,
         showCancelButton: true,
         confirmButtonText: 'Add Term',
         preConfirm: () => {
             const year = document.getElementById('termYear').value;
-            const termNum = document.getElementById('termNumber').value;
-            const startDate = document.getElementById('termStart').value;
-            const endDate = document.getElementById('termEnd').value;
-            const status = document.getElementById('termStatus').value;
+            const name = document.getElementById('termName').value;
+            const start = document.getElementById('termStart').value;
+            const end = document.getElementById('termEnd').value;
             
-            if (!startDate || !endDate) {
-                Swal.showValidationMessage('Please enter start and end dates');
+            if (!year || !name || !start || !end) {
+                Swal.showValidationMessage('Please fill all fields');
                 return false;
             }
-            
-            return {
-                year: parseInt(year),
-                term_number: parseInt(termNum),
-                term_name: `Term ${termNum}`,
-                start_date: startDate,
-                end_date: endDate,
-                status: status
-            };
+            return { year: parseInt(year), term_name: name, start_date: start, end_date: end };
         }
     });
     
     if (result) {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_terms').insert(result);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_terms').insert([result]);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Term added successfully', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function editTerm(termId) {
-    const term = termsList.find(t => t.id === termId);
+window.editTerm = async function(id) {
+    const term = academicTerms.find(t => t.id === id);
     if (!term) return;
     
     const { value: result } = await Swal.fire({
@@ -16523,12 +16427,6 @@ async function editTerm(termId) {
                 <input type="date" id="termStart" class="form-control mb-3" value="${term.start_date}">
                 <label class="form-label">End Date</label>
                 <input type="date" id="termEnd" class="form-control mb-3" value="${term.end_date}">
-                <label class="form-label">Status</label>
-                <select id="termStatus" class="form-select">
-                    <option value="Upcoming" ${term.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
-                    <option value="Active" ${term.status === 'Active' ? 'selected' : ''}>Active</option>
-                    <option value="Completed" ${term.status === 'Completed' ? 'selected' : ''}>Completed</option>
-                </select>
             </div>
         `,
         showCancelButton: true,
@@ -16537,26 +16435,23 @@ async function editTerm(termId) {
             year: parseInt(document.getElementById('termYear').value),
             term_name: document.getElementById('termName').value,
             start_date: document.getElementById('termStart').value,
-            end_date: document.getElementById('termEnd').value,
-            status: document.getElementById('termStatus').value
+            end_date: document.getElementById('termEnd').value
         })
     });
     
     if (result) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_terms').update(result).eq('id', termId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_terms').update(result).eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Term updated', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function deleteTerm(termId) {
+window.deleteTerm = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Term?',
         text: 'This action cannot be undone!',
@@ -16568,23 +16463,21 @@ async function deleteTerm(termId) {
     
     if (result.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_terms').delete().eq('id', termId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_terms').delete().eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Deleted!', 'Term removed', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
 // ============================================
 // HOLIDAY CRUD OPERATIONS
 // ============================================
 
-async function addNewHoliday() {
+window.addNewHoliday = async function() {
     const { value: result } = await Swal.fire({
         title: 'Add Holiday',
         html: `
@@ -16601,35 +16494,30 @@ async function addNewHoliday() {
         confirmButtonText: 'Add Holiday',
         preConfirm: () => {
             const name = document.getElementById('holidayName').value;
-            const startDate = document.getElementById('holidayStart').value;
-            const endDate = document.getElementById('holidayEnd').value;
-            
-            if (!name || !startDate || !endDate) {
+            const start = document.getElementById('holidayStart').value;
+            const end = document.getElementById('holidayEnd').value;
+            if (!name || !start || !end) {
                 Swal.showValidationMessage('Please fill all fields');
                 return false;
             }
-            
-            const days = calculateDays(startDate, endDate);
-            return { name: name, start_date: startDate, end_date: endDate, days: days };
+            return { name, start_date: start, end_date: end };
         }
     });
     
     if (result) {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_holidays').insert(result);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_holidays').insert([result]);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Holiday added', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function editHoliday(holidayId) {
-    const holiday = holidaysList.find(h => h.id === holidayId);
+window.editHoliday = async function(id) {
+    const holiday = academicHolidays.find(h => h.id === id);
     if (!holiday) return;
     
     const { value: result } = await Swal.fire({
@@ -16646,34 +16534,26 @@ async function editHoliday(holidayId) {
         `,
         showCancelButton: true,
         confirmButtonText: 'Save Changes',
-        preConfirm: () => {
-            const startDate = document.getElementById('holidayStart').value;
-            const endDate = document.getElementById('holidayEnd').value;
-            const days = calculateDays(startDate, endDate);
-            return {
-                name: document.getElementById('holidayName').value,
-                start_date: startDate,
-                end_date: endDate,
-                days: days
-            };
-        }
+        preConfirm: () => ({
+            name: document.getElementById('holidayName').value,
+            start_date: document.getElementById('holidayStart').value,
+            end_date: document.getElementById('holidayEnd').value
+        })
     });
     
     if (result) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_holidays').update(result).eq('id', holidayId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_holidays').update(result).eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Holiday updated', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function deleteHoliday(holidayId) {
+window.deleteHoliday = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Holiday?',
         icon: 'warning',
@@ -16684,23 +16564,21 @@ async function deleteHoliday(holidayId) {
     
     if (result.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_holidays').delete().eq('id', holidayId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_holidays').delete().eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Deleted!', 'Holiday removed', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
 // ============================================
 // EXAM CRUD OPERATIONS
 // ============================================
 
-async function addNewExam() {
+window.addNewExam = async function() {
     const { value: result } = await Swal.fire({
         title: 'Add Exam',
         html: `
@@ -16714,7 +16592,7 @@ async function addNewExam() {
                     <option value="Term 3">Term 3</option>
                 </select>
                 <label class="form-label">Year</label>
-                <input type="number" id="examYear" class="form-control mb-3" value="2026">
+                <input type="number" id="examYear" class="form-control mb-3" value="${new Date().getFullYear()}">
                 <label class="form-label">Start Date</label>
                 <input type="date" id="examStart" class="form-control mb-3">
                 <label class="form-label">End Date</label>
@@ -16734,20 +16612,18 @@ async function addNewExam() {
     
     if (result) {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_exams').insert(result);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_exams').insert([result]);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Exam added', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function editExam(examId) {
-    const exam = examsList.find(e => e.id === examId);
+window.editExam = async function(id) {
+    const exam = academicExams.find(e => e.id === id);
     if (!exam) return;
     
     const { value: result } = await Swal.fire({
@@ -16783,19 +16659,17 @@ async function editExam(examId) {
     
     if (result) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_exams').update(result).eq('id', examId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_exams').update(result).eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Exam updated', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function deleteExam(examId) {
+window.deleteExam = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Exam?',
         icon: 'warning',
@@ -16806,23 +16680,21 @@ async function deleteExam(examId) {
     
     if (result.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_exams').delete().eq('id', examId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_exams').delete().eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Deleted!', 'Exam removed', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
 // ============================================
 // EVENT CRUD OPERATIONS
 // ============================================
 
-async function addNewEvent() {
+window.addNewEvent = async function() {
     const { value: result } = await Swal.fire({
         title: 'Add Event',
         html: `
@@ -16846,20 +16718,18 @@ async function addNewEvent() {
     
     if (result) {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_events').insert(result);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_events').insert([result]);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Event added', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function editEvent(eventId) {
-    const event = eventsList.find(e => e.id === eventId);
+window.editEvent = async function(id) {
+    const event = academicEvents.find(e => e.id === id);
     if (!event) return;
     
     const { value: result } = await Swal.fire({
@@ -16885,19 +16755,17 @@ async function editEvent(eventId) {
     
     if (result) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_events').update(result).eq('id', eventId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_events').update(result).eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Success!', 'Event updated', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
-async function deleteEvent(eventId) {
+window.deleteEvent = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Event?',
         icon: 'warning',
@@ -16908,34 +16776,32 @@ async function deleteEvent(eventId) {
     
     if (result.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            await sb.from('academic_events').delete().eq('id', eventId);
-            await loadAcademicData();
-            Swal.close();
+        const { error } = await sb.from('academic_events').delete().eq('id', id);
+        Swal.close();
+        if (error) Swal.fire('Error', error.message, 'error');
+        else {
             Swal.fire('Deleted!', 'Event removed', 'success');
-        } catch (error) {
-            Swal.close();
-            Swal.fire('Error', error.message, 'error');
+            await loadAcademicData();
         }
     }
-}
+};
 
 // ============================================
-// AUTO-LOAD ON PAGE START
+// REFRESH ALL ACADEMIC DATA
 // ============================================
 
-(function autoLoadAcademic() {
-    if (typeof sb !== 'undefined' && sb) {
-        loadAcademicData();
-    } else {
-        setTimeout(autoLoadAcademic, 200);
-    }
-})();
+window.refreshAcademicData = async function() {
+    Swal.fire({ title: 'Refreshing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    await loadAcademicData();
+    Swal.close();
+    Swal.fire('Refreshed!', 'Academic calendar updated.', 'success');
+};
 
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(loadAcademicData, 100);
-});
+// ============================================
+// INITIALIZE ACADEMIC TAB
+// ============================================
 
+// Auto-load when tab is opened
 if (typeof showTab === 'function') {
     const originalShowTab = window.showTab;
     window.showTab = function(tabName) {
@@ -16946,7 +16812,18 @@ if (typeof showTab === 'function') {
     };
 }
 
-console.log('✅ Academic Calendar Module Loaded - FINAL MASTERPIECE');
+// Load on page load
+setTimeout(() => {
+    if (document.getElementById('termsTableBody')) {
+        loadAcademicData();
+    }
+}, 500);
+
+console.log('✅ Academic Calendar Module Loaded - Complete');
+
+
+
+
 
 // ============================================
 // HOUSES MANAGEMENT - SEPARATE TABLE VERSION
