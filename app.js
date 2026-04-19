@@ -54,7 +54,6 @@ const terms = ['Term 1', 'Term 2', 'Term 3', 'Mid-Term', 'Mock'];
 const roleMenus = {
     superadmin: [
         { page: "dashboard", icon: "fa-tachometer-alt", label: "Dashboard" },
-        { page: "users", icon: "fa-users-cog", label: "User Management" },
         { page: "students", icon: "fa-users", label: "Students" },
         { page: "teachers", icon: "fa-chalkboard-user", label: "Teachers" },
         { page: "subjects", icon: "fa-book-open", label: "Subjects" },
@@ -64,6 +63,7 @@ const roleMenus = {
         { page: "payments", icon: "fa-credit-card", label: "Payments" },
         { page: "reports", icon: "fa-file-alt", label: "Reports" },
         { page: "promotion", icon: "fa-arrow-up", label: "Promotion" },
+        { page: "users", icon: "fa-users-cog", label: "User Management" },
         { page: "settings", icon: "fa-cog", label: "Settings" }
     ],
     admin: [
@@ -80,10 +80,7 @@ const roleMenus = {
     ],
     teacher: [
         { page: "dashboard", icon: "fa-tachometer-alt", label: "Dashboard" },
-        { page: "students", icon: "fa-users", label: "Students" },
         { page: "marks", icon: "fa-chart-line", label: "Marks" },
-        { page: "attendance", icon: "fa-calendar-check", label: "Attendance" },
-        { page: "reports", icon: "fa-file-alt", label: "Reports" },
         { page: "subjects", icon: "fa-book-open", label: "Subjects" }
         
         
@@ -95,6 +92,17 @@ const roleMenus = {
     accountant: [
         { page: "dashboard", icon: "fa-tachometer-alt", label: "Dashboard" },
         { page: "payments", icon: "fa-credit-card", label: "Payments" }
+    ],
+     secretary: [
+        { page: "dashboard", icon: "fa-tachometer-alt", label: "Dashboard" },
+        { page: "reports", icon: "fa-file-alt", label: "Reports" },
+        { page: "attendance", icon: "fa-calendar-check", label: "Attendance" },
+        { page: "marks", icon: "fa-chart-line", label: "Marks" },
+        { page: "subjects", icon: "fa-book-open", label: "Subjects" },
+        { page: "students", icon: "fa-users", label: "Students" }
+
+        
+
     ]
 };
 
@@ -1861,29 +1869,7 @@ window.showAddStudentModal = async function() {
         }
     });
 
-    window.showAddStudentModal = async function() {
-    // Check permission - show alert if not authorized
-    if (!canAddStudent()) {
-        Swal.fire({
-            title: '⛔ Access Denied',
-            html: `<p>You do not have permission to add students.</p>
-                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
-                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can add students.</p>
-                   <hr>
-                   <p>Please contact your administrator for access.</p>`,
-            icon: 'error',
-            confirmButtonText: 'OK'
-        });
-        return;
-    }
     
-    // Rest of your existing add student code...
-    const isAlevel = currentLevel === 'alevel';
-    const availableClasses = isAlevel ? alevelClasses : olevelClasses;
-    const availableStreams = isAlevel ? alevelStreams : olevelStreams;
-    
-    // ... rest of your existing add student modal code
-};
 };
 
 // ============================================
@@ -1894,20 +1880,6 @@ window.showAddStudentModal = async function() {
 // ============================================
 
 window.showBulkUploadModal = function() {
-     if (!canUseBulkUpload()) {
-        Swal.fire({
-            title: '⛔ Access Denied',
-            html: `<p>You do not have permission to use Bulk Upload.</p>
-                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
-                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can use bulk upload.</p>
-                   <hr>
-                   <p>Please contact your administrator for access.</p>`,
-            icon: 'error',
-            confirmButtonText: 'OK'
-        });
-        return;
-    }
-    
     const isAlevel = currentLevel === 'alevel';
     
     Swal.fire({
@@ -6295,31 +6267,201 @@ window.editMark = async function(id) {
     });
 };
 
+
+
+// ============================================
+// HELPER FUNCTIONS (Dual Password)
+// ============================================
+
+async function verifyAdminOrSuperAdminPassword(action = 'this action') {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-warning mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        ${action} requires <strong>Admin</strong> or <strong>Super Admin</strong> credentials.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Account Type</label>
+                        <select id="accountType" class="form-select mb-3">
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Super Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Password</label>
+                        <input type="password" id="authPassword" class="form-control" 
+                               placeholder="Enter password" autocomplete="off">
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('authPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') Swal.clickConfirm();
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const accountType = document.getElementById('accountType')?.value;
+                const password = document.getElementById('authPassword')?.value;
+                if (!password) {
+                    Swal.showValidationMessage('Please enter password');
+                    return false;
+                }
+                try {
+                    const { data: userData, error: userError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', accountType)
+                        .limit(1)
+                        .single();
+                    if (userError) {
+                        Swal.showValidationMessage(`Could not find ${accountType} account`);
+                        return false;
+                    }
+                    const { error } = await sb.auth.signInWithPassword({
+                        email: userData.email,
+                        password: password
+                    });
+                    if (error) {
+                        document.getElementById('passwordError').style.display = 'block';
+                        Swal.showValidationMessage(`Incorrect ${accountType} password`);
+                        return false;
+                    }
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed');
+                    return false;
+                }
+            }
+        }).then((result) => resolve(result.isConfirmed));
+    });
+}
+
 window.deleteMark = async function(id) {
-    const result = await Swal.fire({ title: 'Delete Mark?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Yes, delete' });
-    if (result.isConfirmed) {
-        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const { error } = await sb.from('marks').delete().eq('id', id);
-        if (error) Swal.fire('Error', error.message, 'error');
-        else { Swal.fire('Deleted!', 'Mark deleted.', 'success'); await loadMarksTable(); }
+    const mark = allMarksList.find(m => m.id === id);
+    if (!mark) return;
+
+    // First confirmation
+    const confirmDelete = await Swal.fire({
+        title: 'Delete Mark?',
+        html: `<p>Are you sure you want to delete this mark record?</p>
+               <p><strong>Student:</strong> ${escapeHtml(mark.student_name || 'Unknown')}</p>
+               <p><strong>Subject:</strong> ${escapeHtml(mark.subject)}</p>
+               <p><strong>Exam:</strong> ${mark.exam} ${mark.year}</p>
+               <p class="text-danger">⚠️ This action cannot be undone!</p>
+               <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization (Admin or Super Admin) will be required.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Continue',
+        cancelButtonText: 'Cancel'
+    });
+    if (!confirmDelete.isConfirmed) return;
+
+    // Ask for password (Admin or Super Admin)
+    const authorized = await verifyAdminOrSuperAdminPassword('deleting this mark');
+    if (!authorized) {
+        Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
+        return;
+    }
+
+    // Final confirmation
+    const finalConfirm = await Swal.fire({
+        title: '🔴 Final Confirmation',
+        html: `<p>Authorization successful. Are you absolutely sure you want to delete this mark?</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Delete Permanently',
+        cancelButtonText: 'Cancel'
+    });
+    if (!finalConfirm.isConfirmed) return;
+
+    Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        await deleteMark(id);
+        Swal.fire('Deleted!', 'Mark record has been deleted.', 'success');
+        await loadMarksTable();
+    } catch (error) {
+        Swal.fire('Error!', error.message, 'error');
     }
 };
-
 // ============================================
 // BULK DELETE MARKS (Keep original)
 // ============================================
-
 window.bulkDeleteMarks = async function() {
     const checkboxes = document.querySelectorAll('.markCheck:checked');
     const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
-    if (!ids.length) return Swal.fire('Error', 'No marks selected', 'error');
-    
-    const result = await Swal.fire({ title: `Delete ${ids.length} marks?`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Yes, delete' });
-    if (result.isConfirmed) {
-        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        for (const id of ids) await sb.from('marks').delete().eq('id', id);
-        Swal.fire('Deleted!', `${ids.length} marks deleted.`, 'success');
+    if (ids.length === 0) {
+        Swal.fire('Error', 'No marks selected', 'error');
+        return;
+    }
+
+    // First confirmation
+    const confirmDelete = await Swal.fire({
+        title: `Delete ${ids.length} mark records?`,
+        html: `<p>You are about to delete <strong>${ids.length}</strong> mark records.</p>
+               <p class="text-danger">⚠️ THIS ACTION CANNOT BE UNDONE!</p>
+               <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization (Admin or Super Admin) will be required.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Continue',
+        cancelButtonText: 'Cancel'
+    });
+    if (!confirmDelete.isConfirmed) return;
+
+    // Ask for password (Admin or Super Admin)
+    const authorized = await verifyAdminOrSuperAdminPassword('deleting marks');
+    if (!authorized) {
+        Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
+        return;
+    }
+
+    // Final confirmation with typing
+    const finalConfirm = await Swal.fire({
+        title: '🔴 FINAL CONFIRMATION',
+        html: `<p>Authorization successful. Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> mark records.</p>`,
+        input: 'text',
+        inputPlaceholder: 'Type DELETE here',
+        showCancelButton: true,
+        confirmButtonText: 'Permanently Delete',
+        confirmButtonColor: '#d33',
+        preConfirm: (inputValue) => {
+            if (inputValue !== 'DELETE') {
+                Swal.showValidationMessage('Please type "DELETE" to confirm');
+                return false;
+            }
+            return true;
+        }
+    });
+    if (!finalConfirm.isConfirmed) return;
+
+    Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        for (const id of ids) {
+            await deleteMark(id);
+        }
+        Swal.fire('Deleted!', `${ids.length} mark records deleted.`, 'success');
         await loadMarksTable();
+    } catch (error) {
+        Swal.fire('Error!', error.message, 'error');
     }
 };
 
