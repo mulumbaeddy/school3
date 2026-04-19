@@ -83,7 +83,10 @@ const roleMenus = {
         { page: "students", icon: "fa-users", label: "Students" },
         { page: "marks", icon: "fa-chart-line", label: "Marks" },
         { page: "attendance", icon: "fa-calendar-check", label: "Attendance" },
-        { page: "reports", icon: "fa-file-alt", label: "Reports" }
+        { page: "reports", icon: "fa-file-alt", label: "Reports" },
+        { page: "subjects", icon: "fa-book-open", label: "Subjects" }
+        
+        
     ],
     librarian: [
         { page: "dashboard", icon: "fa-tachometer-alt", label: "Dashboard" },
@@ -1857,6 +1860,30 @@ window.showAddStudentModal = async function() {
             }
         }
     });
+
+    window.showAddStudentModal = async function() {
+    // Check permission - show alert if not authorized
+    if (!canAddStudent()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to add students.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can add students.</p>
+                   <hr>
+                   <p>Please contact your administrator for access.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    // Rest of your existing add student code...
+    const isAlevel = currentLevel === 'alevel';
+    const availableClasses = isAlevel ? alevelClasses : olevelClasses;
+    const availableStreams = isAlevel ? alevelStreams : olevelStreams;
+    
+    // ... rest of your existing add student modal code
+};
 };
 
 // ============================================
@@ -1867,6 +1894,20 @@ window.showAddStudentModal = async function() {
 // ============================================
 
 window.showBulkUploadModal = function() {
+     if (!canUseBulkUpload()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to use Bulk Upload.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can use bulk upload.</p>
+                   <hr>
+                   <p>Please contact your administrator for access.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
     const isAlevel = currentLevel === 'alevel';
     
     Swal.fire({
@@ -2207,6 +2248,20 @@ async function processExcelUpload(file) {
 // ============================================
 
 window.editStudent = async function(id) {
+     if (!canEditStudent()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to edit students.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can edit students.</p>
+                   <hr>
+                   <p>Please contact your administrator for access.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
     const student = students.find(s => s.id === id);
     if (!student) return;
     
@@ -2338,24 +2393,323 @@ window.editStudent = async function(id) {
     });
 };
 
+// ============================================
+// STUDENT MODULE - BUTTONS VISIBLE, ALERTS FOR UNAUTHORIZED
+// ============================================
+
+// ============================================
+// VERIFY SUPER ADMIN PASSWORD (For Admin delete)
+// ============================================
+
+async function verifySuperAdminPasswordForStudent() {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Super Admin Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-danger mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        This action requires Super Administrator approval.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Super Admin Password</label>
+                        <input type="password" id="superAdminPassword" class="form-control" 
+                               placeholder="Enter Super Admin password" autocomplete="off">
+                        <small class="text-muted">A Super Admin must authorize this action.</small>
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('superAdminPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            Swal.clickConfirm();
+                        }
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const password = document.getElementById('superAdminPassword')?.value;
+                
+                if (!password) {
+                    Swal.showValidationMessage('Please enter Super Admin password');
+                    return false;
+                }
+                
+                try {
+                    const { data: superAdminData, error: superAdminError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', 'superadmin')
+                        .limit(1)
+                        .single();
+                    
+                    if (superAdminError) {
+                        Swal.showValidationMessage('Could not verify Super Admin credentials');
+                        return false;
+                    }
+                    
+                    const { data, error } = await sb.auth.signInWithPassword({
+                        email: superAdminData.email,
+                        password: password
+                    });
+                    
+                    if (error) {
+                        const errorDiv = document.getElementById('passwordError');
+                        if (errorDiv) errorDiv.style.display = 'block';
+                        Swal.showValidationMessage('Incorrect Super Admin password');
+                        return false;
+                    }
+                    
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed. Please try again.');
+                    return false;
+                }
+            }
+        }).then((result) => {
+            resolve(result.isConfirmed);
+        });
+    });
+}
+
+// ============================================
+// PERMISSION CHECK FUNCTIONS (For alerts)
+// ============================================
+
+function canAddStudent() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
+function canEditStudent() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
+function canDeleteStudent() {
+    if (currentUserRole === 'superadmin') return 'superadmin';
+    if (currentUserRole === 'admin') return 'admin';
+    return false;
+}
+
+function canUseBulkUpload() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
 window.deleteStudentItem = async function(id) {
     const student = students.find(s => s.id === id);
-    const result = await Swal.fire({ title: 'Delete?', text: `Delete ${student?.name}?`, icon: 'warning', showCancelButton: true });
-    if (result.isConfirmed) {
-        await deleteStudent(id);
-        Swal.fire('Deleted', '', 'success');
-        await refreshStudents();
+    if (!student) return;
+    
+    const deletePermission = canDeleteStudent();
+    
+    // If not authorized to delete at all
+    if (!deletePermission) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to delete students.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can delete students.</p>
+                   <hr>
+                   <p>Please contact your administrator for access.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    // Super Admin - delete directly
+    if (deletePermission === 'superadmin') {
+        const result = await Swal.fire({
+            title: 'Delete Student?',
+            html: `<p>Are you sure you want to delete <strong>${escapeHtml(student.name)}</strong>?</p>
+                   <p class="text-danger">⚠️ This action cannot be undone!</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Yes, Delete',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (result.isConfirmed) {
+            Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                await deleteStudent(id);
+                Swal.fire('Deleted!', 'Student has been deleted.', 'success');
+                await refreshStudents();
+            } catch (error) {
+                Swal.fire('Error!', error.message, 'error');
+            }
+        }
+        return;
+    }
+    
+    // Admin - needs Super Admin password
+    if (deletePermission === 'admin') {
+        const result = await Swal.fire({
+            title: 'Delete Student?',
+            html: `<p>Are you sure you want to delete <strong>${escapeHtml(student.name)}</strong>?</p>
+                   <p class="text-danger">⚠️ This action cannot be undone!</p>
+                   <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization is required to delete students.</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Continue',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (!result.isConfirmed) return;
+        
+        const passwordVerified = await verifySuperAdminPasswordForStudent();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Authorization Failed',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+        
+        const finalConfirm = await Swal.fire({
+            title: '🔴 Final Confirmation',
+            html: `<p>Super Admin authorized. Are you absolutely sure you want to delete <strong>${escapeHtml(student.name)}</strong>?</p>
+                   <p class="text-danger">This action cannot be undone!</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Yes, Delete Permanently',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (finalConfirm.isConfirmed) {
+            Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                await deleteStudent(id);
+                Swal.fire('Deleted!', 'Student has been deleted.', 'success');
+                await refreshStudents();
+            } catch (error) {
+                Swal.fire('Error!', error.message, 'error');
+            }
+        }
     }
 };
 
 window.bulkDeleteStudents = async function() {
     const ids = Array.from(document.querySelectorAll('.studentCheck:checked')).map(cb => cb.dataset.id);
-    if (!ids.length) { Swal.fire('Error', 'No students selected', 'error'); return; }
-    const result = await Swal.fire({ title: `Delete ${ids.length} students?`, icon: 'warning', showCancelButton: true });
-    if (result.isConfirmed) {
-        for (const id of ids) await deleteStudent(id);
-        Swal.fire('Deleted', `${ids.length} students deleted`, 'success');
-        await refreshStudents();
+    
+    if (!ids.length) {
+        Swal.fire('Error', 'No students selected', 'error');
+        return;
+    }
+    
+    const deletePermission = canDeleteStudent();
+    
+    // If not authorized to delete at all
+    if (!deletePermission) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to delete students.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can delete students.</p>
+                   <hr>
+                   <p>Please contact your administrator for access.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    // Super Admin - delete directly
+    if (deletePermission === 'superadmin') {
+        const result = await Swal.fire({
+            title: `Delete ${ids.length} students?`,
+            html: `<p>You are about to delete <strong>${ids.length}</strong> students.</p>
+                   <p class="text-danger">⚠️ This action cannot be undone!</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Yes, Delete',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (result.isConfirmed) {
+            Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                for (const id of ids) await deleteStudent(id);
+                Swal.fire('Deleted!', `${ids.length} students deleted.`, 'success');
+                await refreshStudents();
+            } catch (error) {
+                Swal.fire('Error!', error.message, 'error');
+            }
+        }
+        return;
+    }
+    
+    // Admin - needs Super Admin password
+    if (deletePermission === 'admin') {
+        const result = await Swal.fire({
+            title: `Delete ${ids.length} students?`,
+            html: `<p>You are about to delete <strong>${ids.length}</strong> students.</p>
+                   <p class="text-danger">⚠️ This action cannot be undone!</p>
+                   <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization is required.</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Continue',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (!result.isConfirmed) return;
+        
+        const passwordVerified = await verifySuperAdminPasswordForStudent();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Authorization Failed',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+        
+        const finalConfirm = await Swal.fire({
+            title: '🔴 FINAL CONFIRMATION',
+            html: `<p>Super Admin authorized. Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> students.</p>`,
+            input: 'text',
+            inputPlaceholder: 'Type DELETE here',
+            showCancelButton: true,
+            confirmButtonText: 'Permanently Delete',
+            confirmButtonColor: '#d33',
+            preConfirm: (inputValue) => {
+                if (inputValue !== 'DELETE') {
+                    Swal.showValidationMessage('Please type "DELETE" to confirm');
+                    return false;
+                }
+                return true;
+            }
+        });
+        
+        if (finalConfirm.isConfirmed) {
+            Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                for (const id of ids) await deleteStudent(id);
+                Swal.fire('Deleted!', `${ids.length} students deleted.`, 'success');
+                await refreshStudents();
+            } catch (error) {
+                Swal.fire('Error!', error.message, 'error');
+            }
+        }
     }
 };
 
@@ -4028,6 +4382,7 @@ window.refreshSubjects = async function() {
 // ============================================
 
 window.showAddSubjectModal = function() {
+    
     Swal.fire({
         title: '<i class="fas fa-book"></i> Add New Subject',
         html: `
@@ -4106,6 +4461,8 @@ window.showAddSubjectModal = function() {
 // ============================================
 
 window.editSubject = async function(id) {
+
+     
     const subject = allSubjects.find(s => s.id === id);
     if (!subject) return;
     
@@ -4183,28 +4540,208 @@ window.editSubject = async function(id) {
 };
 
 // ============================================
+// HELPER FUNCTIONS FOR DUAL PASSWORD AUTH
+// ============================================
+
+// For non-admin users: prompt for Admin OR Super Admin password
+async function verifyAdminOrSuperAdminPassword(action = 'this action') {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-warning mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        ${action} requires <strong>Admin</strong> or <strong>Super Admin</strong> credentials.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Account Type</label>
+                        <select id="accountType" class="form-select mb-3">
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Super Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Password</label>
+                        <input type="password" id="authPassword" class="form-control" 
+                               placeholder="Enter password" autocomplete="off">
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('authPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') Swal.clickConfirm();
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const accountType = document.getElementById('accountType')?.value;
+                const password = document.getElementById('authPassword')?.value;
+                if (!password) {
+                    Swal.showValidationMessage('Please enter password');
+                    return false;
+                }
+                try {
+                    const { data: userData, error: userError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', accountType)
+                        .limit(1)
+                        .single();
+                    if (userError) {
+                        Swal.showValidationMessage(`Could not find ${accountType} account`);
+                        return false;
+                    }
+                    const { error } = await sb.auth.signInWithPassword({
+                        email: userData.email,
+                        password: password
+                    });
+                    if (error) {
+                        document.getElementById('passwordError').style.display = 'block';
+                        Swal.showValidationMessage(`Incorrect ${accountType} password`);
+                        return false;
+                    }
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed');
+                    return false;
+                }
+            }
+        }).then((result) => resolve(result.isConfirmed));
+    });
+}
+
+// For Admin user: prompt for Admin password only
+async function verifyAdminPassword(action = 'this action') {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Admin Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-warning mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        ${action} requires Admin password.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Admin Password</label>
+                        <input type="password" id="adminPassword" class="form-control" 
+                               placeholder="Enter Admin password" autocomplete="off">
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('adminPassword');
+                if (passwordInput) passwordInput.focus();
+            },
+            preConfirm: async () => {
+                const password = document.getElementById('adminPassword')?.value;
+                if (!password) {
+                    Swal.showValidationMessage('Please enter Admin password');
+                    return false;
+                }
+                try {
+                    const { data: adminData, error: adminError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', 'admin')
+                        .limit(1)
+                        .single();
+                    if (adminError) throw adminError;
+                    const { error } = await sb.auth.signInWithPassword({
+                        email: adminData.email,
+                        password: password
+                    });
+                    if (error) {
+                        document.getElementById('passwordError').style.display = 'block';
+                        Swal.showValidationMessage('Incorrect Admin password');
+                        return false;
+                    }
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed');
+                    return false;
+                }
+            }
+        }).then((result) => resolve(result.isConfirmed));
+    });
+}
+
+// Check if user has full privileges (Super Admin or Admin)
+function hasFullPrivilege() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
+// ============================================
 // DELETE SUBJECT
 // ============================================
 
 window.deleteSubjectItem = async function(id) {
     const subject = allSubjects.find(s => s.id === id);
-    
-    const result = await Swal.fire({
+    if (!subject) return;
+
+    const confirmDelete = await Swal.fire({
         title: 'Delete Subject?',
-        text: `Are you sure you want to delete "${subject?.name}"?`,
+        html: `<p>Are you sure you want to delete <strong>${escapeHtml(subject.name)}</strong>?</p>
+               <p class="text-danger">⚠️ This action cannot be undone!</p>
+               ${!hasFullPrivilege() ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization will be required.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete',
+        confirmButtonText: 'Yes, Continue',
         cancelButtonText: 'Cancel'
     });
-    
-    if (result.isConfirmed) {
+    if (!confirmDelete.isConfirmed) return;
+
+    let authorized = false;
+    if (currentUserRole === 'superadmin') {
+        authorized = true;
+    } else if (currentUserRole === 'admin') {
+        authorized = await verifyAdminPassword('deleting this subject');
+    } else {
+        authorized = await verifyAdminOrSuperAdminPassword('deleting this subject');
+    }
+    if (!authorized) {
+        Swal.fire('⛔ Authorization Failed', 'Delete cancelled.', 'error');
+        return;
+    }
+
+    const finalConfirm = await Swal.fire({
+        title: '🔴 Final Confirmation',
+        html: `<p>Authorization successful. Are you absolutely sure you want to delete <strong>${escapeHtml(subject.name)}</strong>?</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Delete Permanently',
+        cancelButtonText: 'Cancel'
+    });
+    if (finalConfirm.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
         try {
             await deleteSubject(id);
-            Swal.fire('Deleted!', 'Subject has been deleted.', 'success');
+            Swal.fire('Deleted!', 'Subject deleted.', 'success');
             await loadSubjectsTable();
         } catch (error) {
             Swal.fire('Error!', error.message, 'error');
@@ -4215,33 +4752,54 @@ window.deleteSubjectItem = async function(id) {
 // ============================================
 // BULK DELETE SUBJECTS
 // ============================================
-
 window.bulkDeleteSubjects = async function() {
     const checkboxes = document.querySelectorAll('.subjectCheck:checked');
     const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
-    
     if (ids.length === 0) {
         Swal.fire('Error', 'No subjects selected', 'error');
         return;
     }
-    
-    const result = await Swal.fire({
+
+    const confirmDelete = await Swal.fire({
         title: `Delete ${ids.length} subjects?`,
-        text: 'This action cannot be undone!',
+        html: `<p>You are about to delete <strong>${ids.length}</strong> subjects.</p>
+               <p class="text-danger">⚠️ THIS ACTION CANNOT BE UNDONE!</p>
+               ${!hasFullPrivilege() ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization required.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete',
+        confirmButtonText: 'Yes, Continue',
         cancelButtonText: 'Cancel'
     });
-    
-    if (result.isConfirmed) {
+    if (!confirmDelete.isConfirmed) return;
+
+    let authorized = false;
+    if (currentUserRole === 'superadmin') {
+        authorized = true;
+    } else if (currentUserRole === 'admin') {
+        authorized = await verifyAdminPassword('deleting subjects');
+    } else {
+        authorized = await verifyAdminOrSuperAdminPassword('deleting subjects');
+    }
+    if (!authorized) {
+        Swal.fire('⛔ Authorization Failed', 'Delete cancelled.', 'error');
+        return;
+    }
+
+    const finalConfirm = await Swal.fire({
+        title: '🔴 FINAL CONFIRMATION',
+        html: `<p>Authorization successful. Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> subjects.</p>`,
+        input: 'text',
+        inputPlaceholder: 'Type DELETE here',
+        showCancelButton: true,
+        confirmButtonText: 'Permanently Delete',
+        confirmButtonColor: '#d33',
+        preConfirm: (val) => val === 'DELETE' || Swal.showValidationMessage('Type "DELETE" to confirm')
+    });
+    if (finalConfirm.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
         try {
-            for (const id of ids) {
-                await deleteSubject(id);
-            }
+            for (const id of ids) await deleteSubject(id);
             Swal.fire('Deleted!', `${ids.length} subjects deleted.`, 'success');
             await loadSubjectsTable();
         } catch (error) {
@@ -4249,7 +4807,6 @@ window.bulkDeleteSubjects = async function() {
         }
     }
 };
-
 // ============================================
 // EXPORT SUBJECTS TO EXCEL
 // ============================================
@@ -6402,170 +6959,57 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-
-
-// ==================== LIBRARY MODULE ====================
 // ============================================
-// LIBRARY MODULE - COMPLETE FIXED VERSION
-// All Buttons Working | Return Function Fixed
+// LIBRARY MODULE - FINAL MASTERPIECE
+// Complete with: Books, Borrowing, History, Fine Management, Categories, Reports, Settings
+// Role-Based Access: Superadmin/Admin/Librarian = Full | Others = View Only
+// Settings Tab: SUPER ADMIN ONLY
 // ============================================
 
-// Global variables
+// ============================================
+// GLOBAL VARIABLES
+// ============================================
+
 let libraryBooks = [];
 let libraryBorrowings = [];
 let libraryStudents = [];
 let libraryTeachers = [];
+let libraryFines = [];
+let currentFineFilter = 'all';
 
 // Constants
-const DAILY_FINE_RATE = 500;
-const BORROW_DAYS = 14;
+let DAILY_FINE_RATE = 500;
+let BORROW_DAYS = 14;
+
 
 // ============================================
-// DATABASE OPERATIONS
+// CHECK USER PERMISSIONS
 // ============================================
 
-async function libGetBooks() {
-    try {
-        const { data, error } = await sb
-            .from('books')
-            .select('*')
-            .eq('level', currentLevel)
-            .order('title');
-        
-        if (error) throw error;
-        libraryBooks = data || [];
-        return libraryBooks;
-    } catch (error) {
-        console.error('Error loading books:', error);
-        return [];
-    }
+function canManageLibrary() {
+    const fullAccessRoles = ['superadmin', 'admin', 'librarian'];
+    return fullAccessRoles.includes(currentUserRole);
 }
 
-async function libGetBorrowings() {
-    try {
-        const { data, error } = await sb
-            .from('borrowings')
-            .select('*')
-            .order('borrow_date', { ascending: false });
-        
-        if (error) throw error;
-        libraryBorrowings = data || [];
-        return libraryBorrowings;
-    } catch (error) {
-        console.error('Error loading borrowings:', error);
-        return [];
-    }
-}
-
-async function libGetStudents() {
-    try {
-        let classList = currentLevel === 'olevel' 
-            ? ['S.1', 'S.2', 'S.3', 'S.4']
-            : ['S.5', 'S.6'];
-        
-        const { data, error } = await sb
-            .from('students')
-            .select('*')
-            .in('class', classList)
-            .order('name');
-        
-        if (error) throw error;
-        libraryStudents = data || [];
-        return libraryStudents;
-    } catch (error) {
-        console.error('Error loading students:', error);
-        return [];
-    }
-}
-
-async function libGetTeachers() {
-    try {
-        const { data, error } = await sb
-            .from('teachers')
-            .select('*')
-            .order('name');
-        
-        if (error) throw error;
-        libraryTeachers = data || [];
-        return libraryTeachers;
-    } catch (error) {
-        console.error('Error loading teachers:', error);
-        return [];
-    }
-}
-
-async function libAddBook(bookData) {
-    const { data, error } = await sb
-        .from('books')
-        .insert([{
-            ...bookData,
-            level: currentLevel,
-            borrowed_count: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        }])
-        .select();
-    
-    if (error) throw error;
-    return data[0];
-}
-
-async function libUpdateBook(id, bookData) {
-    const { data, error } = await sb
-        .from('books')
-        .update({
-            ...bookData,
-            updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .select();
-    
-    if (error) throw error;
-    return data[0];
-}
-
-async function libDeleteBook(id) {
-    const { error } = await sb
-        .from('books')
-        .delete()
-        .eq('id', id);
-    
-    if (error) throw error;
-}
-
-async function libDeleteAllBooks() {
-    const { error } = await sb
-        .from('books')
-        .delete()
-        .eq('level', currentLevel);
-    
-    if (error) throw error;
-}
-
-async function libAddBorrowing(borrowData) {
-    const { data, error } = await sb
-        .from('borrowings')
-        .insert([borrowData])
-        .select();
-    
-    if (error) throw error;
-    return data[0];
-}
-
-async function libUpdateBorrowing(id, borrowData) {
-    const { data, error } = await sb
-        .from('borrowings')
-        .update(borrowData)
-        .eq('id', id)
-        .select();
-    
-    if (error) throw error;
-    return data[0];
+function canOnlyView() {
+    const viewOnlyRoles = ['teacher', 'accountant', 'secretary'];
+    return viewOnlyRoles.includes(currentUserRole);
 }
 
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatMoney(amount) {
+    return 'UGX ' + (amount || 0).toLocaleString();
+}
 
 function calculateFine(expectedReturnDate, actualReturnDate = null) {
     const expected = new Date(expectedReturnDate);
@@ -6591,124 +7035,185 @@ function getBorrowerName(borrowing) {
     }
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+// ============================================
+// DATABASE OPERATIONS
+// ============================================
+
+async function libGetBooks() {
+    try {
+        const { data, error } = await sb
+            .from('books')
+            .select('*')
+            .eq('level', currentLevel)
+            .order('title');
+        if (error) throw error;
+        libraryBooks = data || [];
+        return libraryBooks;
+    } catch (error) {
+        console.error('Error loading books:', error);
+        return [];
+    }
 }
 
-// ============================================
-// RENDER LIBRARY PAGE
-// ============================================
+async function libGetBorrowings() {
+    try {
+        const { data, error } = await sb
+            .from('borrowings')
+            .select('*')
+            .order('borrow_date', { ascending: false });
+        if (error) throw error;
+        libraryBorrowings = data || [];
+        return libraryBorrowings;
+    } catch (error) {
+        console.error('Error loading borrowings:', error);
+        return [];
+    }
+}
 
-async function renderLibrary() {
-    await libGetBooks();
-    await libGetBorrowings();
-    
-    const levelName = currentLevel === 'olevel' ? 'O-Level (UCE)' : 'A-Level (UACE)';
-    const totalBooks = libraryBooks.reduce((sum, b) => sum + (b.copies || 0), 0);
-    const totalBorrowed = libraryBorrowings.filter(b => b.status === 'BORROWED').length;
-    const overdueCount = libraryBorrowings.filter(b => {
-        if (b.status !== 'BORROWED') return false;
-        return new Date() > new Date(b.expected_return_date);
-    }).length;
-    const totalFines = libraryBorrowings.filter(b => b.fine_paid).reduce((sum, b) => sum + (b.fine_amount || 0), 0);
-    
-    return `
-        <div class="card shadow-sm mb-3">
-            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-book"></i> Library Management - ${levelName}</h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-2">
-                    <div class="col-md-12">
-                        <button class="btn btn-primary" onclick="showAddBookModal()">
-                            <i class="fas fa-plus"></i> Add Book
-                        </button>
-                        <button class="btn btn-info ms-2" onclick="showBorrowedBooksModal()">
-                            <i class="fas fa-book-open"></i> Borrowed Books
-                        </button>
-                        <button class="btn btn-warning ms-2" onclick="showBorrowBookModal()">
-                            <i class="fas fa-hand-holding-heart"></i> Borrow Book
-                        </button>
-                        <button class="btn btn-success ms-2" onclick="exportBooksData()">
-                            <i class="fas fa-file-excel"></i> Export
-                        </button>
-                        <button class="btn btn-danger ms-2" onclick="confirmDeleteAllBooks()">
-                            <i class="fas fa-trash-alt"></i> Delete All
-                        </button>
-                        <button class="btn btn-outline-secondary ms-2" onclick="refreshLibrary()">
-                            <i class="fas fa-sync-alt"></i> Refresh
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Statistics Cards -->
-        <div class="row mb-3">
-            <div class="col-md-3">
-                <div class="card bg-primary text-white">
-                    <div class="card-body text-center">
-                        <h3>${totalBooks}</h3>
-                        <p><i class="fas fa-book"></i> Total Books</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-warning text-dark">
-                    <div class="card-body text-center">
-                        <h3>${totalBorrowed}</h3>
-                        <p><i class="fas fa-book-open"></i> Borrowed</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-danger text-white">
-                    <div class="card-body text-center">
-                        <h3>${overdueCount}</h3>
-                        <p><i class="fas fa-clock"></i> Overdue</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-success text-white">
-                    <div class="card-body text-center">
-                        <h3>UGX ${totalFines.toLocaleString()}</h3>
-                        <p><i class="fas fa-money-bill"></i> Fines</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Books Table -->
-        <div class="card shadow-sm">
-            <div class="card-header bg-white">
-                <h6 class="mb-0"><i class="fas fa-list"></i> Books Inventory</h6>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                    <table class="table table-bordered mb-0">
-                        <thead class="table-primary sticky-top">
-                            <tr>
-                                <th width="30"><input type="checkbox" id="selectAllBooks"></th>
-                                <th>ISBN</th>
-                                <th>Title</th>
-                                <th>Author</th>
-                                <th>Category</th>
-                                <th>Copies</th>
-                                <th>Available</th>
-                                <th width="100">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="booksTableBody">
-                            <tr><td colspan="8" class="text-center py-4">Loading... </span>络</tbody>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+async function libGetStudents() {
+    try {
+        let classList = currentLevel === 'olevel' 
+            ? ['S.1', 'S.2', 'S.3', 'S.4']
+            : ['S.5', 'S.6'];
+        const { data, error } = await sb
+            .from('students')
+            .select('*')
+            .in('class', classList)
+            .order('name');
+        if (error) throw error;
+        libraryStudents = data || [];
+        return libraryStudents;
+    } catch (error) {
+        console.error('Error loading students:', error);
+        return [];
+    }
+}
+
+async function libGetTeachers() {
+    try {
+        const { data, error } = await sb
+            .from('teachers')
+            .select('*')
+            .order('name');
+        if (error) throw error;
+        libraryTeachers = data || [];
+        return libraryTeachers;
+    } catch (error) {
+        console.error('Error loading teachers:', error);
+        return [];
+    }
+}
+
+async function libAddBook(bookData) {
+    const { data, error } = await sb
+        .from('books')
+        .insert([{
+            ...bookData,
+            level: currentLevel,
+            borrowed_count: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        }])
+        .select();
+    if (error) throw error;
+    return data[0];
+}
+
+async function libUpdateBook(id, bookData) {
+    const { data, error } = await sb
+        .from('books')
+        .update({
+            ...bookData,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select();
+    if (error) throw error;
+    return data[0];
+}
+
+async function libDeleteBook(id) {
+    const { error } = await sb
+        .from('books')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}
+
+async function libDeleteAllBooks() {
+    const { error } = await sb
+        .from('books')
+        .delete()
+        .eq('level', currentLevel);
+    if (error) throw error;
+}
+
+async function libAddBorrowing(borrowData) {
+    const { data, error } = await sb
+        .from('borrowings')
+        .insert([borrowData])
+        .select();
+    if (error) throw error;
+    return data[0];
+}
+
+async function libUpdateBorrowing(id, borrowData) {
+    const { data, error } = await sb
+        .from('borrowings')
+        .update(borrowData)
+        .eq('id', id)
+        .select();
+    if (error) throw error;
+    return data[0];
+}
+
+async function libAddFine(fineData) {
+    const { data, error } = await sb
+        .from('library_fines')
+        .insert([{
+            ...fineData,
+            created_at: new Date().toISOString(),
+            status: 'PENDING'
+        }])
+        .select();
+    if (error) throw error;
+    return data[0];
+}
+
+async function libUpdateFine(id, fineData) {
+    const { data, error } = await sb
+        .from('library_fines')
+        .update({
+            ...fineData,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select();
+    if (error) throw error;
+    return data[0];
+}
+
+async function libDeleteFine(id) {
+    const { error } = await sb
+        .from('library_fines')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}
+
+async function libGetFines() {
+    try {
+        const { data, error } = await sb
+            .from('library_fines')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        libraryFines = data || [];
+        return libraryFines;
+    } catch (error) {
+        console.error('Error loading fines:', error);
+        return [];
+    }
 }
 
 // ============================================
@@ -6718,64 +7223,54 @@ async function renderLibrary() {
 async function loadBooksTable() {
     const tbody = document.getElementById('booksTableBody');
     if (!tbody) return;
-    
     await libGetBooks();
+    const canManage = canManageLibrary();
     
     if (libraryBooks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">No ${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'} books found. </span>络</tbody>`;
+        tbody.innerHTML = `<tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-book-open"></i> No books found. Click "Add Book" to get started.</span>络`;
         return;
     }
     
     let html = '';
     for (const b of libraryBooks) {
         const available = (b.copies || 0) - (b.borrowed_count || 0);
-        html += `
-            <tr>
-                <td class="text-center"><input type="checkbox" class="bookCheck" data-id="${b.id}"></td>
-                <td><code>${escapeHtml(b.isbn || '-')}</code></td>
-                <td><strong>${escapeHtml(b.title)}</strong></td>
-                <td>${escapeHtml(b.author || '-')}</td>
-                <td><span class="badge bg-secondary">${escapeHtml(b.category || '-')}</span></td>
-                <td class="text-center">${b.copies || 0}</td>
-                <td class="text-center">
-                    <span class="badge ${available > 0 ? 'bg-success' : 'bg-danger'}">
-                        ${available}
-                    </span>
-                </td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-warning me-1" onclick="editBook('${b.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteBookItem('${b.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
+        html += `<tr>
+            ${canManage ? `<td class="text-center"><input type="checkbox" class="bookCheck" data-id="${b.id}"></td>` : ''}
+            <td><code>${escapeHtml(b.isbn || '-')}</code></td>
+            <td><strong>${escapeHtml(b.title)}</strong></td>
+            <td>${escapeHtml(b.author || '-')}</td>
+            <td><span class="badge bg-secondary">${escapeHtml(b.category || '-')}</span></td>
+            <td class="text-center">${b.copies || 0}</td>
+            <td class="text-center"><span class="badge ${available > 0 ? 'bg-success' : 'bg-danger'}">${available}</span></td>
+            ${canManage ? `<td class="text-center">
+                <button class="btn btn-sm btn-warning action-btn me-1" onclick="editBook('${b.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger action-btn" onclick="deleteBookItem('${b.id}')" title="Delete"><i class="fas fa-trash"></i></button>
+             </span>` : ''}
+        </tr>`;
     }
     tbody.innerHTML = html;
     
-    const selectAll = document.getElementById('selectAllBooks');
-    if (selectAll) {
-        selectAll.onclick = () => {
-            document.querySelectorAll('.bookCheck').forEach(cb => cb.checked = selectAll.checked);
-        };
+    if (canManage) {
+        const selectAll = document.getElementById('selectAllBooks');
+        if (selectAll) selectAll.onclick = () => document.querySelectorAll('.bookCheck').forEach(cb => cb.checked = selectAll.checked);
     }
 }
 
 // ============================================
-// BORROWED BOOKS MODAL - WITH WORKING RETURN
+// LOAD CURRENTLY BORROWED TABLE
 // ============================================
 
-window.showBorrowedBooksModal = async function() {
+async function loadCurrentlyBorrowedTable() {
+    const tbody = document.getElementById('borrowedBooksTableBody');
+    if (!tbody) return;
     await libGetBorrowings();
     await libGetStudents();
     await libGetTeachers();
+    const canManage = canManageLibrary();
     
     const activeBorrowings = libraryBorrowings.filter(b => b.status === 'BORROWED');
-    
     if (activeBorrowings.length === 0) {
-        Swal.fire('Info', 'No books are currently borrowed.', 'info');
+        tbody.innerHTML = `<tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-check-circle"></i> No books currently borrowed.</span>络`;
         return;
     }
     
@@ -6785,529 +7280,786 @@ window.showBorrowedBooksModal = async function() {
         const borrowerType = b.borrower_type === 'student' ? 'Student' : 'Teacher';
         const borrowerBadge = b.borrower_type === 'student' ? 'bg-success' : 'bg-info';
         const dueDate = new Date(b.expected_return_date);
-        const today = new Date();
-        const daysLeft = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+        const daysLeft = Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24));
         const fine = calculateFine(b.expected_return_date);
+        let statusClass = daysLeft < 0 ? 'text-danger' : (daysLeft <= 3 ? 'text-warning' : 'text-success');
+        let statusText = daysLeft < 0 ? `${Math.abs(daysLeft)} days overdue` : `${daysLeft} days left`;
         
-        let statusClass = '';
-        let statusText = '';
-        if (daysLeft < 0) {
-            statusClass = 'text-danger';
-            statusText = `${Math.abs(daysLeft)} days overdue`;
-        } else if (daysLeft <= 3) {
-            statusClass = 'text-warning';
-            statusText = `${daysLeft} days left`;
-        } else {
-            statusClass = 'text-success';
-            statusText = `${daysLeft} days left`;
-        }
-        
-        html += `
-            <tr>
-                <td><strong>${escapeHtml(borrowerName)}</strong></td>
-                <td class="text-center"><span class="badge ${borrowerBadge}">${borrowerType}</span></td>
-                <td><strong>${escapeHtml(b.book_title)}</strong></td>
-                <td>${b.borrow_date}</span></td>
-                <td>${b.expected_return_date}</span></td>
-                <td class="${statusClass}"><strong>${statusText}</strong></span></td>
-                <td class="text-danger"><strong>UGX ${fine.toLocaleString()}</strong></span></td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-success" onclick="returnBook('${b.id}')" title="Return Book">
-                        <i class="fas fa-undo-alt"></i> Return
-                    </button>
-                </span></td>
-            </tr>
-        `;
+        html += `<tr>
+            <td><strong>${escapeHtml(borrowerName)}</strong></td>
+            <td class="text-center"><span class="badge ${borrowerBadge}">${borrowerType}</span></td>
+            <td><strong>${escapeHtml(b.book_title)}</strong></td>
+            <td>${b.borrow_date}</td>
+            <td>${b.expected_return_date}</td>
+            <td class="${statusClass}"><strong>${statusText}</strong></td>
+            <td class="text-danger"><strong>${formatMoney(fine)}</strong></td>
+            ${canManage ? `<td class="text-center"><button class="btn btn-sm btn-success action-btn" onclick="returnBook('${b.id}')" title="Return Book"><i class="fas fa-undo-alt"></i> Return</button></td>` : ''}
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+// ============================================
+// LOAD BORROWING HISTORY TABLE
+// ============================================
+
+async function loadBorrowingHistoryTable() {
+    const tbody = document.getElementById('historyTableBody');
+    if (!tbody) return;
+    await libGetBorrowings();
+    await libGetStudents();
+    await libGetTeachers();
+    
+    const returnedBorrowings = libraryBorrowings.filter(b => b.status === 'RETURNED');
+    if (returnedBorrowings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><i class="fas fa-history"></i> No borrowing history found.</span>络';
+        return;
     }
     
+    let html = '';
+    for (const b of returnedBorrowings) {
+        const borrowerName = getBorrowerName(b);
+        const borrowerType = b.borrower_type === 'student' ? 'Student' : 'Teacher';
+        const borrowerBadge = b.borrower_type === 'student' ? 'bg-success' : 'bg-info';
+        html += `<tr>
+            <td><strong>${escapeHtml(borrowerName)}</strong></td>
+            <td class="text-center"><span class="badge ${borrowerBadge}">${borrowerType}</span></td>
+            <td><strong>${escapeHtml(b.book_title)}</strong></td>
+            <td>${b.borrow_date}</td>
+            <td>${b.actual_return_date || '-'}</td>
+            <td class="text-center">${b.fine_amount ? formatMoney(b.fine_amount) : '-'}</td>
+            <td class="text-center"><span class="badge bg-secondary">Returned</span></td>
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+// ============================================
+// LOAD FINES TABLE
+// ============================================
+
+async function loadFinesTable() {
+    const tbody = document.getElementById('finesTableBody');
+    if (!tbody) return;
+    await libGetFines();
+    await libGetStudents();
+    await libGetTeachers();
+    const canManage = canManageLibrary();
+    
+    // Populate borrower dropdown for add fine form
+    if (canManage) {
+        const borrowerTypeSelect = document.getElementById('fineBorrowerType');
+        const borrowerIdSelect = document.getElementById('fineBorrowerId');
+        
+        const updateBorrowerList = () => {
+            const type = borrowerTypeSelect.value;
+            let list = type === 'student' ? libraryStudents : libraryTeachers;
+            list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+            borrowerIdSelect.innerHTML = '<option value="">-- Select --</option>' + 
+                list.map(item => `<option value="${item.id}">${escapeHtml(item.name)} ${type === 'student' ? '(' + item.class + ' - ' + (item.admission_no || 'No ADM') + ')' : '(' + (item.specialization || 'Staff') + ')'}</option>`).join('');
+        };
+        borrowerTypeSelect.onchange = updateBorrowerList;
+        updateBorrowerList();
+    }
+    
+    // Apply filter
+    let filteredFines = libraryFines;
+    if (currentFineFilter === 'pending') filteredFines = libraryFines.filter(f => f.status === 'PENDING');
+    else if (currentFineFilter === 'paid') filteredFines = libraryFines.filter(f => f.status === 'PAID');
+    
+    if (filteredFines.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${canManage ? 7 : 6}" class="text-center py-4"><i class="fas fa-check-circle"></i> No fines found.</span>络`;
+        return;
+    }
+    
+    let html = '';
+    for (const f of filteredFines) {
+        let borrowerName = 'Unknown';
+        if (f.borrower_type === 'student') {
+            const student = libraryStudents.find(s => s.id === f.borrower_id);
+            borrowerName = student ? `${student.name} (${student.class})` : 'Unknown';
+        } else {
+            const teacher = libraryTeachers.find(t => t.id === f.borrower_id);
+            borrowerName = teacher ? `${teacher.name} (${teacher.specialization || 'Staff'})` : 'Unknown';
+        }
+        
+        const statusBadge = f.status === 'PAID' ? 'bg-success' : 'bg-danger';
+        const statusText = f.status === 'PAID' ? 'Paid' : 'Pending';
+        
+        html += `<tr>
+            <td><strong>${escapeHtml(borrowerName)}</strong></td>
+            <td class="text-center"><span class="badge ${f.borrower_type === 'student' ? 'bg-success' : 'bg-info'}">${f.borrower_type === 'student' ? 'Student' : 'Teacher'}</span></td>
+            <td>${escapeHtml(f.reason)}</span></td>
+            <td class="text-end"><strong>${formatMoney(f.amount || 0)}</strong></td>
+            <td>${f.created_at ? new Date(f.created_at).toLocaleDateString() : '-'}</td>
+            <td class="text-center"><span class="badge ${statusBadge}">${statusText}</span></td>
+            ${canManage ? `<td class="text-center">
+                ${f.status === 'PENDING' ? 
+                    `<button class="btn btn-sm btn-success action-btn me-1" onclick="markFinePaid('${f.id}')" title="Mark as Paid"><i class="fas fa-check"></i> Pay</button>
+                     <button class="btn btn-sm btn-danger action-btn" onclick="deleteFine('${f.id}')" title="Delete Fine"><i class="fas fa-trash"></i></button>` : 
+                    `<button class="btn btn-sm btn-danger action-btn" onclick="deleteFine('${f.id}')" title="Delete Fine"><i class="fas fa-trash"></i> Delete</button>`}
+             </span>` : ''}
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+// ============================================
+// LOAD CATEGORIES TABLE
+// ============================================
+
+async function loadCategoriesTable() {
+    const tbody = document.getElementById('categoriesTableBody');
+    if (!tbody) return;
+    await libGetBooks();
+    await libGetBorrowings();
+    
+    const categories = [...new Set(libraryBooks.map(b => b.category).filter(c => c))];
+    if (categories.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><i class="fas fa-tags"></i> No categories found.</span>络';
+        return;
+    }
+    
+    let html = '';
+    for (const category of categories) {
+        const booksInCategory = libraryBooks.filter(b => b.category === category);
+        const totalCopies = booksInCategory.reduce((sum, b) => sum + (b.copies || 0), 0);
+        const borrowedCount = booksInCategory.reduce((sum, b) => sum + (b.borrowed_count || 0), 0);
+        const available = totalCopies - borrowedCount;
+        html += `<tr>
+            <td><strong>${escapeHtml(category)}</strong></td>
+            <td class="text-center">${totalCopies}</td>
+            <td class="text-center">${borrowedCount}</td>
+            <td class="text-center">${available}</td>
+            <td class="text-center"><button class="btn btn-sm btn-info action-btn" onclick="viewBooksByCategory('${category}')"><i class="fas fa-eye"></i> View</button></td>
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+// ============================================
+// LOAD LIBRARY REPORTS (IMPROVED)
+// ============================================
+
+async function loadLibraryReports() {
+    await libGetBooks();
+    await libGetBorrowings();
+    await libGetStudents();
+    await libGetTeachers();
+    
+    // Popular books
+    const popularBooks = [...libraryBooks]
+        .sort((a, b) => (b.borrowed_count || 0) - (a.borrowed_count || 0))
+        .slice(0, 10);
+    
+    let popularHtml = '';
+    if (popularBooks.length === 0) {
+        popularHtml = '<tr><td colspan="2" class="text-center py-3 text-muted">No borrowing data available</span></tr>';
+    } else {
+        for (const book of popularBooks) {
+            popularHtml += `<tr>
+                <td><strong>${escapeHtml(book.title)}</strong><br><small class="text-muted">${escapeHtml(book.author || 'Unknown Author')}</small></span>
+                <td class="text-center"><span class="badge bg-primary rounded-pill">${book.borrowed_count || 0}</span></span>
+            </tr>`;
+        }
+    }
+    document.getElementById('popularBooksTableBody').innerHTML = popularHtml;
+    
+    // Top Borrowers with rankings
+    const borrowerCount = {};
+    for (const b of libraryBorrowings) {
+        const key = `${b.borrower_id}_${b.borrower_type}`;
+        if (!borrowerCount[key]) {
+            borrowerCount[key] = { id: b.borrower_id, type: b.borrower_type, count: 0, name: '', class: '', admission_no: '', specialization: '' };
+        }
+        borrowerCount[key].count++;
+    }
+    
+    for (const key in borrowerCount) {
+        const item = borrowerCount[key];
+        if (item.type === 'student') {
+            const student = libraryStudents.find(s => s.id === item.id);
+            if (student) {
+                item.name = student.name;
+                item.class = student.class;
+                item.admission_no = student.admission_no || '-';
+            } else item.name = 'Unknown Student';
+        } else {
+            const teacher = libraryTeachers.find(t => t.id === item.id);
+            if (teacher) {
+                item.name = teacher.name;
+                item.specialization = teacher.specialization || 'Staff';
+            } else item.name = 'Unknown Teacher';
+        }
+    }
+    
+    const topBorrowers = Object.values(borrowerCount).sort((a, b) => b.count - a.count).slice(0, 10);
+    let topHtml = '';
+    if (topBorrowers.length === 0) {
+        topHtml = '<tr><td colspan="5" class="text-center py-3 text-muted">No borrowing data available</span></tr>';
+    } else {
+        for (let i = 0; i < topBorrowers.length; i++) {
+            const borrower = topBorrowers[i];
+            const rankIcon = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : `${i + 1}`));
+            const rankClass = i === 0 ? 'bg-warning' : (i === 1 ? 'bg-secondary' : (i === 2 ? 'bg-danger' : 'bg-light'));
+            
+            topHtml += `<tr>
+                <td class="text-center"><span class="badge ${rankClass} rounded-pill" style="font-size: 16px; padding: 8px 12px;">${rankIcon}</span></span>
+                <td><strong>${escapeHtml(borrower.name)}</strong><br><small class="text-muted">${borrower.type === 'student' ? `📚 ${borrower.class} | 🆔 ${borrower.admission_no}` : `👨‍🏫 ${borrower.specialization}`}</small></span>
+                <td class="text-center"><span class="badge bg-primary rounded-pill">${borrower.type === 'student' ? 'Student' : 'Teacher'}</span></span>
+                <td class="text-center"><span class="badge bg-success rounded-pill">📖 ${borrower.count} books</span></span>
+                <td class="text-center"><button class="btn btn-sm btn-outline-info" onclick="viewBorrowerDetails('${borrower.id}', '${borrower.type}')"><i class="fas fa-eye"></i></button></span>
+            </tr>`;
+        }
+    }
+    document.getElementById('topBorrowersTableBody').innerHTML = topHtml;
+}
+
+// ============================================
+// VIEW BORROWER DETAILS
+// ============================================
+
+window.viewBorrowerDetails = async function(borrowerId, borrowerType) {
+    await libGetBorrowings();
+    await libGetStudents();
+    await libGetTeachers();
+    
+    let borrower = null;
+    let borrowerBooks = [];
+    
+    if (borrowerType === 'student') {
+        borrower = libraryStudents.find(s => s.id === borrowerId);
+        borrowerBooks = libraryBorrowings.filter(b => b.borrower_id === borrowerId && b.borrower_type === 'student');
+    } else {
+        borrower = libraryTeachers.find(t => t.id === borrowerId);
+        borrowerBooks = libraryBorrowings.filter(b => b.borrower_id === borrowerId && b.borrower_type === 'teacher');
+    }
+    
+    if (!borrower) {
+        Swal.fire('Error', 'Borrower not found', 'error');
+        return;
+    }
+    
+    const totalBorrowed = borrowerBooks.length;
+    const activeBorrowed = borrowerBooks.filter(b => b.status === 'BORROWED').length;
+    const returned = borrowerBooks.filter(b => b.status === 'RETURNED').length;
+    const totalFine = borrowerBooks.reduce((sum, b) => sum + (b.fine_amount || 0), 0);
+    
+    let booksHtml = '<div class="table-responsive" style="max-height: 300px;"><table class="table table-bordered table-sm"><thead class="table-light"><tr><th>Book Title</th><th>Borrow Date</th><th>Due Date</th><th>Return Date</th><th>Status</th></tr></thead><tbody>';
+    for (const book of borrowerBooks.slice(0, 10)) {
+        const statusBadge = book.status === 'BORROWED' ? 'bg-warning' : 'bg-success';
+        booksHtml += `<tr>
+            <td>${escapeHtml(book.book_title)}</span>
+            <td>${book.borrow_date}</span>
+            <td>${book.expected_return_date || '-'}</span>
+            <td>${book.actual_return_date || '-'}</span>
+            <td class="text-center"><span class="badge ${statusBadge}">${book.status}</span></span>
+        </tr>`;
+    }
+    if (borrowerBooks.length > 10) booksHtml += `<tr><td colspan="5" class="text-center text-muted">... and ${borrowerBooks.length - 10} more records</span></tr>`;
+    booksHtml += '</tbody>}</div>';
+    
     Swal.fire({
-        title: '<i class="fas fa-book-open"></i> Currently Borrowed Books',
-        html: `
-            <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                <table class="table table-bordered table-sm">
-                    <thead class="table-primary">
-                        <tr>
-                            <th>Borrower</th>
-                            <th>Type</th>
-                            <th>Book</th>
-                            <th>Borrow Date</th>
-                            <th>Due Date</th>
-                            <th>Status</th>
-                            <th>Fine</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>${html}</tbody>
-                </table>
-            </div>
-        `,
-        width: '1000px',
+        title: `<i class="fas fa-user-graduate"></i> ${escapeHtml(borrower.name)}`,
+        html: `<div class="text-start">
+            <div class="row mb-2"><div class="col-md-6"><strong>📚 Type:</strong> ${borrowerType === 'student' ? 'Student' : 'Teacher'}</div><div class="col-md-6"><strong>📖 Total Books:</strong> ${totalBorrowed}</div></div>
+            <div class="row mb-2"><div class="col-md-6"><strong>📘 Currently Borrowed:</strong> <span class="badge bg-warning">${activeBorrowed}</span></div><div class="col-md-6"><strong>✅ Returned:</strong> <span class="badge bg-success">${returned}</span></div></div>
+            <div class="row mb-3"><div class="col-md-12"><strong>💰 Total Fines:</strong> <span class="text-danger">${formatMoney(totalFine)}</span></div></div>
+            ${borrowerType === 'student' ? `
+            <div class="row mb-2"><div class="col-md-6"><strong>🏫 Class:</strong> ${borrower.class || '-'}</div><div class="col-md-6"><strong>🆔 Admission:</strong> ${borrower.admission_no || '-'}</div></div>
+            <div class="row mb-2"><div class="col-md-6"><strong>👨‍👩‍👧 Parent:</strong> ${escapeHtml(borrower.parent_name || '-')}</div><div class="col-md-6"><strong>📞 Phone:</strong> ${borrower.parent_phone || '-'}</div></div>
+            ` : `
+            <div class="row mb-2"><div class="col-md-6"><strong>🎓 Specialization:</strong> ${borrower.specialization || '-'}</div><div class="col-md-6"><strong>🆔 Staff ID:</strong> ${borrower.staff_id || '-'}</div></div>
+            <div class="row mb-2"><div class="col-md-6"><strong>📞 Phone:</strong> ${borrower.phone || '-'}</div><div class="col-md-6"><strong>📧 Email:</strong> ${borrower.email || '-'}</div></div>
+            `}
+            <hr><strong>📚 Borrowing History (Last 10):</strong>${booksHtml}
+        </div>`,
+        width: '800px',
         confirmButtonText: 'Close'
     });
 };
 
 // ============================================
-// RETURN BOOK - FIXED WORKING VERSION
+// FILTER FUNCTIONS
 // ============================================
 
-window.returnBook = async function(borrowingId) {
-    await libGetBorrowings();
-    await libGetBooks();
-    await libGetStudents();
-    await libGetTeachers();
-    
-    const borrowing = libraryBorrowings.find(b => b.id === borrowingId);
-    if (!borrowing) {
-        Swal.fire('Error', 'Borrowing record not found', 'error');
-        return;
-    }
-    
-    const fine = calculateFine(borrowing.expected_return_date);
-    const borrowerName = getBorrowerName(borrowing);
-    const todayDate = new Date().toISOString().split('T')[0];
-    
-    // Create a unique container for this return operation
-    const containerId = `returnContainer_${borrowingId}`;
-    
-    Swal.fire({
-        title: 'Return Book',
-        html: `
-            <div id="${containerId}" class="text-start">
-                <div class="mb-3">
-                    <p><strong>📖 Book:</strong> ${escapeHtml(borrowing.book_title)}</p>
-                    <p><strong>👤 Borrower:</strong> ${escapeHtml(borrowerName)}</p>
-                    <p><strong>📅 Borrow Date:</strong> ${borrowing.borrow_date}</p>
-                    <p><strong>⏰ Due Date:</strong> ${borrowing.expected_return_date}</p>
-                    ${fine > 0 ? `<p class="text-danger"><strong>💰 Late Fine:</strong> UGX ${fine.toLocaleString()}</p>` : '<p class="text-success">✅ No fine - Returned on time</p>'}
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Actual Return Date</label>
-                    <input type="date" id="returnDateInput" class="form-control" value="${todayDate}">
-                </div>
-                ${fine > 0 ? `
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Fine Paid?</label>
-                    <select id="finePaidSelect" class="form-select">
-                        <option value="no">No</option>
-                        <option value="yes">Yes</option>
-                    </select>
-                </div>
-                ` : ''}
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Remarks (Condition, etc.)</label>
-                    <textarea id="returnRemarksText" class="form-control" rows="2" placeholder="Any damage, missing pages, condition..."></textarea>
-                </div>
-            </div>
-        `,
-        width: '450px',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-check"></i> Confirm Return',
-        cancelButtonText: 'Cancel',
-        preConfirm: () => {
-            const returnDate = document.getElementById('returnDateInput')?.value;
-            const finePaid = fine > 0 ? (document.getElementById('finePaidSelect')?.value === 'yes') : false;
-            const remarks = document.getElementById('returnRemarksText')?.value || '';
-            
-            if (!returnDate) {
-                Swal.showValidationMessage('Please select a return date');
-                return false;
-            }
-            
-            return { returnDate, finePaid, remarks };
-        }
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            
-            try {
-                const returnDate = result.value.returnDate;
-                const finePaid = result.value.finePaid;
-                const remarks = result.value.remarks;
-                
-                const book = libraryBooks.find(b => b.id === borrowing.book_id);
-                
-                // Update borrowing record
-                const { error: updateError } = await sb
-                    .from('borrowings')
-                    .update({
-                        actual_return_date: returnDate,
-                        status: 'RETURNED',
-                        fine_amount: fine,
-                        fine_paid: finePaid,
-                        return_remarks: remarks,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', borrowingId);
-                
-                if (updateError) throw updateError;
-                
-                // Update book borrowed count
-                if (book) {
-                    const { error: bookError } = await sb
-                        .from('books')
-                        .update({
-                            borrowed_count: Math.max(0, (book.borrowed_count || 0) - 1),
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', book.id);
-                    
-                    if (bookError) throw bookError;
-                }
-                
-                let message = `✅ Book returned successfully on ${returnDate}.`;
-                if (fine > 0) {
-                    message += `\n💰 Fine: UGX ${fine.toLocaleString()}. ${finePaid ? 'Payment received.' : 'Payment pending.'}`;
-                }
-                
-                Swal.fire('Success!', message, 'success');
-                await refreshLibrary();
-                
-            } catch (error) {
-                console.error('Return error:', error);
-                Swal.fire('Error!', error.message, 'error');
-            }
-        }
+window.filterBooks = function() {
+    const searchTerm = document.getElementById('bookSearch')?.value.toLowerCase() || '';
+    document.querySelectorAll('#booksTableBody tr').forEach(row => {
+        if (row.cells && row.cells.length > 1) row.style.display = row.innerText.toLowerCase().includes(searchTerm) ? '' : 'none';
     });
 };
 
+window.filterHistory = function() {
+    const searchTerm = document.getElementById('historySearch')?.value.toLowerCase() || '';
+    document.querySelectorAll('#historyTableBody tr').forEach(row => {
+        if (row.cells && row.cells.length > 1) row.style.display = row.innerText.toLowerCase().includes(searchTerm) ? '' : 'none';
+    });
+};
+
+window.filterFines = function(filter) {
+    currentFineFilter = filter;
+    loadFinesTable();
+};
+
 // ============================================
-// ADD BOOK MODAL
+// ADD FINE
+// ============================================
+
+window.addLibraryFine = async function() {
+    const borrowerId = document.getElementById('fineBorrowerId').value;
+    const borrowerType = document.getElementById('fineBorrowerType').value;
+    const reason = document.getElementById('fineReason').value;
+    const amount = parseInt(document.getElementById('fineAmount').value);
+    const description = document.getElementById('fineDescription').value;
+    
+    if (!borrowerId) { Swal.fire('Error', 'Please select a borrower', 'error'); return; }
+    if (!amount || amount <= 0) { Swal.fire('Error', 'Please enter a valid amount', 'error'); return; }
+    
+    Swal.fire({ title: 'Adding fine...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        await libAddFine({ borrower_id: borrowerId, borrower_type: borrowerType, reason: reason, amount: amount, description: description });
+        Swal.fire('Success!', 'Fine added successfully.', 'success');
+        document.getElementById('fineAmount').value = '';
+        document.getElementById('fineDescription').value = '';
+        await loadFinesTable();
+        await refreshLibrary();
+    } catch (error) { Swal.fire('Error!', error.message, 'error'); }
+};
+
+window.markFinePaid = async function(fineId) {
+    const result = await Swal.fire({ title: 'Mark Fine as Paid?', icon: 'question', showCancelButton: true, confirmButtonText: 'Yes, Mark Paid' });
+    if (result.isConfirmed) {
+        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            await libUpdateFine(fineId, { status: 'PAID', paid_at: new Date().toISOString() });
+            Swal.fire('Success!', 'Fine marked as paid.', 'success');
+            await loadFinesTable();
+            await refreshLibrary();
+        } catch (error) { Swal.fire('Error!', error.message, 'error'); }
+    }
+};
+
+
+// ============================================
+// VERIFY SUPER ADMIN PASSWORD (For Librarian/Admin)
+// ============================================
+
+async function verifySuperAdminPasswordForDelete() {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Super Admin Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-danger mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        This action requires Super Administrator approval.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Super Admin Password</label>
+                        <input type="password" id="superAdminPassword" class="form-control" 
+                               placeholder="Enter Super Admin password" autocomplete="off">
+                        <small class="text-muted">A Super Admin must authorize this deletion.</small>
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize Deletion',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('superAdminPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            Swal.clickConfirm();
+                        }
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const password = document.getElementById('superAdminPassword')?.value;
+                
+                if (!password) {
+                    Swal.showValidationMessage('Please enter Super Admin password');
+                    return false;
+                }
+                
+                try {
+                    // Get super admin email from users table
+                    const { data: superAdminData, error: superAdminError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', 'superadmin')
+                        .limit(1)
+                        .single();
+                    
+                    if (superAdminError) {
+                        Swal.showValidationMessage('Could not verify Super Admin credentials');
+                        return false;
+                    }
+                    
+                    // Verify password with Supabase
+                    const { data, error } = await sb.auth.signInWithPassword({
+                        email: superAdminData.email,
+                        password: password
+                    });
+                    
+                    if (error) {
+                        const errorDiv = document.getElementById('passwordError');
+                        if (errorDiv) errorDiv.style.display = 'block';
+                        Swal.showValidationMessage('Incorrect Super Admin password');
+                        return false;
+                    }
+                    
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed. Please try again.');
+                    return false;
+                }
+            }
+        }).then((result) => {
+            resolve(result.isConfirmed);
+        });
+    });
+}
+
+// ============================================
+// DELETE FINE - PROMPTS FOR PASSWORD IF NOT SUPER ADMIN
+// ============================================
+
+window.deleteFine = async function(fineId) {
+    const isSuperAdmin = (currentUserRole === 'superadmin');
+    const fine = libraryFines.find(f => f.id === fineId);
+    if (!fine) return;
+    
+    // First confirmation
+    const confirmDelete = await Swal.fire({
+        title: 'Delete Fine?',
+        html: `<p>Are you sure you want to delete this fine?</p>
+               <p><strong>Amount:</strong> ${formatMoney(fine.amount)}</p>
+               <p><strong>Reason:</strong> ${fine.reason}</p>
+               <p class="text-danger">⚠️ This action cannot be undone!</p>
+               ${!isSuperAdmin ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Delete',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (!confirmDelete.isConfirmed) return;
+    
+    // If not Super Admin, verify Super Admin password
+    if (!isSuperAdmin) {
+        const passwordVerified = await verifySuperAdminPasswordForDelete();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Access Denied',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+    }
+    
+    Swal.fire({ 
+        title: 'Deleting...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    try {
+        await libDeleteFine(fineId);
+        Swal.fire('✅ Deleted!', 'Fine has been deleted successfully.', 'success');
+        await loadFinesTable();
+        await refreshLibrary();
+    } catch (error) {
+        Swal.fire('❌ Error!', error.message, 'error');
+    }
+};
+
+// ============================================
+// BOOK MANAGEMENT FUNCTIONS
 // ============================================
 
 window.showAddBookModal = function() {
+    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to add books.', 'error'); return; }
     Swal.fire({
         title: '<i class="fas fa-book"></i> Add New Book',
-        html: `
-            <div class="text-start">
-                <div class="row mb-2">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">ISBN</label>
-                        <input type="text" id="bookIsbn" class="form-control" placeholder="978-3-16-148410-0">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Title *</label>
-                        <input type="text" id="bookTitle" class="form-control" placeholder="Book title">
-                    </div>
-                </div>
-                <div class="row mb-2">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Author</label>
-                        <input type="text" id="bookAuthor" class="form-control" placeholder="Author name">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Publisher</label>
-                        <input type="text" id="bookPublisher" class="form-control" placeholder="Publisher name">
-                    </div>
-                </div>
-                <div class="row mb-2">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Category</label>
-                        <select id="bookCategory" class="form-select">
-                            <option value="English">English</option>
-                            <option value="Mathematics">Mathematics</option>
-                            <option value="Science">Science</option>
-                            <option value="Biology">Biology</option>
-                            <option value="Chemistry">Chemistry</option>
-                            <option value="Physics">Physics</option>
-                            <option value="History">History</option>
-                            <option value="Geography">Geography</option>
-                            <option value="Economics">Economics</option>
-                            <option value="General Paper">General Paper</option>
-                            <option value="Computer Science">Computer Science</option>
-                            <option value="Fiction">Fiction</option>
-                            <option value="Reference">Reference</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Copies</label>
-                        <input type="number" id="bookCopies" class="form-control" value="1" min="1">
-                    </div>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label fw-bold">Description</label>
-                    <textarea id="bookDescription" class="form-control" rows="2"></textarea>
-                </div>
-                <div class="alert alert-info mt-2">
-                    <i class="fas fa-info-circle"></i> This book will be added to <strong>${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}</strong> library
-                </div>
-            </div>
-        `,
-        width: '600px',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-save"></i> Save',
-        cancelButtonText: 'Cancel',
+        html: `<div class="text-start"><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">ISBN</label><input type="text" id="bookIsbn" class="form-control" placeholder="978-3-16-148410-0"></div><div class="col-md-6"><label class="form-label fw-bold">Title *</label><input type="text" id="bookTitle" class="form-control" placeholder="Book title"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Author</label><input type="text" id="bookAuthor" class="form-control" placeholder="Author name"></div><div class="col-md-6"><label class="form-label fw-bold">Publisher</label><input type="text" id="bookPublisher" class="form-control" placeholder="Publisher name"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Category</label><select id="bookCategory" class="form-select"><option value="English">English</option><option value="Mathematics">Mathematics</option><option value="Science">Science</option><option value="Biology">Biology</option><option value="Chemistry">Chemistry</option><option value="Physics">Physics</option><option value="History">History</option><option value="Geography">Geography</option><option value="Economics">Economics</option><option value="Fiction">Fiction</option><option value="Reference">Reference</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Copies</label><input type="number" id="bookCopies" class="form-control" value="1" min="1"></div></div><div class="mb-3"><label class="form-label fw-bold">Description</label><textarea id="bookDescription" class="form-control" rows="2" placeholder="Book description..."></textarea></div><div class="alert alert-info"><i class="fas fa-info-circle"></i> This book will be added to <strong>${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}</strong> library</div></div>`,
+        width: '600px', showCancelButton: true, confirmButtonText: '<i class="fas fa-save"></i> Save Book',
         preConfirm: () => {
             const title = document.getElementById('bookTitle').value.trim();
-            if (!title) {
-                Swal.showValidationMessage('Book title is required!');
-                return false;
-            }
-            return {
-                isbn: document.getElementById('bookIsbn').value,
-                title: title,
-                author: document.getElementById('bookAuthor').value,
-                publisher: document.getElementById('bookPublisher').value,
-                category: document.getElementById('bookCategory').value,
-                copies: parseInt(document.getElementById('bookCopies').value) || 1,
-                description: document.getElementById('bookDescription').value
-            };
+            if (!title) return Swal.showValidationMessage('Book title is required!');
+            return { isbn: document.getElementById('bookIsbn').value, title: title, author: document.getElementById('bookAuthor').value, publisher: document.getElementById('bookPublisher').value, category: document.getElementById('bookCategory').value, copies: parseInt(document.getElementById('bookCopies').value) || 1, description: document.getElementById('bookDescription').value };
         }
     }).then(async (result) => {
         if (result.value) {
             Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            try {
-                await libAddBook(result.value);
-                Swal.fire('Success!', 'Book added successfully.', 'success');
-                await refreshLibrary();
-            } catch (error) {
-                Swal.fire('Error!', error.message, 'error');
-            }
+            try { await libAddBook(result.value); Swal.fire('Success!', 'Book added successfully.', 'success'); await refreshLibrary(); } 
+            catch (error) { Swal.fire('Error!', error.message, 'error'); }
         }
     });
 };
 
-// ============================================
-// EDIT BOOK
-// ============================================
-
 window.editBook = async function(id) {
+    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to edit books.', 'error'); return; }
     const book = libraryBooks.find(b => b.id === id);
     if (!book) return;
-    
     Swal.fire({
         title: '<i class="fas fa-edit"></i> Edit Book',
-        html: `
-            <div class="text-start">
-                <div class="row mb-2">
-                    <div class="col-md-6">
-                        <label>ISBN</label>
-                        <input type="text" id="bookIsbn" class="form-control" value="${escapeHtml(book.isbn || '')}">
-                    </div>
-                    <div class="col-md-6">
-                        <label>Title *</label>
-                        <input type="text" id="bookTitle" class="form-control" value="${escapeHtml(book.title)}">
-                    </div>
-                </div>
-                <div class="row mb-2">
-                    <div class="col-md-6">
-                        <label>Author</label>
-                        <input type="text" id="bookAuthor" class="form-control" value="${escapeHtml(book.author || '')}">
-                    </div>
-                    <div class="col-md-6">
-                        <label>Publisher</label>
-                        <input type="text" id="bookPublisher" class="form-control" value="${escapeHtml(book.publisher || '')}">
-                    </div>
-                </div>
-                <div class="row mb-2">
-                    <div class="col-md-6">
-                        <label>Category</label>
-                        <select id="bookCategory" class="form-select">
-                            <option value="English" ${book.category === 'English' ? 'selected' : ''}>English</option>
-                            <option value="Mathematics" ${book.category === 'Mathematics' ? 'selected' : ''}>Mathematics</option>
-                            <option value="Science" ${book.category === 'Science' ? 'selected' : ''}>Science</option>
-                            <option value="Biology" ${book.category === 'Biology' ? 'selected' : ''}>Biology</option>
-                            <option value="Chemistry" ${book.category === 'Chemistry' ? 'selected' : ''}>Chemistry</option>
-                            <option value="Physics" ${book.category === 'Physics' ? 'selected' : ''}>Physics</option>
-                            <option value="Economics" ${book.category === 'Economics' ? 'selected' : ''}>Economics</option>
-                            <option value="General Paper" ${book.category === 'General Paper' ? 'selected' : ''}>General Paper</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label>Copies</label>
-                        <input type="number" id="bookCopies" class="form-control" value="${book.copies}" min="1">
-                    </div>
-                </div>
-            </div>
-        `,
-        width: '600px',
-        showCancelButton: true,
-        confirmButtonText: 'Update',
+        html: `<div class="text-start"><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">ISBN</label><input type="text" id="bookIsbn" class="form-control" value="${escapeHtml(book.isbn || '')}"></div><div class="col-md-6"><label class="form-label fw-bold">Title *</label><input type="text" id="bookTitle" class="form-control" value="${escapeHtml(book.title)}"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Author</label><input type="text" id="bookAuthor" class="form-control" value="${escapeHtml(book.author || '')}"></div><div class="col-md-6"><label class="form-label fw-bold">Publisher</label><input type="text" id="bookPublisher" class="form-control" value="${escapeHtml(book.publisher || '')}"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Category</label><select id="bookCategory" class="form-select"><option value="English" ${book.category === 'English' ? 'selected' : ''}>English</option><option value="Mathematics" ${book.category === 'Mathematics' ? 'selected' : ''}>Mathematics</option><option value="Science" ${book.category === 'Science' ? 'selected' : ''}>Science</option><option value="Biology" ${book.category === 'Biology' ? 'selected' : ''}>Biology</option><option value="Chemistry" ${book.category === 'Chemistry' ? 'selected' : ''}>Chemistry</option><option value="Physics" ${book.category === 'Physics' ? 'selected' : ''}>Physics</option><option value="Economics" ${book.category === 'Economics' ? 'selected' : ''}>Economics</option><option value="General Paper" ${book.category === 'General Paper' ? 'selected' : ''}>General Paper</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Copies</label><input type="number" id="bookCopies" class="form-control" value="${book.copies}" min="1"></div></div></div>`,
+        width: '600px', showCancelButton: true, confirmButtonText: '<i class="fas fa-save"></i> Update Book',
         preConfirm: () => {
             const title = document.getElementById('bookTitle').value.trim();
             if (!title) return Swal.showValidationMessage('Title required');
-            return {
-                isbn: document.getElementById('bookIsbn').value,
-                title: title,
-                author: document.getElementById('bookAuthor').value,
-                publisher: document.getElementById('bookPublisher').value,
-                category: document.getElementById('bookCategory').value,
-                copies: parseInt(document.getElementById('bookCopies').value) || 1
-            };
+            return { isbn: document.getElementById('bookIsbn').value, title: title, author: document.getElementById('bookAuthor').value, publisher: document.getElementById('bookPublisher').value, category: document.getElementById('bookCategory').value, copies: parseInt(document.getElementById('bookCopies').value) || 1 };
         }
     }).then(async (result) => {
         if (result.value) {
             Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            try {
-                await libUpdateBook(id, result.value);
-                Swal.fire('Success!', 'Book updated.', 'success');
-                await refreshLibrary();
-            } catch (error) {
-                Swal.fire('Error!', error.message, 'error');
-            }
+            try { await libUpdateBook(id, result.value); Swal.fire('Success!', 'Book updated.', 'success'); await refreshLibrary(); } 
+            catch (error) { Swal.fire('Error!', error.message, 'error'); }
         }
     });
 };
 
 // ============================================
-// DELETE BOOK
+// DELETE SINGLE BOOK - PROMPTS FOR PASSWORD IF NOT SUPER ADMIN
 // ============================================
 
 window.deleteBookItem = async function(id) {
+    const isSuperAdmin = (currentUserRole === 'superadmin');
     const book = libraryBooks.find(b => b.id === id);
-    const result = await Swal.fire({
+    if (!book) return;
+    
+    // First confirmation
+    const confirmDelete = await Swal.fire({
         title: 'Delete Book?',
-        html: `<p>Delete <strong>"${escapeHtml(book?.title)}"</strong>?</p><p class="text-danger">Cannot be undone!</p>`,
+        html: `<p>Are you sure you want to delete:<br>
+               <strong>"${escapeHtml(book.title)}"</strong>?</p>
+               <p class="text-danger">⚠️ This action cannot be undone!</p>
+               <p>All borrowing records for this book will also be affected.</p>
+               ${!isSuperAdmin ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Delete'
+        confirmButtonText: '<i class="fas fa-trash"></i> Yes, Delete',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel'
     });
-    if (result.isConfirmed) {
-        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    if (!confirmDelete.isConfirmed) return;
+    
+    // If not Super Admin, verify Super Admin password
+    if (!isSuperAdmin) {
+        const passwordVerified = await verifySuperAdminPasswordForDelete();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Access Denied',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+    }
+    
+    // Final confirmation
+    const finalConfirm = await Swal.fire({
+        title: '🔴 Final Confirmation',
+        html: `<p>${!isSuperAdmin ? 'Super Admin authorized. ' : ''}Are you absolutely sure you want to delete<br>
+               <strong>"${escapeHtml(book.title)}"</strong>?</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Delete Permanently',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (finalConfirm.isConfirmed) {
+        Swal.fire({ 
+            title: 'Deleting...', 
+            text: 'Removing book from library...',
+            allowOutsideClick: false, 
+            didOpen: () => Swal.showLoading() 
+        });
+        
         try {
             await libDeleteBook(id);
-            Swal.fire('Deleted!', 'Book removed.', 'success');
+            Swal.fire({
+                title: '✅ Deleted!',
+                text: 'Book has been removed successfully.',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
             await refreshLibrary();
         } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
+            Swal.fire({
+                title: '❌ Error!',
+                text: error.message,
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
         }
     }
 };
 
 // ============================================
-// DELETE ALL BOOKS
+// DELETE ALL BOOKS - PROMPTS FOR PASSWORD IF NOT SUPER ADMIN
 // ============================================
 
 window.confirmDeleteAllBooks = async function() {
+    const isSuperAdmin = (currentUserRole === 'superadmin');
+    
     if (libraryBooks.length === 0) {
-        Swal.fire('Info', `No ${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'} books to delete.`, 'info');
+        Swal.fire({
+            title: 'ℹ️ No Books',
+            text: 'There are no books to delete.',
+            icon: 'info',
+            confirmButtonText: 'OK'
+        });
         return;
     }
     
-    const result = await Swal.fire({
-        title: 'Delete All Books?',
-        html: `<p>Delete <strong>${libraryBooks.length}</strong> ${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'} books?</p><p class="text-danger">This cannot be undone!</p>`,
+    // First confirmation
+    const firstConfirm = await Swal.fire({
+        title: '⚠️ DELETE ALL BOOKS',
+        html: `<p>You are about to delete <strong style="color: red; font-size: 24px;">${libraryBooks.length}</strong> books from the library.</p>
+               <p class="text-danger"><strong>⚠️ THIS ACTION CANNOT BE UNDONE! ⚠️</strong></p>
+               <p>All borrowing records, fines, and history will also be affected.</p>
+               ${!isSuperAdmin ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}
+               <hr>
+               <p>Are you sure you want to continue?</p>`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Delete All'
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="fas fa-trash"></i> Yes, Continue',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel'
     });
-    if (result.isConfirmed) {
-        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    if (!firstConfirm.isConfirmed) return;
+    
+    // If not Super Admin, verify Super Admin password
+    if (!isSuperAdmin) {
+        const passwordVerified = await verifySuperAdminPasswordForDelete();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Access Denied',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+    }
+    
+    // Final confirmation
+    const finalConfirm = await Swal.fire({
+        title: '🔴 FINAL CONFIRMATION',
+        html: `<p>${!isSuperAdmin ? 'Super Admin authorized. ' : ''}This is your last chance to cancel.</p>
+               <p>Type <strong style="color: red;">"DELETE ALL"</strong> to permanently delete <strong>${libraryBooks.length}</strong> books.</p>`,
+        input: 'text',
+        inputPlaceholder: 'Type DELETE ALL here',
+        showCancelButton: true,
+        confirmButtonText: 'Permanently Delete',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#d33',
+        preConfirm: (inputValue) => {
+            if (inputValue !== 'DELETE ALL') {
+                Swal.showValidationMessage('Please type "DELETE ALL" to confirm');
+                return false;
+            }
+            return true;
+        }
+    });
+    
+    if (finalConfirm.isConfirmed) {
+        Swal.fire({ 
+            title: '🗑️ Deleting all books...', 
+            text: 'Please wait while we delete all library books.',
+            allowOutsideClick: false, 
+            didOpen: () => Swal.showLoading() 
+        });
+        
         try {
             await libDeleteAllBooks();
-            Swal.fire('Deleted!', `All ${libraryBooks.length} books deleted.`, 'success');
+            
+            // Also delete related borrowings and fines
+            await sb.from('borrowings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            await sb.from('library_fines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            
+            Swal.fire({
+                title: '✅ Deleted!',
+                html: `<strong>${libraryBooks.length}</strong> books have been permanently deleted from the library.<br><br>
+                       All borrowing records and fines have also been cleared.`,
+                icon: 'success',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#28a745'
+            });
             await refreshLibrary();
         } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
+            Swal.fire({
+                title: '❌ Error!',
+                text: error.message,
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
         }
     }
 };
 
 // ============================================
-// BORROW BOOK MODAL
+// BORROW & RETURN FUNCTIONS
 // ============================================
 
 window.showBorrowBookModal = async function() {
-    await libGetBooks();
-    await libGetStudents();
-    await libGetTeachers();
+    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to borrow books.', 'error'); return; }
+    await libGetBooks(); await libGetStudents(); await libGetTeachers();
     
     const availableBooks = libraryBooks.filter(b => (b.copies - b.borrowed_count) > 0);
-    
-    if (availableBooks.length === 0) {
-        Swal.fire('Info', 'No books available for borrowing.', 'info');
-        return;
-    }
+    if (availableBooks.length === 0) { Swal.fire('Info', 'No books available for borrowing.', 'info'); return; }
     
     let bookOptions = '<option value="">-- Select Book --</option>';
     for (const b of availableBooks) {
         const available = b.copies - b.borrowed_count;
         bookOptions += `<option value="${b.id}" data-title="${escapeHtml(b.title)}">${escapeHtml(b.title)} (${available} available)</option>`;
     }
-    
-    let studentOptions = '<option value="">-- Select Student --</option>';
-    for (const s of libraryStudents) {
-        studentOptions += `<option value="${s.id}">${escapeHtml(s.name)} (${s.class})</option>`;
-    }
-    
-    let teacherOptions = '<option value="">-- Select Teacher --</option>';
-    for (const t of libraryTeachers) {
-        teacherOptions += `<option value="${t.id}">${escapeHtml(t.name)} (${t.specialization || 'Staff'})</option>`;
-    }
+    let studentOptions = '<option value="">-- Select Student --</option>' + libraryStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.class})</option>`).join('');
+    let teacherOptions = '<option value="">-- Select Teacher --</option>' + libraryTeachers.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${t.specialization || 'Staff'})</option>`).join('');
     
     Swal.fire({
         title: '<i class="fas fa-hand-holding-heart"></i> Borrow Book',
-        html: `
-            <div class="text-start">
-                <div class="mb-3">
-                    <label>Select Book *</label>
-                    <select id="borrowBookId" class="form-select">${bookOptions}</select>
-                </div>
-                <div class="mb-3">
-                    <label>Borrower Type *</label>
-                    <select id="borrowerType" class="form-select">
-                        <option value="student">Student</option>
-                        <option value="teacher">Teacher</option>
-                    </select>
-                </div>
-                <div id="studentDiv">
-                    <label>Select Student *</label>
-                    <select id="borrowStudentId" class="form-select">${studentOptions}</select>
-                </div>
-                <div id="teacherDiv" style="display:none">
-                    <label>Select Teacher *</label>
-                    <select id="borrowTeacherId" class="form-select">${teacherOptions}</select>
-                </div>
-                <div class="mt-3">
-                    <label>Due Date (${BORROW_DAYS} days)</label>
-                    <input type="date" id="borrowDueDate" class="form-control" value="${getDefaultReturnDate()}">
-                </div>
-                <div class="mt-2">
-                    <label>Remarks</label>
-                    <textarea id="borrowRemarks" class="form-control" rows="2"></textarea>
-                </div>
-                <div class="alert alert-info mt-2">
-                    <i class="fas fa-info-circle"></i> Late return fine: UGX ${DAILY_FINE_RATE} per day
-                </div>
-            </div>
-        `,
-        width: '500px',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-check"></i> Borrow',
-        cancelButtonText: 'Cancel',
+        html: `<div class="text-start"><div class="mb-3"><label class="form-label fw-bold">📖 Select Book *</label><select id="borrowBookId" class="form-select">${bookOptions}</select></div><div class="mb-3"><label class="form-label fw-bold">👤 Borrower Type *</label><select id="borrowerType" class="form-select"><option value="student">Student</option><option value="teacher">Teacher</option></select></div><div id="studentDiv"><label class="form-label fw-bold">🎓 Select Student *</label><select id="borrowStudentId" class="form-select">${studentOptions}</select></div><div id="teacherDiv" style="display:none"><label class="form-label fw-bold">👨‍🏫 Select Teacher *</label><select id="borrowTeacherId" class="form-select">${teacherOptions}</select></div><div class="mt-3"><label class="form-label fw-bold">📅 Due Date (${BORROW_DAYS} days)</label><input type="date" id="borrowDueDate" class="form-control" value="${getDefaultReturnDate()}"></div><div class="mt-2"><label class="form-label fw-bold">📝 Remarks</label><textarea id="borrowRemarks" class="form-control" rows="2"></textarea></div><div class="alert alert-info mt-2"><i class="fas fa-info-circle"></i> Late return fine: ${formatMoney(DAILY_FINE_RATE)} per day</div></div>`,
+        width: '550px', showCancelButton: true, confirmButtonText: '<i class="fas fa-check"></i> Borrow Book',
         didOpen: () => {
             const typeSelect = document.getElementById('borrowerType');
             const studentDiv = document.getElementById('studentDiv');
             const teacherDiv = document.getElementById('teacherDiv');
             typeSelect.onchange = () => {
-                if (typeSelect.value === 'student') {
-                    studentDiv.style.display = 'block';
-                    teacherDiv.style.display = 'none';
-                } else {
-                    studentDiv.style.display = 'none';
-                    teacherDiv.style.display = 'block';
-                }
+                if (typeSelect.value === 'student') { studentDiv.style.display = 'block'; teacherDiv.style.display = 'none'; } 
+                else { studentDiv.style.display = 'none'; teacherDiv.style.display = 'block'; }
             };
         },
         preConfirm: () => {
             const bookId = document.getElementById('borrowBookId').value;
             const borrowerType = document.getElementById('borrowerType').value;
             let borrowerId = '';
-            
             if (!bookId) return Swal.showValidationMessage('Select a book');
-            
-            if (borrowerType === 'student') {
-                borrowerId = document.getElementById('borrowStudentId').value;
-                if (!borrowerId) return Swal.showValidationMessage('Select a student');
-            } else {
-                borrowerId = document.getElementById('borrowTeacherId').value;
-                if (!borrowerId) return Swal.showValidationMessage('Select a teacher');
-            }
-            
+            if (borrowerType === 'student') { borrowerId = document.getElementById('borrowStudentId').value; if (!borrowerId) return Swal.showValidationMessage('Select a student'); } 
+            else { borrowerId = document.getElementById('borrowTeacherId').value; if (!borrowerId) return Swal.showValidationMessage('Select a teacher'); }
             const bookSelect = document.getElementById('borrowBookId');
             const bookTitle = bookSelect.options[bookSelect.selectedIndex]?.dataset?.title || '';
-            
             return { bookId, bookTitle, borrowerId, borrowerType, dueDate: document.getElementById('borrowDueDate').value, remarks: document.getElementById('borrowRemarks').value };
         }
     }).then(async (result) => {
@@ -7316,47 +8068,84 @@ window.showBorrowBookModal = async function() {
             try {
                 const book = libraryBooks.find(b => b.id === result.value.bookId);
                 await libUpdateBook(result.value.bookId, { ...book, borrowed_count: (book.borrowed_count || 0) + 1 });
-                await libAddBorrowing({
-                    book_id: result.value.bookId,
-                    book_title: result.value.bookTitle,
-                    borrower_id: result.value.borrowerId,
-                    borrower_type: result.value.borrowerType,
-                    borrow_date: new Date().toISOString().split('T')[0],
-                    expected_return_date: result.value.dueDate,
-                    status: 'BORROWED',
-                    remarks: result.value.remarks,
-                    created_at: new Date().toISOString()
-                });
+                await libAddBorrowing({ book_id: result.value.bookId, book_title: result.value.bookTitle, borrower_id: result.value.borrowerId, borrower_type: result.value.borrowerType, borrow_date: new Date().toISOString().split('T')[0], expected_return_date: result.value.dueDate, status: 'BORROWED', remarks: result.value.remarks, created_at: new Date().toISOString() });
                 Swal.fire('Success!', 'Book borrowed successfully.', 'success');
                 await refreshLibrary();
-            } catch (error) {
-                Swal.fire('Error!', error.message, 'error');
-            }
+            } catch (error) { Swal.fire('Error!', error.message, 'error'); }
+        }
+    });
+};
+
+window.returnBook = async function(borrowingId) {
+    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to return books.', 'error'); return; }
+    await libGetBorrowings(); await libGetBooks(); await libGetStudents(); await libGetTeachers();
+    
+    const borrowing = libraryBorrowings.find(b => b.id === borrowingId);
+    if (!borrowing) { Swal.fire('Error', 'Borrowing record not found', 'error'); return; }
+    const fine = calculateFine(borrowing.expected_return_date);
+    const borrowerName = getBorrowerName(borrowing);
+    
+    Swal.fire({
+        title: 'Return Book',
+        html: `<div class="text-start"><p><strong>📖 Book:</strong> ${escapeHtml(borrowing.book_title)}</p><p><strong>👤 Borrower:</strong> ${escapeHtml(borrowerName)}</p><p><strong>📅 Borrow Date:</strong> ${borrowing.borrow_date}</p><p><strong>⏰ Due Date:</strong> ${borrowing.expected_return_date}</p>${fine > 0 ? `<p class="text-danger"><strong>💰 Late Fine:</strong> ${formatMoney(fine)}</p>` : '<p class="text-success">✅ No fine - Returned on time</p>'}<div class="mb-3"><label class="form-label fw-bold">📅 Actual Return Date</label><input type="date" id="returnDateInput" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>${fine > 0 ? `<div class="mb-3"><label class="form-label fw-bold">💰 Fine Paid?</label><select id="finePaidSelect" class="form-select"><option value="no">No</option><option value="yes">Yes</option></select></div>` : ''}<div class="mb-3"><label class="form-label fw-bold">📝 Remarks</label><textarea id="returnRemarksText" class="form-control" rows="2"></textarea></div></div>`,
+        width: '500px', showCancelButton: true, confirmButtonText: '<i class="fas fa-check"></i> Confirm Return',
+        preConfirm: () => {
+            const returnDate = document.getElementById('returnDateInput')?.value;
+            if (!returnDate) return Swal.showValidationMessage('Please select a return date');
+            return { returnDate, finePaid: fine > 0 ? document.getElementById('finePaidSelect')?.value === 'yes' : false, remarks: document.getElementById('returnRemarksText')?.value || '' };
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                const book = libraryBooks.find(b => b.id === borrowing.book_id);
+                await sb.from('borrowings').update({ actual_return_date: result.value.returnDate, status: 'RETURNED', fine_amount: fine, fine_paid: result.value.finePaid, return_remarks: result.value.remarks, updated_at: new Date().toISOString() }).eq('id', borrowingId);
+                if (book) await sb.from('books').update({ borrowed_count: Math.max(0, (book.borrowed_count || 0) - 1), updated_at: new Date().toISOString() }).eq('id', book.id);
+                Swal.fire('Success!', `Book returned successfully.${fine > 0 ? ` Fine: ${formatMoney(fine)}` : ''}`, 'success');
+                await refreshLibrary();
+            } catch (error) { Swal.fire('Error!', error.message, 'error'); }
         }
     });
 };
 
 // ============================================
-// EXPORT BOOKS
+// EXPORT & CATEGORY FUNCTIONS
 // ============================================
 
 window.exportBooksData = async function() {
     await libGetBooks();
-    const exportData = libraryBooks.map(b => ({
-        'ISBN': b.isbn || '-',
-        'Title': b.title,
-        'Author': b.author || '-',
-        'Publisher': b.publisher || '-',
-        'Category': b.category || '-',
-        'Total Copies': b.copies || 0,
-        'Borrowed': b.borrowed_count || 0,
-        'Available': (b.copies || 0) - (b.borrowed_count || 0)
-    }));
+    const exportData = libraryBooks.map(b => ({ 'ISBN': b.isbn || '-', 'Title': b.title, 'Author': b.author || '-', 'Publisher': b.publisher || '-', 'Category': b.category || '-', 'Total Copies': b.copies || 0, 'Borrowed': b.borrowed_count || 0, 'Available': (b.copies || 0) - (b.borrowed_count || 0) }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}_Books`);
     XLSX.writeFile(wb, `Library_${currentLevel}_${new Date().toISOString().split('T')[0]}.xlsx`);
     Swal.fire('Exported!', `${exportData.length} books exported.`, 'success');
+};
+
+window.showAddCategoryModal = function() {
+    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to add categories.', 'error'); return; }
+    Swal.fire({ title: 'Add New Category', input: 'text', inputLabel: 'Category Name', inputPlaceholder: 'e.g., Science Fiction, Biography', showCancelButton: true, confirmButtonText: 'Add' }).then(async (result) => {
+        if (result.value) Swal.fire('Success!', `Category "${result.value}" added. You can now assign it to books.`, 'success');
+    });
+};
+
+window.viewBooksByCategory = function(category) {
+    const booksInCategory = libraryBooks.filter(b => b.category === category);
+    if (booksInCategory.length === 0) { Swal.fire('No Books', `No books found in category: ${category}`, 'info'); return; }
+    let booksHtml = '<div class="table-responsive"><table class="table table-bordered"><thead class="table-light"><tr><th>Title</th><th>Author</th><th>Copies</th><th>Available</th></tr></thead><tbody>';
+    for (const book of booksInCategory) {
+        const available = (book.copies || 0) - (book.borrowed_count || 0);
+        booksHtml += `<tr>}<strong>${escapeHtml(book.title)}</strong></td>}<td>${escapeHtml(book.author || '-')}</td><td class="text-center">${book.copies}</td><td class="text-center">${available}</td></tr>`;
+    }
+    booksHtml += '</tbody>}</div>';
+    Swal.fire({ title: `Books in Category: ${category}`, html: booksHtml, width: '700px', confirmButtonText: 'Close' });
+};
+
+window.saveLibrarySettings = function() {
+    if (currentUserRole !== 'superadmin') { Swal.fire('Access Denied', 'Only Super Admin can change library settings.', 'error'); return; }
+    const borrowDays = parseInt(document.getElementById('libBorrowDays')?.value) || 14;
+    const dailyFine = parseInt(document.getElementById('libDailyFine')?.value) || 500;
+    Swal.fire({ title: 'Settings Saved', html: `<strong>Borrow Duration:</strong> ${borrowDays} days<br><strong>Daily Fine:</strong> ${formatMoney(dailyFine)}`, icon: 'success' });
 };
 
 // ============================================
@@ -7368,11 +8157,300 @@ async function refreshLibrary() {
     await libGetBorrowings();
     await libGetStudents();
     await libGetTeachers();
+    await libGetFines();
     await loadBooksTable();
+    const activeTab = document.querySelector('.lib-tab-btn.active');
+    if (activeTab) {
+        const onclick = activeTab.getAttribute('onclick');
+        if (onclick) {
+            const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
+            if (tabName && tabName[1]) {
+                if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
+                else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
+                else if (tabName[1] === 'fines') await loadFinesTable();
+                else if (tabName[1] === 'categories') await loadCategoriesTable();
+                else if (tabName[1] === 'reports') await loadLibraryReports();
+            }
+        }
+    }
 }
 
 window.refreshLibrary = refreshLibrary;
 
+// ============================================
+// TAB SWITCHING FUNCTION
+// ============================================
+
+function switchLibraryTab(tabName) {
+    const tabContents = document.querySelectorAll('.lib-tab-content');
+    tabContents.forEach(content => content.style.display = 'none');
+    const tabBtns = document.querySelectorAll('.lib-tab-btn');
+    tabBtns.forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.background = '#f0f0f0';
+        btn.style.color = '#6c757d';
+    });
+    let tabId = '';
+    if (tabName === 'inventory') tabId = 'libTabInventory';
+    else if (tabName === 'borrowed') tabId = 'libTabBorrowed';
+    else if (tabName === 'history') tabId = 'libTabHistory';
+    else if (tabName === 'fines') tabId = 'libTabFines';
+    else if (tabName === 'categories') tabId = 'libTabCategories';
+    else if (tabName === 'reports') tabId = 'libTabReports';
+    else if (tabName === 'settings') tabId = 'libTabSettings';
+    const selectedTab = document.getElementById(tabId);
+    if (selectedTab) selectedTab.style.display = 'block';
+    const activeBtn = Array.from(tabBtns).find(btn => {
+        const onclick = btn.getAttribute('onclick');
+        return onclick && onclick.includes(tabName);
+    });
+    if (activeBtn) {
+        activeBtn.style.background = 'linear-gradient(135deg, #01605a, #ff862d)';
+        activeBtn.style.color = 'white';
+    }
+    if (tabName === 'borrowed') loadCurrentlyBorrowedTable();
+    else if (tabName === 'history') loadBorrowingHistoryTable();
+    else if (tabName === 'fines') loadFinesTable();
+    else if (tabName === 'categories') loadCategoriesTable();
+    else if (tabName === 'reports') loadLibraryReports();
+}
+
+// ============================================
+// RENDER LIBRARY PAGE (MAIN)
+// ============================================
+
+async function renderLibrary() {
+    await libGetBooks();
+    await libGetBorrowings();
+    await libGetStudents();
+    await libGetTeachers();
+    await libGetFines();
+    
+    const levelName = currentLevel === 'olevel' ? 'O-Level (UCE)' : 'A-Level (UACE)';
+    const totalBooks = libraryBooks.reduce((sum, b) => sum + (b.copies || 0), 0);
+    const totalBorrowed = libraryBorrowings.filter(b => b.status === 'BORROWED').length;
+    const overdueCount = libraryBorrowings.filter(b => b.status === 'BORROWED' && new Date() > new Date(b.expected_return_date)).length;
+    const totalFines = libraryFines.reduce((sum, f) => sum + (f.amount || 0), 0);
+    const pendingFines = libraryFines.filter(f => f.status === 'PENDING').length;
+    const canManage = canManageLibrary();
+    
+    return `
+    <style>
+        .lib-stat-card { transition: transform 0.3s, box-shadow 0.3s; cursor: pointer; }
+        .lib-stat-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .lib-tab-btn { transition: all 0.3s ease; padding: 10px 20px; border: none; background: #f0f0f0; color: #6c757d; border-radius: 8px; cursor: pointer; font-weight: 500; }
+        .lib-tab-btn:hover { transform: translateY(-2px); background: #e0e0e0; }
+        .lib-tab-btn.active { background: linear-gradient(135deg, #01605a, #ff862d); color: white; }
+        .action-btn { transition: all 0.2s ease; }
+        .action-btn:hover { transform: scale(1.05); }
+    </style>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3"><div class="card lib-stat-card bg-primary text-white shadow"><div class="card-body text-center"><h2 class="mb-0">${totalBooks}</h2><p class="mb-0"><i class="fas fa-book"></i> Total Books</p></div></div></div>
+        <div class="col-md-3"><div class="card lib-stat-card bg-warning text-dark shadow"><div class="card-body text-center"><h2 class="mb-0">${totalBorrowed}</h2><p class="mb-0"><i class="fas fa-book-open"></i> Borrowed</p></div></div></div>
+        <div class="col-md-3"><div class="card lib-stat-card bg-danger text-white shadow"><div class="card-body text-center"><h2 class="mb-0">${overdueCount}</h2><p class="mb-0"><i class="fas fa-clock"></i> Overdue</p></div></div></div>
+        <div class="col-md-3"><div class="card lib-stat-card bg-success text-white shadow"><div class="card-body text-center"><h2 class="mb-0">${formatMoney(totalFines)}</h2><p class="mb-0"><i class="fas fa-money-bill"></i> Total Fines</p><small>${pendingFines} pending</small></div></div></div>
+    </div>
+    
+    ${canOnlyView() ? `<div class="alert alert-info text-center mb-3"><i class="fas fa-info-circle"></i> You are in <strong>View Only</strong> mode. Contact Librarian for book management.</div>` : ''}
+    
+    <!-- Tabs -->
+    <div class="library-tabs" style="display: flex; flex-wrap: wrap; gap: 8px; background: white; border-radius: 12px; padding: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+        <button class="lib-tab-btn active" onclick="switchLibraryTab('inventory')"><i class="fas fa-book"></i> Books Inventory</button>
+        <button class="lib-tab-btn" onclick="switchLibraryTab('borrowed')"><i class="fas fa-hand-holding-heart"></i> Currently Borrowed</button>
+        <button class="lib-tab-btn" onclick="switchLibraryTab('history')"><i class="fas fa-history"></i> Borrowing History</button>
+        <button class="lib-tab-btn" onclick="switchLibraryTab('fines')"><i class="fas fa-money-bill-wave"></i> Fine Management</button>
+        <button class="lib-tab-btn" onclick="switchLibraryTab('categories')"><i class="fas fa-tags"></i> Categories</button>
+        <button class="lib-tab-btn" onclick="switchLibraryTab('reports')"><i class="fas fa-chart-bar"></i> Reports</button>
+        ${currentUserRole === 'superadmin' ? `<button class="lib-tab-btn" onclick="switchLibraryTab('settings')"><i class="fas fa-cog"></i> Settings <span class="badge bg-danger ms-1">Admin</span></button>` : ''}
+    </div>
+    
+    <!-- TAB 1: BOOKS INVENTORY -->
+<!-- TAB 1: BOOKS INVENTORY -->
+<div id="libTabInventory" class="lib-tab-content active">
+    <div class="card shadow-sm">
+        <div class="card-header bg-white" style="border-bottom: 2px solid #01605a;">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    ${canManage ? `
+                    <button class="btn btn-primary btn-sm action-btn" onclick="showAddBookModal()" style="background: linear-gradient(135deg, #01605a, #ff862d); border: none;">
+                        <i class="fas fa-plus"></i> Add Book
+                    </button>
+                    <button class="btn btn-warning btn-sm ms-2 action-btn" onclick="showBorrowBookModal()">
+                        <i class="fas fa-hand-holding-heart"></i> Borrow Book
+                    </button>
+                    ${currentUserRole === 'superadmin' ? `
+                    <button class="btn btn-danger btn-sm ms-2 action-btn" onclick="confirmDeleteAllBooks()">
+                        <i class="fas fa-trash-alt"></i> Delete All Books
+                    </button>
+                    ` : ''}
+                    ` : ''}
+                    <button class="btn btn-success btn-sm ms-2 action-btn" onclick="exportBooksData()">
+                        <i class="fas fa-file-excel"></i> Export
+                    </button>
+                    <button class="btn btn-secondary btn-sm ms-2 action-btn" onclick="refreshLibrary()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" id="bookSearch" class="form-control form-control-sm" placeholder="🔍 Search books..." onkeyup="filterBooks()" style="border: 2px solid #01605a; border-radius: 8px;">
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table table-bordered mb-0">
+                    <thead class="table-primary sticky-top">
+                        <tr>
+                            ${canManage ? '<th width="30"><input type="checkbox" id="selectAllBooks"></th>' : ''}
+                            <th>ISBN</th>
+                            <th>Title</th>
+                            <th>Author</th>
+                            <th>Category</th>
+                            <th>Copies</th>
+                            <th>Available</th>
+                            ${canManage ? '<th width="100">Actions</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="booksTableBody">
+                        <tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading books...</span>络
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>    
+    <!-- TAB 2: CURRENTLY BORROWED -->
+    <div id="libTabBorrowed" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #01605a;"><h6 class="mb-0"><i class="fas fa-hand-holding-heart"></i> Currently Borrowed Books</h6></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 450px; overflow-y: auto;"><table class="table table-bordered mb-0"><thead class="table-primary sticky-top"><tr><th>Borrower</th><th>Type</th><th>Book Title</th><th>Borrow Date</th><th>Due Date</th><th>Status</th><th>Fine (UGX)</th>${canManage ? '<th>Action</th>' : ''}</tr></thead><tbody id="borrowedBooksTableBody"><tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody></table></div></div></div></div>
+    
+    <!-- TAB 3: BORROWING HISTORY -->
+    <div id="libTabHistory" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #01605a;"><div class="row"><div class="col-md-6"><h6 class="mb-0"><i class="fas fa-history"></i> Borrowing History</h6></div><div class="col-md-6"><input type="text" id="historySearch" class="form-control form-control-sm" placeholder="🔍 Search by borrower or book..." onkeyup="filterHistory()" style="border: 2px solid #01605a; border-radius: 8px;"></div></div></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 450px; overflow-y: auto;"><table class="table table-bordered mb-0"><thead class="table-primary sticky-top"><tr><th>Borrower</th><th>Type</th><th>Book Title</th><th>Borrow Date</th><th>Return Date</th><th>Fine Paid</th><th>Status</th></tr></thead><tbody id="historyTableBody"><tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody></table></div></div></div></div>
+    
+    <!-- TAB 4: FINE MANAGEMENT -->
+    <div id="libTabFines" class="lib-tab-content" style="display: none;"><div class="row"><div class="col-md-4"><div class="card shadow-sm"><div class="card-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;"><h6 class="mb-0"><i class="fas fa-plus-circle"></i> Add New Fine</h6></div><div class="card-body">${canManage ? `<div class="mb-3"><label class="form-label fw-bold">👤 Borrower Type</label><select id="fineBorrowerType" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;"><option value="student">📚 Student</option><option value="teacher">👨‍🏫 Teacher</option></select></div><div class="mb-3"><label class="form-label fw-bold">🔍 Select Borrower</label><select id="fineBorrowerId" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;"><option value="">-- Select --</option></select></div><div class="mb-3"><label class="form-label fw-bold">⚠️ Reason</label><select id="fineReason" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;"><option value="Late Return">⏰ Late Return</option><option value="Damaged Book">📖 Damaged Book</option><option value="Lost Book">❌ Lost Book</option><option value="Overdue">📅 Overdue (30+ days)</option><option value="Other">📝 Other</option></select></div><div class="mb-3"><label class="form-label fw-bold">💰 Amount (UGX)</label><input type="number" id="fineAmount" class="form-control" placeholder="Enter amount" style="border: 2px solid #dc3545; border-radius: 8px;"></div><div class="mb-3"><label class="form-label fw-bold">📝 Description</label><textarea id="fineDescription" class="form-control" rows="2" placeholder="Additional details..." style="border-radius: 8px;"></textarea></div><button class="btn btn-danger w-100" onclick="addLibraryFine()" style="background: linear-gradient(135deg, #dc3545, #c82333); border: none; padding: 10px; border-radius: 8px;"><i class="fas fa-save"></i> Add Fine</button>` : `<div class="alert alert-warning text-center"><i class="fas fa-lock"></i> You do not have permission to add fines.</div>`}</div></div></div><div class="col-md-8"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #dc3545;"><div class="row align-items-center"><div class="col-md-6"><h6 class="mb-0"><i class="fas fa-list"></i> Fine Records</h6></div><div class="col-md-6"><div class="btn-group w-100" role="group"><button class="btn btn-sm btn-outline-success" onclick="filterFines('all')" style="border-radius: 8px 0 0 8px;">All</button><button class="btn btn-sm btn-outline-warning" onclick="filterFines('pending')">Pending</button><button class="btn btn-sm btn-outline-info" onclick="filterFines('paid')" style="border-radius: 0 8px 8px 0;">Paid</button></div></div></div></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 450px; overflow-y: auto;"><table class="table table-bordered mb-0"><thead class="table-danger"><tr><th>Borrower</th><th>Type</th><th>Reason</th><th>Amount</th><th>Date</th><th>Status</th>${canManage ? '<th>Action</th>' : ''}</tr></thead><tbody id="finesTableBody"><td><td colspan="${canManage ? 7 : 6}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading fines...</span>络</tbody></table></div></div></div></div></div></div>
+    
+    <!-- TAB 5: CATEGORIES -->
+    <div id="libTabCategories" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #01605a;"><div class="row"><div class="col-md-8"><h6 class="mb-0"><i class="fas fa-tags"></i> Book Categories</h6></div>${canManage ? '<div class="col-md-4"><button class="btn btn-sm btn-primary w-100 action-btn" onclick="showAddCategoryModal()" style="background: linear-gradient(135deg, #01605a, #ff862d); border: none;"><i class="fas fa-plus"></i> Add Category</button></div>' : ''}</div></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-bordered mb-0"><thead class="table-primary"><tr><th>Category</th><th>Total Books</th><th>Borrowed</th><th>Available</th><th>Action</th></tr></thead><tbody id="categoriesTableBody"></tbody></table></div></div></div></div>
+    
+    <!-- TAB 6: REPORTS -->
+    <div id="libTabReports" class="lib-tab-content" style="display: none;"><div class="row"><div class="col-md-6"><div class="card shadow-sm"><div class="card-header bg-primary text-white"><h6 class="mb-0"><i class="fas fa-chart-line"></i> Most Popular Books</h6></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 400px;"><table class="table table-bordered mb-0"><thead class="table-light sticky-top"><tr><th>Book Title</th><th style="width: 100px;">Times Borrowed</th></tr></thead><tbody id="popularBooksTableBody"></tbody></table></div></div></div></div><div class="col-md-6"><div class="card shadow-sm"><div class="card-header bg-info text-white"><h6 class="mb-0"><i class="fas fa-trophy"></i> Top Borrowers</h6></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 400px;"><table class="table table-bordered mb-0"><thead class="table-light sticky-top"><tr><th style="width: 60px;">Rank</th><th>Borrower</th><th style="width: 80px;">Type</th><th style="width: 100px;">Total</th><th style="width: 60px;">Action</th></tr></thead><tbody id="topBorrowersTableBody"></tbody></table></div></div></div></div></div></div>
+    
+    <!-- TAB 7: SETTINGS (SUPER ADMIN ONLY) -->
+    ${currentUserRole === 'superadmin' ? `<div id="libTabSettings" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;"><h6 class="mb-0"><i class="fas fa-cog"></i> Library Settings <span class="badge bg-light text-danger ms-2">Super Admin Only</span></h6></div><div class="card-body"><div class="alert alert-warning"><i class="fas fa-shield-alt"></i> <strong>Super Admin Access Only</strong> - These settings control global library behavior.</div><div class="row"><div class="col-md-6"><label class="form-label fw-bold">📅 Borrow Duration (Days)</label><input type="number" id="libBorrowDays" class="form-control" value="${BORROW_DAYS}" style="border: 2px solid #01605a; border-radius: 8px;"><small class="text-muted">Default number of days a book can be borrowed</small></div><div class="col-md-6"><label class="form-label fw-bold">💰 Daily Fine Rate (UGX)</label><input type="number" id="libDailyFine" class="form-control" value="${DAILY_FINE_RATE}" style="border: 2px solid #01605a; border-radius: 8px;"><small class="text-muted">Fine charged per day for late returns</small></div></div><div class="row mt-3"><div class="col-md-12"><div class="alert alert-info"><i class="fas fa-info-circle"></i> <strong>Note:</strong> Changes to these settings will affect all future borrowings.</div></div></div><div class="text-end mt-3"><button class="btn btn-danger action-btn" onclick="saveLibrarySettings()" style="background: linear-gradient(135deg, #dc3545, #c82333); border: none; padding: 10px 30px;"><i class="fas fa-save"></i> Save Settings</button></div></div></div></div>` : ''}
+    `;
+}
+
+
+// ============================================
+// REFRESH BUTTON FUNCTION - LIBRARY MODULE
+// ============================================
+
+window.refreshLibrary = async function() {
+    // Show loading state on refresh button
+    const refreshBtn = document.querySelector('#libTabInventory .btn-secondary');
+    if (refreshBtn) {
+        const originalText = refreshBtn.innerHTML;
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+        refreshBtn.disabled = true;
+        
+        try {
+            // Reload all library data
+            await Promise.all([
+                libGetBooks(),
+                libGetBorrowings(),
+                libGetStudents(),
+                libGetTeachers(),
+                libGetFines()
+            ]);
+            
+            // Reload the current active table
+            await loadBooksTable();
+            
+            // Check which tab is active and reload its data
+            const activeTab = document.querySelector('.lib-tab-btn.active');
+            if (activeTab) {
+                const onclick = activeTab.getAttribute('onclick');
+                if (onclick) {
+                    const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
+                    if (tabName && tabName[1]) {
+                        if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
+                        else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
+                        else if (tabName[1] === 'fines') await loadFinesTable();
+                        else if (tabName[1] === 'categories') await loadCategoriesTable();
+                        else if (tabName[1] === 'reports') await loadLibraryReports();
+                    }
+                }
+            }
+            
+            // Show success message
+            Swal.fire({
+                title: 'Refreshed!',
+                text: 'Library data has been updated successfully.',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
+            
+        } catch (error) {
+            console.error('Refresh error:', error);
+            Swal.fire({
+                title: 'Error!',
+                text: 'Failed to refresh library data.',
+                icon: 'error',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } finally {
+            // Restore button
+            refreshBtn.innerHTML = originalText;
+            refreshBtn.disabled = false;
+        }
+    } else {
+        // Fallback refresh without button animation
+        try {
+            await Promise.all([
+                libGetBooks(),
+                libGetBorrowings(),
+                libGetStudents(),
+                libGetTeachers(),
+                libGetFines()
+            ]);
+            
+            await loadBooksTable();
+            
+            const activeTab = document.querySelector('.lib-tab-btn.active');
+            if (activeTab) {
+                const onclick = activeTab.getAttribute('onclick');
+                if (onclick) {
+                    const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
+                    if (tabName && tabName[1]) {
+                        if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
+                        else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
+                        else if (tabName[1] === 'fines') await loadFinesTable();
+                        else if (tabName[1] === 'categories') await loadCategoriesTable();
+                        else if (tabName[1] === 'reports') await loadLibraryReports();
+                    }
+                }
+            }
+            
+            Swal.fire({
+                title: 'Refreshed!',
+                text: 'Library data has been updated.',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } catch (error) {
+            Swal.fire('Error!', 'Failed to refresh library data.', 'error');
+        }
+    }
+};
+
+console.log('✅ LIBRARY MODULE LOADED - FINAL MASTERPIECE');
+console.log('✅ Features: Books | Borrowing | History | Fine Management | Categories | Reports | Settings');
+console.log('✅ Role-Based Access: Superadmin/Admin/Librarian = Full Access | Others = View Only');
+console.log('✅ Settings Tab: SUPER ADMIN ONLY');
 // ============================================
 // PAYMENTS MODULE - FINAL MASTERPIECE WITH SCHOOL INFO INTEGRATION
 // O-Level & A-Level | Real-time Fee Updates | Full Functionality
@@ -9024,36 +10102,240 @@ window.printReceipt = async function(id) {
 };
 
 // ============================================
+// VERIFY SUPER ADMIN PASSWORD (For Payment Module)
+// ============================================
+
+async function verifySuperAdminPasswordForPayment() {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Super Admin Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-danger mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        Deleting payment records requires Super Administrator approval.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Super Admin Password</label>
+                        <input type="password" id="superAdminPassword" class="form-control" 
+                               placeholder="Enter Super Admin password" autocomplete="off">
+                        <small class="text-muted">A Super Admin must authorize this deletion.</small>
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize Deletion',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('superAdminPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            Swal.clickConfirm();
+                        }
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const password = document.getElementById('superAdminPassword')?.value;
+                
+                if (!password) {
+                    Swal.showValidationMessage('Please enter Super Admin password');
+                    return false;
+                }
+                
+                try {
+                    // Get super admin email from users table
+                    const { data: superAdminData, error: superAdminError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', 'superadmin')
+                        .limit(1)
+                        .single();
+                    
+                    if (superAdminError) {
+                        Swal.showValidationMessage('Could not verify Super Admin credentials');
+                        return false;
+                    }
+                    
+                    // Verify password with Supabase
+                    const { data, error } = await sb.auth.signInWithPassword({
+                        email: superAdminData.email,
+                        password: password
+                    });
+                    
+                    if (error) {
+                        const errorDiv = document.getElementById('passwordError');
+                        if (errorDiv) errorDiv.style.display = 'block';
+                        Swal.showValidationMessage('Incorrect Super Admin password');
+                        return false;
+                    }
+                    
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed. Please try again.');
+                    return false;
+                }
+            }
+        }).then((result) => {
+            resolve(result.isConfirmed);
+        });
+    });
+}
+
+// ============================================
+// CHECK IF USER CAN DELETE PAYMENTS
+// ============================================
+
+function canDeletePayments() {
+    // Super Admin can delete without password
+    if (currentUserRole === 'superadmin') return true;
+    // Admin and Accountant can delete but need password
+    if (currentUserRole === 'admin' || currentUserRole === 'accountant') return true;
+    // Others cannot delete
+    return false;
+}
+
+function needsPasswordForDelete() {
+    // Admin and Accountant need password verification
+    return (currentUserRole === 'admin' || currentUserRole === 'accountant');
+}
+
+// ============================================
 // DELETE PAYMENT
 // ============================================
 
+// ============================================
+// DELETE PAYMENT - WITH ROLE-BASED PASSWORD
+// ============================================
+
 window.deletePaymentItem = async function(id) {
-    const result = await Swal.fire({
-        title: 'Delete Payment?',
-        text: 'This action cannot be undone!',
+    // Check if user has delete permission
+    if (!canDeletePayments()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            text: 'You do not have permission to delete payment records.',
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    const isSuperAdmin = (currentUserRole === 'superadmin');
+    const needsPassword = needsPasswordForDelete();
+    const payment = allPaymentsList.find(p => p.id === id);
+    const student = allStudentsList.find(s => s.id === payment?.student_id);
+    
+    if (!payment) return;
+    
+    // First confirmation
+    const confirmDelete = await Swal.fire({
+        title: 'Delete Payment Record?',
+        html: `<p>Are you sure you want to delete this payment record?</p>
+               <div class="text-start">
+                   <p><strong>💰 Amount:</strong> ${formatMoney(payment.amount)}</p>
+                   <p><strong>👨‍🎓 Student:</strong> ${student ? escapeHtml(student.name) : 'Unknown'}</p>
+                   <p><strong>📅 Date:</strong> ${payment.payment_date || '-'}</p>
+                   <p><strong>📝 Receipt No:</strong> ${payment.receipt_no || '-'}</p>
+               </div>
+               <p class="text-danger mt-2"><strong>⚠️ THIS ACTION CANNOT BE UNDONE!</strong></p>
+               ${needsPassword ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete'
+        confirmButtonText: '<i class="fas fa-trash"></i> Yes, Delete',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel'
     });
     
-    if (result.isConfirmed) {
-        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    if (!confirmDelete.isConfirmed) return;
+    
+    // If not Super Admin (Admin or Accountant), verify Super Admin password
+    if (needsPassword) {
+        const passwordVerified = await verifySuperAdminPasswordForPayment();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Access Denied',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+    }
+    
+    // Final confirmation
+    const finalConfirm = await Swal.fire({
+        title: '🔴 Final Confirmation',
+        html: `<p>${needsPassword ? 'Super Admin authorized. ' : ''}Are you absolutely sure you want to delete this payment record?</p>
+               <p><strong>Amount:</strong> ${formatMoney(payment.amount)}</p>
+               <p><strong>Student:</strong> ${student ? escapeHtml(student.name) : 'Unknown'}</p>
+               <p><strong>Receipt No:</strong> ${payment.receipt_no || '-'}</p>
+               <p class="text-danger">This action cannot be undone!</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Delete Permanently',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (finalConfirm.isConfirmed) {
+        Swal.fire({ 
+            title: 'Deleting...', 
+            text: 'Removing payment record...',
+            allowOutsideClick: false, 
+            didOpen: () => Swal.showLoading() 
+        });
+        
         try {
             await deletePayment(id);
-            Swal.fire('Deleted!', 'Payment record deleted.', 'success');
+            Swal.fire({
+                title: '✅ Deleted!',
+                text: 'Payment record has been deleted successfully.',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
             await refreshPayments();
         } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
+            Swal.fire({
+                title: '❌ Error!',
+                text: error.message,
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
         }
     }
 };
-
 // ============================================
 // BULK DELETE PAYMENTS
 // ============================================
 
+// ============================================
+// BULK DELETE PAYMENTS - WITH ROLE-BASED PASSWORD
+// ============================================
+
 window.bulkDeletePayments = async function() {
+    // Check if user has delete permission
+    if (!canDeletePayments()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            text: 'You do not have permission to delete payment records.',
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    const isSuperAdmin = (currentUserRole === 'superadmin');
+    const needsPassword = needsPasswordForDelete();
     const checkboxes = document.querySelectorAll('.paymentCheck:checked');
     const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
     
@@ -9062,24 +10344,88 @@ window.bulkDeletePayments = async function() {
         return;
     }
     
-    const result = await Swal.fire({
-        title: `Delete ${ids.length} payments?`,
+    // Calculate total amount of selected payments
+    let totalAmount = 0;
+    for (const id of ids) {
+        const payment = allPaymentsList.find(p => p.id === id);
+        if (payment) totalAmount += payment.amount || 0;
+    }
+    
+    // First confirmation
+    const confirmDelete = await Swal.fire({
+        title: `Delete ${ids.length} Payment Records?`,
+        html: `<p>You are about to delete <strong>${ids.length}</strong> payment records.</p>
+               <p><strong>💰 Total Amount:</strong> ${formatMoney(totalAmount)}</p>
+               <p class="text-danger"><strong>⚠️ THIS ACTION CANNOT BE UNDONE!</strong></p>
+               ${needsPassword ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete'
+        confirmButtonText: '<i class="fas fa-trash"></i> Yes, Delete',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel'
     });
     
-    if (result.isConfirmed) {
-        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    if (!confirmDelete.isConfirmed) return;
+    
+    // If not Super Admin (Admin or Accountant), verify Super Admin password
+    if (needsPassword) {
+        const passwordVerified = await verifySuperAdminPasswordForPayment();
+        if (!passwordVerified) {
+            Swal.fire({
+                title: '⛔ Access Denied',
+                text: 'Super Admin authorization failed. Delete operation cancelled.',
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+    }
+    
+    // Final confirmation with typing
+    const finalConfirm = await Swal.fire({
+        title: '🔴 FINAL CONFIRMATION',
+        html: `<p>${needsPassword ? 'Super Admin authorized. ' : ''}Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> payment records.</p>`,
+        input: 'text',
+        inputPlaceholder: 'Type DELETE here',
+        showCancelButton: true,
+        confirmButtonText: 'Permanently Delete',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#d33',
+        preConfirm: (inputValue) => {
+            if (inputValue !== 'DELETE') {
+                Swal.showValidationMessage('Please type "DELETE" to confirm');
+                return false;
+            }
+            return true;
+        }
+    });
+    
+    if (finalConfirm.isConfirmed) {
+        Swal.fire({ 
+            title: 'Deleting...', 
+            text: `Removing ${ids.length} payment records...`,
+            allowOutsideClick: false, 
+            didOpen: () => Swal.showLoading() 
+        });
+        
         try {
             for (const id of ids) {
                 await deletePayment(id);
             }
-            Swal.fire('Deleted!', `${ids.length} payments deleted.`, 'success');
+            Swal.fire({
+                title: '✅ Deleted!',
+                text: `${ids.length} payment records have been deleted successfully.`,
+                icon: 'success',
+                confirmButtonText: 'OK'
+            });
             await refreshPayments();
         } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
+            Swal.fire({
+                title: '❌ Error!',
+                text: error.message,
+                icon: 'error',
+                confirmButtonText: 'OK'
+            });
         }
     }
 };
