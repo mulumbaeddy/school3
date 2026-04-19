@@ -814,10 +814,8 @@ async function renderDashboard() {
             { page: "reports", label: "Reports", icon: "fa-file-alt", color: "warning" }
         ],
         teacher: [
-            { page: "students", label: "Students", icon: "fa-users", color: "primary" },
             { page: "marks", label: "Marks", icon: "fa-chart-line", color: "info" },
-            { page: "attendance", label: "Attendance", icon: "fa-calendar-check", color: "warning" },
-            { page: "reports", label: "Reports", icon: "fa-file-alt", color: "success" }
+           
         ],
         librarian: [
             { page: "library", label: "Library", icon: "fa-book", color: "primary" }
@@ -837,7 +835,7 @@ async function renderDashboard() {
     // Card configuration
     const cardConfig = {
         students: { 
-            roles: ['superadmin', 'admin', 'teacher', 'secretary'], 
+            roles: ['superadmin', 'admin', 'secretary'], 
             onclick: "loadPage('students')",
             icon: "fa-users",
             bg: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
@@ -891,7 +889,7 @@ async function renderDashboard() {
             extra: "Total Revenue"
         },
         attendance: { 
-            roles: ['superadmin', 'admin', 'teacher', 'secretary'], 
+            roles: ['superadmin', 'admin',  'secretary'], 
             onclick: "loadPage('attendance')",
             icon: "fa-calendar-check",
             bg: todayAttendancePercent >= 80 ? "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" : 
@@ -948,8 +946,7 @@ async function renderDashboard() {
         teacher: [
             { icon: "fa-chart-line", label: "Enter Marks", onclick: "loadPage('marks')", color: "#17a2b8" },
             { icon: "fa-calendar-check", label: "Mark Attendance", onclick: "loadPage('attendance')", color: "#ffc107" },
-            { icon: "fa-users", label: "View Students", onclick: "loadPage('students')", color: "#667eea" },
-            { icon: "fa-file-alt", label: "View Reports", onclick: "loadPage('reports')", color: "#28a745" }
+            
         ],
         accountant: [
             { icon: "fa-credit-card", label: "Record Payment", onclick: "loadPage('payments')", color: "#28a745" },
