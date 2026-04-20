@@ -8934,7 +8934,7 @@ async function calculateStudentFeeStatusWithCarryForward(studentId, targetYear, 
 // PROCESS PAYMENT
 // ============================================
 
-async function processPaymentWithCarryForward(studentId, amount, feeType, method, paymentDate, term, year, remarks) {
+async function processPaymentWithCarryForward(studentId, amount, feeType, method, paymentDate, term, year, remarks, sendSms = true) {
     const student = allStudentsList.find(s => s.id === studentId);
     if (!student) throw new Error('Student not found');
     
@@ -8955,6 +8955,7 @@ async function processPaymentWithCarryForward(studentId, amount, feeType, method
             term: term,
             year: year,
             remarks: remarks,
+            send_sms: sendSms,   // use the parameter
             created_at: new Date().toISOString()
         })
         .select();
@@ -9935,6 +9936,16 @@ window.showAddPaymentModal = async function() {
                     <textarea id="remarksInput" class="form-control" rows="2"></textarea>
                 </div>
                 
+                <!-- === ADDED SMS CHECKBOX === -->
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="sendSmsCheckbox" checked>
+                    <label class="form-check-label fw-bold">
+                        📱 Send SMS notification to parent
+                    </label>
+                    <small class="text-muted d-block">Uncheck to skip sending SMS for this payment.</small>
+                </div>
+                <!-- ========================= -->
+                
                 <div class="alert alert-success small">
                     <i class="fas fa-info-circle"></i> 
                     <strong>Note:</strong> Excess payment automatically carries forward to next term.
@@ -9956,9 +9967,6 @@ window.showAddPaymentModal = async function() {
             const balanceDetails = document.getElementById('balanceDetails');
             const termSelect = document.getElementById('termSelect');
             const yearInput = document.getElementById('yearInput');
-            
-            // Make dropdown searchable - when focused, pressing letters jumps to that option
-            // This is native browser behavior for select dropdowns
             
             const updateBalanceInfo = async () => {
                 const studentId = studentSelect.value;
@@ -10030,6 +10038,9 @@ window.showAddPaymentModal = async function() {
                 return false;
             }
             
+            // Get checkbox value
+            const sendSms = document.getElementById('sendSmsCheckbox').checked;
+            
             return {
                 student_id: studentId,
                 amount: amount,
@@ -10038,7 +10049,8 @@ window.showAddPaymentModal = async function() {
                 payment_date: document.getElementById('paymentDateInput').value,
                 term: document.getElementById('termSelect').value,
                 year: document.getElementById('yearInput').value,
-                remarks: document.getElementById('remarksInput').value || ''
+                remarks: document.getElementById('remarksInput').value || '',
+                send_sms: sendSms   // <-- added
             };
         }
     });
@@ -10047,8 +10059,15 @@ window.showAddPaymentModal = async function() {
         Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         try {
             await processPaymentWithCarryForward(
-                result.student_id, result.amount, result.fee_type, result.method,
-                result.payment_date, result.term, result.year, result.remarks
+                result.student_id,
+                result.amount,
+                result.fee_type,
+                result.method,
+                result.payment_date,
+                result.term,
+                result.year,
+                result.remarks,
+                result.send_sms   // <-- pass the flag
             );
             Swal.fire('✅ Success!', 'Payment recorded successfully.', 'success');
             await refreshPayments();
@@ -10057,7 +10076,6 @@ window.showAddPaymentModal = async function() {
         }
     }
 };
-
 // ============================================
 // REFRESH MODAL FEES
 // ============================================
