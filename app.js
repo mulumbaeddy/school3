@@ -9041,6 +9041,58 @@ function formatDateTime(dateString) {
 // ============================================
 // LOAD PAYMENTS TABLE (UPDATED)
 // ============================================
+// ========================
+// HELPER FUNCTIONS
+// ========================
+
+function formatMoney(amount) {
+    return `UGX ${(amount || 0).toLocaleString()}`;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+// ✅ EXACT DATE & TIME WITH SECONDS (Africa/Kampala)
+function formatDateTime(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',          // shows seconds
+        hour12: false,
+        timeZone: 'Africa/Kampala'
+    });
+}
+
+
+function formatDateTime(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    // Use UTC getters to show exactly what's in the database (no local conversion)
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+// ========================
+// LOAD PAYMENTS TABLE
+// ========================
+
 async function loadPaymentsTable() {
     const tbody = document.getElementById('paymentsTableBody');
     if (!tbody) return;
@@ -9049,73 +9101,35 @@ async function loadPaymentsTable() {
     await getStudentsForPayments();
 
     if (allPaymentsList.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="12" class="text-center py-4">
-                    No payments found. Click "Record Payment" to get started.
-                </td>
-            </tr>
-        `;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4">No payments found.</td></tr>`;
         return;
     }
 
     let html = '';
-
     for (const p of allPaymentsList) {
         const student = allStudentsList.find(s => s.id === p.student_id);
         if (!student) continue;
 
         html += `
             <tr>
-                <td class="text-center">
-                    <input type="checkbox" class="paymentCheck" data-id="${p.id}">
-                </td>
-                <td>
-                    <code>${p.receipt_no || '-'}</code>
-                </td>
+                <td class="text-center"><input type="checkbox" class="paymentCheck" data-id="${p.id}"></td>
+                <td><code>${p.receipt_no || '-'}</code></td>
                 <td>
                     <strong>${escapeHtml(student.name)}</strong>
-                    <button class="btn btn-sm btn-link p-0 ms-1"
-                        onclick="viewPaymentHistory('${p.student_id}')"
-                        title="History">
+                    <button class="btn btn-sm btn-link p-0 ms-1" onclick="viewPaymentHistory('${p.student_id}')" title="History">
                         <i class="fas fa-history text-info"></i>
                     </button>
                 </td>
-                <td>
-                    ${student.class}${student.stream ? ' - ' + student.stream : ''}
-                </td>
-                <td>
-                    ${p.fee_type || '-'}
-                </td>
-                <td class="text-end">
-                    <strong>${formatMoney(p.amount || 0)}</strong>
-                </td>
+                <td>${student.class}${student.stream ? ' - ' + student.stream : ''}</td>
+                <td>${p.fee_type || '-'}</td>
+                <td class="text-end"><strong>${formatMoney(p.amount || 0)}</strong></td>
+                <td class="text-center"><span class="badge bg-secondary">${p.payment_method || '-'}</span></td>
+                <td class="text-center">${p.payment_date ? formatDateTime(p.payment_date) : '<span class="text-danger">NO DATE</span>'}</td>
+                <td class="text-center">${p.term || '-'}</td>
+                <td class="text-center">${p.year || '-'}</td>
                 <td class="text-center">
-                    <span class="badge bg-secondary">
-                        ${p.payment_method || '-'}
-                    </span>
-                </td>
-                <!-- ✅ TIMESTAMP column (recorded at) -->
-                <td class="text-center">
-                    ${formatDateTime(p.created_at)}
-                </td>
-                <td class="text-center">
-                    ${p.term || '-'}
-                </td>
-                <td class="text-center">
-                    ${p.year || '-'}
-                </td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-info me-1"
-                        onclick="printReceipt('${p.id}')"
-                        title="Print">
-                        <i class="fas fa-print"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger"
-                        onclick="deletePaymentItem('${p.id}')"
-                        title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <button class="btn btn-sm btn-info me-1" onclick="printReceipt('${p.id}')" title="Print"><i class="fas fa-print"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deletePaymentItem('${p.id}')" title="Delete"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `;
@@ -9123,17 +9137,9 @@ async function loadPaymentsTable() {
 
     tbody.innerHTML = html;
 
-    // Select All Checkbox
     const selectAll = document.getElementById('selectAllPayments');
-    if (selectAll) {
-        selectAll.onclick = () => {
-            document.querySelectorAll('.paymentCheck')
-                .forEach(cb => cb.checked = selectAll.checked);
-        };
-    }
-
-    // Reapply filters after load
-    setTimeout(() => window.filterPaymentsTable(), 100);
+    if (selectAll) selectAll.onclick = () => document.querySelectorAll('.paymentCheck').forEach(cb => cb.checked = selectAll.checked);
+    if (typeof window.filterPaymentsTable === 'function') setTimeout(() => window.filterPaymentsTable(), 100);
 }
 
 // ============================================
@@ -9876,6 +9882,7 @@ window.showCompletedStudentsModal = async function() {
 // SHOW ADD PAYMENT MODAL
 // ============================================
 
+// Helper to generate current local datetime string with seconds
 function getLocalDateTimeInput() {
     const now = new Date();
     const year = now.getFullYear();
@@ -9883,8 +9890,10 @@ function getLocalDateTimeInput() {
     const day = String(now.getDate()).padStart(2, '0');
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
+
 window.showAddPaymentModal = async function() {
     console.log("Opening Add Payment Modal...");
     
@@ -9967,12 +9976,12 @@ window.showAddPaymentModal = async function() {
                     </div>
                 </div>
                 
-                <!-- ✅ DATETIME PICKER with LOCAL device time -->
+                <!-- ✅ DATETIME PICKER with seconds -->
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Payment Date & Time</label>
+                        <label class="form-label fw-bold">Payment Date & Time *</label>
                         <input type="datetime-local" id="paymentDateInput" class="form-control" 
-                               value="${getLocalDateTimeInput()}">
+                               value="${getLocalDateTimeInput()}" step="1">   <!-- step="1" enables seconds -->
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Term</label>
@@ -10095,7 +10104,13 @@ window.showAddPaymentModal = async function() {
             }
             
             const sendSms = document.getElementById('sendSmsCheckbox').checked;
-            const paymentDateTime = document.getElementById('paymentDateInput').value;
+            const paymentDateTime = document.getElementById('paymentDateInput').value; // format: YYYY-MM-DDThh:mm:ss
+            
+            // Validate that datetime includes seconds (optional, but step=1 ensures it)
+            if (!paymentDateTime || paymentDateTime.length < 19) {
+                Swal.showValidationMessage('Please select a valid date and time (including seconds).');
+                return false;
+            }
             
             return {
                 student_id: studentId,
@@ -10119,7 +10134,7 @@ window.showAddPaymentModal = async function() {
                 result.amount,
                 result.fee_type,
                 result.method,
-                result.payment_date,
+                result.payment_date,   // full timestamp with seconds
                 result.term,
                 result.year,
                 result.remarks,
@@ -10247,45 +10262,49 @@ window.printReceipt = async function(id) {
     if (!payment) return;
 
     const student = allStudentsList.find(s => s.id === payment.student_id);
-    const printWindow = window.open('', '_blank', 'width=600,height=800');
+    if (!student) return;
 
     const logoUrl = schoolSettings.school_logo || '';
+    const printWindow = window.open('', '_blank', 'width=600,height=800');
 
-    // ✅ Helper to format date & time (same as in your table)
+    const formatMoney = (amount) => `UGX ${(amount || 0).toLocaleString()}`;
+    const escapeHtml = (text) =>
+        (text || '').replace(/[&<>]/g, (m) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;'
+        }[m]));
+
+    // ✅ NEW: Display raw database timestamp (no timezone conversion)
     const formatDateTime = (dateString) => {
         if (!dateString) return '-';
-        const date = new Date(dateString);
-        return date.toLocaleString('en-GB', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        });
+        // Remove 'T' and milliseconds/timezone for clean display
+        return dateString.replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '');
     };
 
-    printWindow.document.write(`
+    // ✅ Use payment_date (the legal timestamp), not created_at
+    const receiptTimestamp = payment.payment_date;
+
+    const html = `
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Payment Receipt - ${payment.receipt_no}</title>
+            <meta charset="UTF-8">
+            <title>Receipt - ${payment.receipt_no}</title>
             <style>
-                @media print {
-                    body { margin: 0; padding: 0; }
-                    .no-print { display: none; }
-                }
                 body {
-                    font-family: Arial, sans-serif;
-                    padding: 40px;
+                    font-family: "Segoe UI", Arial, sans-serif;
+                    padding: 20px;
+                    background: #f4f4f4;
+                    margin: 0;
                 }
                 .receipt {
-                    max-width: 400px;
-                    margin: 0 auto;
+                    max-width: 380px;
+                    margin: auto;
+                    background: #fff;
                     border: 2px solid #01605a;
+                    border-radius: 12px;
                     padding: 20px;
-                    border-radius: 10px;
                     position: relative;
                     overflow: hidden;
                 }
@@ -10294,152 +10313,160 @@ window.printReceipt = async function(id) {
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    opacity: 0.1;
+                    width: 65%;
+                    height: 65%;
+                    background-image: url('${logoUrl}');
+                    background-repeat: no-repeat;
+                    background-position: center;
+                    background-size: contain;
+                    opacity: 0.18;
                     z-index: 0;
-                    width: 60%;
                 }
-                .paid-stamp {
-                    position: absolute;
-                    top: 110px;
-                    right: 20px;
-                    transform: rotate(-20deg);
-                    color: red;
-                    border: 3px solid red;
-                    padding: 5px 15px;
-                    font-size: 18px;
-                    font-weight: bold;
-                    opacity: 0.85;
-                    z-index: 2;
+                .content {
+                    position: relative;
+                    z-index: 1;
                 }
                 .header {
                     text-align: center;
                     border-bottom: 2px solid #ff862d;
                     padding-bottom: 10px;
-                    margin-bottom: 20px;
-                    position: relative;
-                    z-index: 1;
+                    margin-bottom: 15px;
                 }
                 .school-name {
+                    font-size: 18px;
+                    font-weight: 700;
                     color: #01605a;
-                    font-size: 20px;
-                    font-weight: bold;
                 }
                 .receipt-title {
-                    font-size: 16px;
-                    font-weight: bold;
-                    margin-top: 5px;
+                    font-size: 14px;
+                    font-weight: 600;
                 }
                 .receipt-no {
-                    background: #f0f0f0;
-                    padding: 5px;
+                    font-size: 13px;
+                    background: #f2f2f2;
+                    padding: 6px;
+                    margin: 10px 0;
                     text-align: center;
-                    margin-bottom: 15px;
-                    position: relative;
-                    z-index: 1;
+                    border-radius: 6px;
+                    font-family: monospace;
                 }
                 table {
                     width: 100%;
-                    margin: 15px 0;
-                    position: relative;
-                    z-index: 1;
+                    font-size: 13px;
                 }
                 td {
-                    padding: 5px;
+                    padding: 4px 0;
+                }
+                td:first-child {
+                    font-weight: 600;
                 }
                 .total {
+                    border-top: 1px dashed #ccc;
+                    margin-top: 10px;
+                    padding-top: 8px;
+                    font-size: 14px;
                     font-weight: bold;
                     text-align: right;
-                    border-top: 1px solid #ddd;
-                    padding-top: 10px;
                 }
                 .signature {
-                    margin-top: 30px;
                     display: flex;
                     justify-content: space-between;
-                    position: relative;
-                    z-index: 1;
+                    margin-top: 25px;
+                    font-size: 12px;
+                }
+                .line {
+                    border-bottom: 1px solid #000;
+                    height: 20px;
+                    margin-bottom: 5px;
+                }
+                .paid-stamp {
+                    margin-top: 12px;
+                    text-align: center;
+                    border: 2px solid #d32f2f;
+                    color: #d32f2f;
+                    font-size: 20px;
+                    font-weight: 700;
+                    padding: 6px 14px;
+                    display: inline-block;
+                    border-radius: 6px;
+                    letter-spacing: 2px;
                 }
                 .thankyou {
                     text-align: center;
-                    margin-top: 15px;
-                    color: #01605a;
-                }
-                .school-logo {
-                    max-width: 50px;
-                    max-height: 50px;
-                    margin-bottom: 5px;
-                }
-                .printed-time {
-                    text-align: center;
-                    font-size: 12px;
                     margin-top: 10px;
-                    color: #555;
+                    font-size: 13px;
+                    color: #01605a;
+                    font-weight: 600;
+                }
+                @media print {
+                    body {
+                        background: white;
+                        padding: 0;
+                    }
+                    .no-print {
+                        display: none;
+                    }
                 }
             </style>
         </head>
         <body>
             <div class="receipt">
-                ${logoUrl ? `<img src="${logoUrl}" class="watermark">` : ''}
-                <div class="paid-stamp">PAID</div>
-                <div class="header">
-                    ${logoUrl ? `<img src="${logoUrl}" class="school-logo">` : ''}
-                    <div class="school-name">${escapeHtml(schoolSettings.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
-                    <div class="receipt-title">OFFICIAL PAYMENT RECEIPT</div>
-                </div>
-                <div class="receipt-no">
-                    <strong>Receipt No:</strong> ${payment.receipt_no}
-                </div>
-                <table>
-                    <tr>
-                        <td width="40%"><strong>Recorded At:</strong></td>
-                        <td>${formatDateTime(payment.created_at)}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Student:</strong></td>
-                        <td>${student ? escapeHtml(student.name) : 'Unknown'} (${student ? student.class : ''})</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Fee Type:</strong></td>
-                        <td>${payment.fee_type || '-'}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Amount:</strong></td>
-                        <td><strong>${formatMoney(payment.amount)}</strong></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Method:</strong></td>
-                        <td>${payment.payment_method || '-'}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Term:</strong></td>
-                        <td>${payment.term || '-'} ${payment.year || ''}</td>
-                    </tr>
-                </table>
-                <div class="total">
-                    Total Paid: ${formatMoney(payment.amount)}
-                </div>
-                <div class="signature">
-                    <div>_________________<br>Student/Parent</div>
-                    <div>_________________<br>${escapeHtml(schoolSettings.bursar_name || 'Bursar')}</div>
-                </div>
-                <div class="thankyou">
-                    Thank you for your payment!
-                </div>
-                <div class="printed-time">
-                    Printed on: ${formatDateTime(new Date())}
+                ${logoUrl ? `<div class="watermark"></div>` : ''}
+                <div class="content">
+                    ${logoUrl ? `<div style="text-align:center; margin-bottom:10px;"><img src="${logoUrl}" style="max-height:70px; object-fit:contain;" /></div>` : ''}
+                    
+                    <div class="header">
+                        <div class="school-name">${escapeHtml(schoolSettings.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
+                        <div class="receipt-title">OFFICIAL PAYMENT RECEIPT</div>
+                    </div>
+
+                    <div class="receipt-no">
+                        Receipt No: ${payment.receipt_no}
+                    </div>
+
+                    <table>
+                        <tr>
+                            <td width="40%">Date & Time</td>
+                            <td>${receiptTimestamp ? formatDateTime(receiptTimestamp) : 'MISSING'}</td>
+                        </tr>
+                        <tr><td>Student</td><td>${escapeHtml(student.name)}</td></tr>
+                        <tr><td>Class</td><td>${student.class}</td></tr>
+                        <tr><td>Admission</td><td>${student.admission_no || '-'}</td></tr>
+                        <tr><td>Parent</td><td>${escapeHtml(student.parent_name || '-')}</td></tr>
+                        <tr><td>Fee Type</td><td>${payment.fee_type}</td></tr>
+                        <tr><td>Method</td><td>${payment.payment_method}</td></tr>
+                        <tr><td>Term</td><td>${payment.term} ${payment.year}</td></tr>
+                    </table>
+
+                    <div class="total">
+                        Total: ${formatMoney(payment.amount)}
+                    </div>
+
+                    <div class="signature">
+                        <div><div class="line"></div>Parent</div>
+                        <div><div class="line"></div>${escapeHtml(schoolSettings.bursar_name || 'Bursar')}</div>
+                    </div>
+
+                    ${payment.status === 'paid' || payment.amount > 0 ? `
+                        <div style="text-align:center;">
+                            <div class="paid-stamp">PAID</div>
+                        </div>
+                    ` : ''}
+
+                    <div class="thankyou">Thank you for your payment</div>
                 </div>
             </div>
-            <div class="no-print" style="text-align:center;margin-top:20px;">
+            <div class="no-print" style="text-align:center; margin-top:20px;">
                 <button onclick="window.print()">🖨️ Print</button>
                 <button onclick="window.close()">❌ Close</button>
             </div>
         </body>
         </html>
-    `);
+    `;
 
+    printWindow.document.write(html);
     printWindow.document.close();
 
-    // Auto‑print after a short delay
     setTimeout(() => {
         printWindow.print();
     }, 500);
