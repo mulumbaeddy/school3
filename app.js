@@ -9024,61 +9024,115 @@ window.filterPaymentsTable = function() {
 // LOAD PAYMENTS TABLE
 // ============================================
 
+// ✅ Format Date + Time
+function formatDateTime(dateString) {
+    if (!dateString) return '-';
+
+    const d = new Date(dateString);
+    return d.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// ============================================
+// LOAD PAYMENTS TABLE (UPDATED)
+// ============================================
 async function loadPaymentsTable() {
     const tbody = document.getElementById('paymentsTableBody');
     if (!tbody) return;
-    
+
     await getPayments();
     await getStudentsForPayments();
-    
+
     if (allPaymentsList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4">No payments found. Click "Record Payment" to get started. </span>络</tbody>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="12" class="text-center py-4">
+                    No payments found. Click "Record Payment" to get started.
+                </td>
+            </tr>
+        `;
         return;
     }
-    
+
     let html = '';
+
     for (const p of allPaymentsList) {
         const student = allStudentsList.find(s => s.id === p.student_id);
         if (!student) continue;
-        
+
         html += `
             <tr>
-                <td class="text-center"><input type="checkbox" class="paymentCheck" data-id="${p.id}"></td>
-                <td><code>${p.receipt_no || '-'}</code></td>
+                <td class="text-center">
+                    <input type="checkbox" class="paymentCheck" data-id="${p.id}">
+                </td>
+                <td>
+                    <code>${p.receipt_no || '-'}</code>
+                </td>
                 <td>
                     <strong>${escapeHtml(student.name)}</strong>
-                    <button class="btn btn-sm btn-link p-0 ms-1" onclick="viewPaymentHistory('${p.student_id}')" title="History">
+                    <button class="btn btn-sm btn-link p-0 ms-1"
+                        onclick="viewPaymentHistory('${p.student_id}')"
+                        title="History">
                         <i class="fas fa-history text-info"></i>
                     </button>
-                 </span></td>
-                <td>${student.class}${student.stream ? ' - ' + student.stream : ''}</span></td>
-                <td>${p.fee_type || '-'}</span></td>
-                <td class="text-end"><strong>${formatMoney(p.amount || 0)}</strong></span></td>
-                <td class="text-center"><span class="badge bg-secondary">${p.payment_method || '-'}</span></span></td>
-                <td>${p.payment_date || '-'}</span></td>
-                <td class="text-center">${p.term || '-'}</span></td>
-                <td class="text-center">${p.year || '-'}</span></td>
+                </td>
+                <td>
+                    ${student.class}${student.stream ? ' - ' + student.stream : ''}
+                </td>
+                <td>
+                    ${p.fee_type || '-'}
+                </td>
+                <td class="text-end">
+                    <strong>${formatMoney(p.amount || 0)}</strong>
+                </td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-info me-1" onclick="printReceipt('${p.id}')" title="Print">
+                    <span class="badge bg-secondary">
+                        ${p.payment_method || '-'}
+                    </span>
+                </td>
+                <!-- ✅ TIMESTAMP column (recorded at) -->
+                <td class="text-center">
+                    ${formatDateTime(p.created_at)}
+                </td>
+                <td class="text-center">
+                    ${p.term || '-'}
+                </td>
+                <td class="text-center">
+                    ${p.year || '-'}
+                </td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-info me-1"
+                        onclick="printReceipt('${p.id}')"
+                        title="Print">
                         <i class="fas fa-print"></i>
                     </button>
-                    <button class="btn btn-sm btn-danger" onclick="deletePaymentItem('${p.id}')" title="Delete">
+                    <button class="btn btn-sm btn-danger"
+                        onclick="deletePaymentItem('${p.id}')"
+                        title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
-                </span></td>
+                </td>
             </tr>
         `;
     }
-    
+
     tbody.innerHTML = html;
-    
+
+    // Select All Checkbox
     const selectAll = document.getElementById('selectAllPayments');
     if (selectAll) {
         selectAll.onclick = () => {
-            document.querySelectorAll('.paymentCheck').forEach(cb => cb.checked = selectAll.checked);
+            document.querySelectorAll('.paymentCheck')
+                .forEach(cb => cb.checked = selectAll.checked);
         };
     }
-    
+
+    // Reapply filters after load
     setTimeout(() => window.filterPaymentsTable(), 100);
 }
 
@@ -10186,23 +10240,53 @@ window.viewPaymentHistory = async function(studentId) {
 window.printReceipt = async function(id) {
     await loadSchoolSettingsForPayments();
     await getStudentsForPayments();
-    
+
     const payment = allPaymentsList.find(p => p.id === id);
     if (!payment) return;
-    
+
     const student = allStudentsList.find(s => s.id === payment.student_id);
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open('', '_blank', 'width=600,height=800');
+
     const logoUrl = schoolSettings.school_logo || '';
-    
+
+    // ✅ Helper to format date & time (same as in your table)
+    const formatDateTime = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+    };
+
     printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
             <title>Payment Receipt - ${payment.receipt_no}</title>
             <style>
-                @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
-                body { font-family: Arial, sans-serif; padding: 40px; }
-                .receipt { max-width: 400px; margin: 0 auto; border: 2px solid #01605a; padding: 20px; border-radius: 10px; position: relative; overflow: hidden; }
+                @media print {
+                    body { margin: 0; padding: 0; }
+                    .no-print { display: none; }
+                }
+                body {
+                    font-family: Arial, sans-serif;
+                    padding: 40px;
+                }
+                .receipt {
+                    max-width: 400px;
+                    margin: 0 auto;
+                    border: 2px solid #01605a;
+                    padding: 20px;
+                    border-radius: 10px;
+                    position: relative;
+                    overflow: hidden;
+                }
                 .watermark {
                     position: absolute;
                     top: 50%;
@@ -10212,41 +10296,136 @@ window.printReceipt = async function(id) {
                     z-index: 0;
                     width: 60%;
                 }
-                .header { text-align: center; border-bottom: 2px solid #ff862d; padding-bottom: 10px; margin-bottom: 20px; position: relative; z-index: 1; }
-                .school-name { color: #01605a; font-size: 20px; font-weight: bold; }
-                .receipt-title { font-size: 16px; font-weight: bold; margin-top: 5px; }
-                .receipt-no { background: #f0f0f0; padding: 5px; text-align: center; margin-bottom: 15px; position: relative; z-index: 1; }
-                table { width: 100%; margin: 15px 0; position: relative; z-index: 1; }
-                td { padding: 5px; }
-                .total { font-weight: bold; text-align: right; border-top: 1px solid #ddd; padding-top: 10px; }
-                .thankyou { text-align: center; margin-top: 15px; color: #01605a; }
-                .signature { margin-top: 30px; display: flex; justify-content: space-between; position: relative; z-index: 1; }
-                .school-logo { max-width: 50px; max-height: 50px; margin-bottom: 5px; }
+                .paid-stamp {
+                    position: absolute;
+                    top: 110px;
+                    right: 20px;
+                    transform: rotate(-20deg);
+                    color: red;
+                    border: 3px solid red;
+                    padding: 5px 15px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    opacity: 0.85;
+                    z-index: 2;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 2px solid #ff862d;
+                    padding-bottom: 10px;
+                    margin-bottom: 20px;
+                    position: relative;
+                    z-index: 1;
+                }
+                .school-name {
+                    color: #01605a;
+                    font-size: 20px;
+                    font-weight: bold;
+                }
+                .receipt-title {
+                    font-size: 16px;
+                    font-weight: bold;
+                    margin-top: 5px;
+                }
+                .receipt-no {
+                    background: #f0f0f0;
+                    padding: 5px;
+                    text-align: center;
+                    margin-bottom: 15px;
+                    position: relative;
+                    z-index: 1;
+                }
+                table {
+                    width: 100%;
+                    margin: 15px 0;
+                    position: relative;
+                    z-index: 1;
+                }
+                td {
+                    padding: 5px;
+                }
+                .total {
+                    font-weight: bold;
+                    text-align: right;
+                    border-top: 1px solid #ddd;
+                    padding-top: 10px;
+                }
+                .signature {
+                    margin-top: 30px;
+                    display: flex;
+                    justify-content: space-between;
+                    position: relative;
+                    z-index: 1;
+                }
+                .thankyou {
+                    text-align: center;
+                    margin-top: 15px;
+                    color: #01605a;
+                }
+                .school-logo {
+                    max-width: 50px;
+                    max-height: 50px;
+                    margin-bottom: 5px;
+                }
+                .printed-time {
+                    text-align: center;
+                    font-size: 12px;
+                    margin-top: 10px;
+                    color: #555;
+                }
             </style>
         </head>
         <body>
             <div class="receipt">
-                ${logoUrl ? `<img src="${logoUrl}" class="watermark" alt="School Logo">` : ''}
+                ${logoUrl ? `<img src="${logoUrl}" class="watermark">` : ''}
+                <div class="paid-stamp">PAID</div>
                 <div class="header">
-                    ${logoUrl ? `<img src="${logoUrl}" class="school-logo" alt="Logo">` : ''}
+                    ${logoUrl ? `<img src="${logoUrl}" class="school-logo">` : ''}
                     <div class="school-name">${escapeHtml(schoolSettings.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
                     <div class="receipt-title">OFFICIAL PAYMENT RECEIPT</div>
                 </div>
-                <div class="receipt-no"><strong>Receipt No:</strong> ${payment.receipt_no}</div>
+                <div class="receipt-no">
+                    <strong>Receipt No:</strong> ${payment.receipt_no}
+                </div>
                 <table>
-                    <tr><td width="40%"><strong>Date:</strong></td><td>${payment.payment_date}</td></tr>
-                    <tr><td><strong>Student:</strong></td><td>${student ? escapeHtml(student.name) : 'Unknown'} (${student ? student.class : ''})</span></td></tr>
-                    <tr><td><strong>Fee Type:</strong></td><td>${payment.fee_type}</span></td></tr>
-                    <tr><td><strong>Amount:</strong></td><td class="text-end"><strong>${formatMoney(payment.amount)}</strong></td></tr>
-                    <tr><td><strong>Method:</strong></td><td>${payment.payment_method}</span></td></tr>
-                    <tr><td><strong>Term:</strong></td><td>${payment.term} ${payment.year}</span></td></tr>
+                    <tr>
+                        <td width="40%"><strong>Recorded At:</strong></td>
+                        <td>${formatDateTime(payment.created_at)}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Student:</strong></td>
+                        <td>${student ? escapeHtml(student.name) : 'Unknown'} (${student ? student.class : ''})</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fee Type:</strong></td>
+                        <td>${payment.fee_type || '-'}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Amount:</strong></td>
+                        <td><strong>${formatMoney(payment.amount)}</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Method:</strong></td>
+                        <td>${payment.payment_method || '-'}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Term:</strong></td>
+                        <td>${payment.term || '-'} ${payment.year || ''}</td>
+                    </tr>
                 </table>
-                <div class="total">Total Paid: ${formatMoney(payment.amount)}</div>
+                <div class="total">
+                    Total Paid: ${formatMoney(payment.amount)}
+                </div>
                 <div class="signature">
                     <div>_________________<br>Student/Parent</div>
                     <div>_________________<br>${escapeHtml(schoolSettings.bursar_name || 'Bursar')}</div>
                 </div>
-                <div class="thankyou">Thank you for your payment!</div>
+                <div class="thankyou">
+                    Thank you for your payment!
+                </div>
+                <div class="printed-time">
+                    Printed on: ${formatDateTime(new Date())}
+                </div>
             </div>
             <div class="no-print" style="text-align:center;margin-top:20px;">
                 <button onclick="window.print()">🖨️ Print</button>
@@ -10255,9 +10434,14 @@ window.printReceipt = async function(id) {
         </body>
         </html>
     `);
-    printWindow.document.close();
-};
 
+    printWindow.document.close();
+
+    // Auto‑print after a short delay
+    setTimeout(() => {
+        printWindow.print();
+    }, 500);
+};
 // ============================================
 // VERIFY SUPER ADMIN PASSWORD (For Payment Module)
 // ============================================
