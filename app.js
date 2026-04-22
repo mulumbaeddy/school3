@@ -9876,6 +9876,15 @@ window.showCompletedStudentsModal = async function() {
 // SHOW ADD PAYMENT MODAL
 // ============================================
 
+function getLocalDateTimeInput() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
 window.showAddPaymentModal = async function() {
     console.log("Opening Add Payment Modal...");
     
@@ -9883,7 +9892,6 @@ window.showAddPaymentModal = async function() {
     await getStudentsForPayments();
     await getPayments();
     
-    // Get students and sort alphabetically by name
     let filteredStudents = getStudentsByLevel();
     filteredStudents = filteredStudents.sort((a, b) => a.name.localeCompare(b.name));
     
@@ -9910,16 +9918,12 @@ window.showAddPaymentModal = async function() {
                     <i class="fas fa-database"></i> <strong>Live Data:</strong> Fees loaded from fee_structure table
                 </div>
                 
-                <!-- SEARCHABLE DROPDOWN -->
                 <div class="mb-3">
                     <label class="form-label fw-bold">👨‍🎓 Select Student *</label>
                     <select id="paymentStudentSelect" class="form-select" style="width: 100%;">
                         ${studentOptions}
                     </select>
-                    <small class="text-muted">
-                        <i class="fas fa-search"></i> 
-                        Click and type to search - ${filteredStudents.length} students available
-                    </small>
+                    <small class="text-muted">Click and type to search - ${filteredStudents.length} students available</small>
                 </div>
                 
                 <div id="balanceInfo" class="alert alert-info mb-3" style="display: none;">
@@ -9963,10 +9967,12 @@ window.showAddPaymentModal = async function() {
                     </div>
                 </div>
                 
+                <!-- ✅ DATETIME PICKER with LOCAL device time -->
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Payment Date</label>
-                        <input type="date" id="paymentDateInput" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                        <label class="form-label fw-bold">Payment Date & Time</label>
+                        <input type="datetime-local" id="paymentDateInput" class="form-control" 
+                               value="${getLocalDateTimeInput()}">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Term</label>
@@ -9990,15 +9996,11 @@ window.showAddPaymentModal = async function() {
                     <textarea id="remarksInput" class="form-control" rows="2"></textarea>
                 </div>
                 
-                <!-- === ADDED SMS CHECKBOX === -->
                 <div class="form-check mb-3">
                     <input type="checkbox" class="form-check-input" id="sendSmsCheckbox" checked>
-                    <label class="form-check-label fw-bold">
-                        📱 Send SMS notification to parent
-                    </label>
+                    <label class="form-check-label fw-bold">📱 Send SMS notification to parent</label>
                     <small class="text-muted d-block">Uncheck to skip sending SMS for this payment.</small>
                 </div>
-                <!-- ========================= -->
                 
                 <div class="alert alert-success small">
                     <i class="fas fa-info-circle"></i> 
@@ -10092,19 +10094,19 @@ window.showAddPaymentModal = async function() {
                 return false;
             }
             
-            // Get checkbox value
             const sendSms = document.getElementById('sendSmsCheckbox').checked;
+            const paymentDateTime = document.getElementById('paymentDateInput').value;
             
             return {
                 student_id: studentId,
                 amount: amount,
                 fee_type: document.getElementById('feeTypeSelect').value,
                 method: document.getElementById('methodSelect').value,
-                payment_date: document.getElementById('paymentDateInput').value,
+                payment_date: paymentDateTime,
                 term: document.getElementById('termSelect').value,
                 year: document.getElementById('yearInput').value,
                 remarks: document.getElementById('remarksInput').value || '',
-                send_sms: sendSms   // <-- added
+                send_sms: sendSms
             };
         }
     });
@@ -10121,7 +10123,7 @@ window.showAddPaymentModal = async function() {
                 result.term,
                 result.year,
                 result.remarks,
-                result.send_sms   // <-- pass the flag
+                result.send_sms
             );
             Swal.fire('✅ Success!', 'Payment recorded successfully.', 'success');
             await refreshPayments();
