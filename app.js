@@ -18561,10 +18561,9 @@ console.log('✅ Academic Calendar Module Loaded - Complete');
 
 
 
-
-
 // ============================================
-// HOUSES MANAGEMENT - SEPARATE TABLE VERSION
+// HOUSES MANAGEMENT - FINAL MASTERPIECE
+// Clean Icons | Well Spaced | Student Counting
 // ============================================
 
 let housesList = [];
@@ -18587,21 +18586,46 @@ async function loadTeachersForHouses() {
     }
 }
 
-// Load houses from database
+// Load houses from database with student counts
 async function loadHousesFromTable() {
     try {
         await loadTeachersForHouses();
         
-        const { data, error } = await sb
+        const { data: houses, error: housesError } = await sb
             .from('houses')
             .select('*')
             .order('name', { ascending: true });
         
-        if (error) throw error;
-        housesList = data || [];
+        if (housesError) throw housesError;
+        
+        const { data: students, error: studentsError } = await sb
+            .from('students')
+            .select('id, name, admission_no, class, stream, gender, student_type, parent_name, parent_phone, house_id');
+        
+        if (studentsError) throw studentsError;
+        
+        const studentCountMap = {};
+        const studentListMap = {};
+        
+        if (students) {
+            for (const student of students) {
+                if (student.house_id) {
+                    studentCountMap[student.house_id] = (studentCountMap[student.house_id] || 0) + 1;
+                    if (!studentListMap[student.house_id]) studentListMap[student.house_id] = [];
+                    studentListMap[student.house_id].push(student);
+                }
+            }
+        }
+        
+        housesList = (houses || []).map(house => ({
+            ...house,
+            student_count: studentCountMap[house.id] || 0,
+            student_list: studentListMap[house.id] || []
+        }));
         
         renderHousesTable();
         return housesList;
+        
     } catch (error) {
         console.error('Error loading houses:', error);
         housesList = [];
@@ -18610,7 +18634,7 @@ async function loadHousesFromTable() {
     }
 }
 
-// Render houses table
+// Render houses table with clean, well-spaced buttons
 function renderHousesTable() {
     const container = document.getElementById('housesListContainer');
     if (!container) return;
@@ -18627,7 +18651,7 @@ function renderHousesTable() {
     
     let html = `
         <div class="table-responsive">
-            <table class="table table-bordered">
+            <table class="table table-bordered table-hover">
                 <thead class="table-primary">
                     <tr>
                         <th width="40">#</th>
@@ -18636,8 +18660,8 @@ function renderHousesTable() {
                         <th width="100">Code</th>
                         <th width="200">House Head</th>
                         <th>Description</th>
-                        <th width="50">Students</th>
-                        <th width="100">Actions</th>
+                        <th width="100">Students</th>
+                        <th width="120">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="housesTableBody">
@@ -18647,46 +18671,53 @@ function renderHousesTable() {
         const teacherDropdown = getTeacherDropdownOptions(house.head_teacher_id);
         
         html += `
-            <tr data-house-id="${house.id}">
+            <tr data-house-id="${house.id}" style="vertical-align: middle;">
                 <td class="text-center">${index + 1}</td>
                 <td>
-                    <input type="text" class="form-control house-name" value="${escapeHtml(house.name)}" 
+                    <input type="text" class="form-control form-control-sm house-name" value="${escapeHtml(house.name)}" 
                            placeholder="e.g., Red House" style="font-weight: bold;">
                  </span></td>
                 <td>
                     <div class="d-flex flex-column gap-1">
-                        <input type="color" class="form-control house-color" value="${house.color}" style="width: 60px; height: 40px;">
+                        <input type="color" class="form-control form-control-sm house-color" value="${house.color}" style="width: 50px; height: 35px; padding: 2px;">
                         <input type="text" class="form-control form-control-sm house-color-text" value="${house.color}" 
-                               placeholder="#HEX" style="width: 80px; font-size: 11px;">
+                               placeholder="#HEX" style="width: 75px; font-size: 10px; text-align: center;">
                     </div>
                  </span></td>
                 <td>
-                    <input type="text" class="form-control house-code" value="${escapeHtml(house.code || '')}" 
-                           placeholder="e.g., RED" style="text-transform: uppercase;">
+                    <input type="text" class="form-control form-control-sm house-code" value="${escapeHtml(house.code || '')}" 
+                           placeholder="e.g., RED" style="text-transform: uppercase; text-align: center;">
                  </span></td>
                 <td>
-                    <select class="form-select house-head-teacher" data-house-id="${house.id}">
+                    <select class="form-select form-select-sm house-head-teacher" data-house-id="${house.id}" style="font-size: 12px;">
                         ${teacherDropdown}
                     </select>
-                    <div class="mt-1">
+                    <div class="mt-1 text-center">
                         <small class="text-muted house-head-display">
-                            ${house.head_teacher_name ? `<span class="badge bg-info">${escapeHtml(house.head_teacher_name)}</span>` : '<span class="text-muted">Not assigned</span>'}
+                            ${house.head_teacher_name ? `<span class="badge bg-info" style="font-size: 10px;">${escapeHtml(house.head_teacher_name)}</span>` : '<span class="text-muted" style="font-size: 10px;">Not assigned</span>'}
                         </small>
                     </div>
                  </span></td>
                 <td>
-                    <textarea class="form-control house-description" rows="2" placeholder="House description...">${escapeHtml(house.description || '')}</textarea>
+                    <textarea class="form-control form-control-sm house-description" rows="2" placeholder="House description..." style="font-size: 11px;">${escapeHtml(house.description || '')}</textarea>
                  </span></td>
                 <td class="text-center">
-                    <span class="badge bg-secondary">${house.student_count || 0}</span>
+                    <span class="badge bg-primary" style="font-size: 13px; padding: 8px 12px; border-radius: 20px;">
+                        <i class="fas fa-users"></i> ${house.student_count || 0}
+                    </span>
                  </span></td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editHouse('${house.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteHouseFromTable('${house.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button class="btn btn-sm btn-outline-primary" onclick="editHouse('${house.id}')" title="Edit House" style="width: 32px; height: 32px; border-radius: 8px;">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteHouseFromTable('${house.id}')" title="Delete House" style="width: 32px; height: 32px; border-radius: 8px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" onclick="printHouseStudents('${house.id}')" title="Print Student List" style="width: 32px; height: 32px; border-radius: 8px;">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </div>
                  </span></td>
             </tr>
         `;
@@ -18696,24 +18727,20 @@ function renderHousesTable() {
                 </tbody>
             </table>
         </div>
-        <div class="alert alert-success mt-3 small">
+        <div class="alert alert-success mt-3 small text-center">
             <i class="fas fa-lightbulb"></i> 
-            <strong>Tip:</strong> Students can be assigned to houses during registration or editing.
+            <strong>Tip:</strong> Student counts update automatically. Hover over icons for actions.
         </div>
     `;
     
     container.innerHTML = html;
     
-    // Add event listeners for color picker sync
+    // Color picker sync
     document.querySelectorAll('.house-color').forEach((colorPicker, idx) => {
         const textInput = document.querySelectorAll('.house-color-text')[idx];
         if (textInput) {
-            colorPicker.addEventListener('input', (e) => {
-                textInput.value = e.target.value;
-            });
-            textInput.addEventListener('input', (e) => {
-                colorPicker.value = e.target.value;
-            });
+            colorPicker.addEventListener('input', (e) => { textInput.value = e.target.value; });
+            textInput.addEventListener('input', (e) => { colorPicker.value = e.target.value; });
         }
     });
 }
@@ -18728,92 +18755,147 @@ function getTeacherDropdownOptions(selectedId = null) {
     return options;
 }
 
+// Print Student List for a House (Only Print Option)
+window.printHouseStudents = async function(houseId) {
+    const house = housesList.find(h => h.id === houseId);
+    if (!house) return;
+    
+    if (house.student_count === 0) {
+        Swal.fire('No Students', `No students assigned to ${house.name} yet.`, 'info');
+        return;
+    }
+    
+    const { data: students, error } = await sb.from('students').select('*').eq('house_id', houseId).order('name', { ascending: true });
+    if (error) { Swal.fire('Error', 'Could not load student data', 'error'); return; }
+    
+    const { data: schoolData } = await sb.from('school_settings').select('*').limit(1).maybeSingle();
+    const schoolInfo = schoolData || { school_name: 'UGANDA SCHOOL SYSTEM', school_motto: 'Education for All', school_logo: '', principal_name: 'Principal' };
+    
+    const printWindow = window.open('', '_blank');
+    const currentDate = new Date().toLocaleDateString('en-GB');
+    const logoUrl = schoolInfo.school_logo || '';
+    
+    let studentsHtml = '';
+    const maleCount = students.filter(s => s.gender === 'Male').length;
+    const femaleCount = students.filter(s => s.gender === 'Female').length;
+    const dayCount = students.filter(s => s.student_type === 'Day').length;
+    const boardingCount = students.filter(s => s.student_type === 'Boarding').length;
+    
+    students.forEach((student, index) => {
+        studentsHtml += `
+            <tr>
+                <td style="padding: 8px; text-align: center;">${index + 1}</span>
+                <td style="padding: 8px;"><strong>${escapeHtml(student.name)}</strong></span>
+                <td style="padding: 8px; text-align: center;">${student.admission_no || '-'}</span>
+                <td style="padding: 8px; text-align: center;">${student.class || '-'}${student.stream ? ' - ' + student.stream : ''}</span>
+                <td style="padding: 8px; text-align: center;">${student.gender || '-'}</span>
+                <td style="padding: 8px; text-align: center;">${student.student_type || 'Day'}</span>
+                <td style="padding: 8px;">${escapeHtml(student.parent_name || '-')}</span>
+                <td style="padding: 8px; text-align: center;">${student.parent_phone || '-'}</span>
+            </tr>
+        `;
+    });
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>${house.name} - Student List</title>
+            <style>
+                @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
+                body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid ${house.color}; padding-bottom: 15px; }
+                .school-name { font-size: 22px; font-weight: bold; color: #01605a; }
+                .house-title { font-size: 24px; font-weight: bold; color: ${house.color}; margin: 10px 0; }
+                .stats-box { display: flex; justify-content: space-around; margin: 15px 0; padding: 10px; background: #f5f5f5; border-radius: 10px; }
+                .stat-item { text-align: center; }
+                .stat-value { font-size: 20px; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th, td { border: 1px solid #ddd; padding: 8px; }
+                th { background: ${house.color}; color: white; }
+                .signature { margin-top: 30px; display: flex; justify-content: space-between; }
+                .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #666; }
+                .school-logo { max-width: 80px; max-height: 80px; margin-bottom: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                ${logoUrl ? `<img src="${logoUrl}" class="school-logo">` : ''}
+                <div class="school-name">${escapeHtml(schoolInfo.school_name)}</div>
+                <div class="house-title">🏠 ${escapeHtml(house.name)} - STUDENT LIST</div>
+                <div>House Head: ${escapeHtml(house.head_teacher_name || 'Not Assigned')} | Generated: ${currentDate}</div>
+            </div>
+            <div class="stats-box">
+                <div class="stat-item"><div class="stat-value">${students.length}</div><div>Total</div></div>
+                <div class="stat-item"><div class="stat-value">${maleCount}</div><div>Male</div></div>
+                <div class="stat-item"><div class="stat-value">${femaleCount}</div><div>Female</div></div>
+                <div class="stat-item"><div class="stat-value">${dayCount}</div><div>Day</div></div>
+                <div class="stat-item"><div class="stat-value">${boardingCount}</div><div>Boarding</div></div>
+            </div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: ${house.color}; color: white;">
+                        <th style="padding: 10px;">#</th>
+                        <th style="padding: 10px;">Student Name</th>
+                        <th style="padding: 10px;">Admission No</th>
+                        <th style="padding: 10px;">Class</th>
+                        <th style="padding: 10px;">Gender</th>
+                        <th style="padding: 10px;">Type</th>
+                        <th style="padding: 10px;">Parent</th>
+                        <th style="padding: 10px;">Phone</th>
+                    </tr>
+                </thead>
+                <tbody>${studentsHtml}</tbody>
+            </table>
+            <div class="signature">
+                <div>_________________<br>House Head</div>
+                <div>_________________<br>${escapeHtml(schoolInfo.principal_name)}</div>
+            </div>
+            <div class="footer">System Generated Report</div>
+            <div class="no-print" style="text-align:center;margin-top:20px;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #01605a; color: white; border: none; border-radius: 5px; margin-right: 10px;">🖨️ Print</button>
+                <button onclick="window.close()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px;">❌ Close</button>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+};
+
 // Add new house
 window.addNewHouse = async function() {
     const { value: formValues } = await Swal.fire({
-        title: 'Add New House',
+        title: '<i class="fas fa-home"></i> Add New House',
         html: `
             <div class="text-start">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">House Name *</label>
-                    <input type="text" id="newHouseName" class="form-control" placeholder="e.g., Red House">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">House Code *</label>
-                    <input type="text" id="newHouseCode" class="form-control" placeholder="e.g., RED" style="text-transform: uppercase;">
-                    <small class="text-muted">Unique code for the house</small>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Color</label>
-                    <div class="d-flex gap-2">
-                        <input type="color" id="newHouseColor" class="form-control" value="#01605a" style="width: 60px;">
-                        <input type="text" id="newHouseColorText" class="form-control" value="#01605a" placeholder="#HEX">
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">House Head Teacher</label>
-                    <select id="newHouseHead" class="form-select">
-                        <option value="">-- Select House Head --</option>
-                        ${teachersList.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${t.staff_id || 'No ID'})</option>`).join('')}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Description</label>
-                    <textarea id="newHouseDesc" class="form-control" rows="2" placeholder="House description..."></textarea>
-                </div>
+                <div class="mb-3"><label class="form-label fw-bold">House Name *</label><input type="text" id="newHouseName" class="form-control" placeholder="e.g., Red House"></div>
+                <div class="mb-3"><label class="form-label fw-bold">House Code *</label><input type="text" id="newHouseCode" class="form-control" placeholder="e.g., RED" style="text-transform: uppercase;"><small class="text-muted">Unique code for the house</small></div>
+                <div class="mb-3"><label class="form-label fw-bold">Color</label><div class="d-flex gap-2"><input type="color" id="newHouseColor" class="form-control" value="#01605a" style="width: 60px;"><input type="text" id="newHouseColorText" class="form-control" value="#01605a" placeholder="#HEX"></div></div>
+                <div class="mb-3"><label class="form-label fw-bold">House Head Teacher</label><select id="newHouseHead" class="form-select"><option value="">-- Select House Head --</option>${teachersList.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${t.staff_id || 'No ID'})</option>`).join('')}</select></div>
+                <div class="mb-3"><label class="form-label fw-bold">Description</label><textarea id="newHouseDesc" class="form-control" rows="2" placeholder="House description..."></textarea></div>
             </div>
         `,
         width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Add House',
+        confirmButtonText: '<i class="fas fa-save"></i> Add House',
         preConfirm: () => {
             const name = document.getElementById('newHouseName')?.value.trim();
             const code = document.getElementById('newHouseCode')?.value.trim().toUpperCase();
-            
-            if (!name) {
-                Swal.showValidationMessage('House name is required');
-                return false;
-            }
-            if (!code) {
-                Swal.showValidationMessage('House code is required');
-                return false;
-            }
-            
-            const color = document.getElementById('newHouseColorText')?.value || '#01605a';
-            const headTeacherId = document.getElementById('newHouseHead')?.value || null;
-            const description = document.getElementById('newHouseDesc')?.value || '';
-            
-            return { name, code, color, headTeacherId, description };
+            if (!name) { Swal.showValidationMessage('House name is required'); return false; }
+            if (!code) { Swal.showValidationMessage('House code is required'); return false; }
+            return { name, code, color: document.getElementById('newHouseColorText')?.value || '#01605a', headTeacherId: document.getElementById('newHouseHead')?.value || null, description: document.getElementById('newHouseDesc')?.value || '' };
         }
     });
     
     if (formValues) {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
         try {
             const headTeacher = teachersList.find(t => t.id === formValues.headTeacherId);
-            
-            const { data, error } = await sb
-                .from('houses')
-                .insert([{
-                    name: formValues.name,
-                    code: formValues.code,
-                    color: formValues.color,
-                    head_teacher_id: formValues.headTeacherId || null,
-                    head_teacher_name: headTeacher?.name || null,
-                    description: formValues.description,
-                    created_at: new Date().toISOString()
-                }])
-                .select();
-            
+            const { error } = await sb.from('houses').insert([{ name: formValues.name, code: formValues.code, color: formValues.color, head_teacher_id: formValues.headTeacherId || null, head_teacher_name: headTeacher?.name || null, description: formValues.description, created_at: new Date().toISOString() }]);
             if (error) throw error;
-            
             Swal.fire('Success!', 'House added successfully.', 'success');
             await loadHousesFromTable();
-            
-        } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
-        }
+        } catch (error) { Swal.fire('Error!', error.message, 'error'); }
     }
 };
 
@@ -18823,272 +18905,125 @@ window.editHouse = async function(houseId) {
     if (!house) return;
     
     const { value: formValues } = await Swal.fire({
-        title: 'Edit House',
+        title: '<i class="fas fa-edit"></i> Edit House',
         html: `
             <div class="text-start">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">House Name *</label>
-                    <input type="text" id="editHouseName" class="form-control" value="${escapeHtml(house.name)}">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">House Code *</label>
-                    <input type="text" id="editHouseCode" class="form-control" value="${escapeHtml(house.code)}" style="text-transform: uppercase;">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Color</label>
-                    <div class="d-flex gap-2">
-                        <input type="color" id="editHouseColor" class="form-control" value="${house.color}" style="width: 60px;">
-                        <input type="text" id="editHouseColorText" class="form-control" value="${house.color}">
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">House Head Teacher</label>
-                    <select id="editHouseHead" class="form-select">
-                        <option value="">-- Select House Head --</option>
-                        ${teachersList.map(t => `<option value="${t.id}" ${house.head_teacher_id === t.id ? 'selected' : ''}>${escapeHtml(t.name)} (${t.staff_id || 'No ID'})</option>`).join('')}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Description</label>
-                    <textarea id="editHouseDesc" class="form-control" rows="2">${escapeHtml(house.description || '')}</textarea>
-                </div>
+                <div class="mb-3"><label class="form-label fw-bold">House Name *</label><input type="text" id="editHouseName" class="form-control" value="${escapeHtml(house.name)}"></div>
+                <div class="mb-3"><label class="form-label fw-bold">House Code *</label><input type="text" id="editHouseCode" class="form-control" value="${escapeHtml(house.code)}" style="text-transform: uppercase;"></div>
+                <div class="mb-3"><label class="form-label fw-bold">Color</label><div class="d-flex gap-2"><input type="color" id="editHouseColor" class="form-control" value="${house.color}" style="width: 60px;"><input type="text" id="editHouseColorText" class="form-control" value="${house.color}"></div></div>
+                <div class="mb-3"><label class="form-label fw-bold">House Head Teacher</label><select id="editHouseHead" class="form-select"><option value="">-- Select House Head --</option>${teachersList.map(t => `<option value="${t.id}" ${house.head_teacher_id === t.id ? 'selected' : ''}>${escapeHtml(t.name)} (${t.staff_id || 'No ID'})</option>`).join('')}</select></div>
+                <div class="mb-3"><label class="form-label fw-bold">Description</label><textarea id="editHouseDesc" class="form-control" rows="2">${escapeHtml(house.description || '')}</textarea></div>
             </div>
         `,
         width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Save Changes',
+        confirmButtonText: '<i class="fas fa-save"></i> Save Changes',
         preConfirm: () => {
             const name = document.getElementById('editHouseName')?.value.trim();
             const code = document.getElementById('editHouseCode')?.value.trim().toUpperCase();
-            
-            if (!name) {
-                Swal.showValidationMessage('House name is required');
-                return false;
-            }
-            if (!code) {
-                Swal.showValidationMessage('House code is required');
-                return false;
-            }
-            
-            return {
-                name: name,
-                code: code,
-                color: document.getElementById('editHouseColorText')?.value || '#01605a',
-                headTeacherId: document.getElementById('editHouseHead')?.value || null,
-                description: document.getElementById('editHouseDesc')?.value || ''
-            };
+            if (!name) { Swal.showValidationMessage('House name is required'); return false; }
+            if (!code) { Swal.showValidationMessage('House code is required'); return false; }
+            return { name, code, color: document.getElementById('editHouseColorText')?.value || '#01605a', headTeacherId: document.getElementById('editHouseHead')?.value || null, description: document.getElementById('editHouseDesc')?.value || '' };
         }
     });
     
     if (formValues) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
         try {
             const headTeacher = teachersList.find(t => t.id === formValues.headTeacherId);
-            
-            const { error } = await sb
-                .from('houses')
-                .update({
-                    name: formValues.name,
-                    code: formValues.code,
-                    color: formValues.color,
-                    head_teacher_id: formValues.headTeacherId || null,
-                    head_teacher_name: headTeacher?.name || null,
-                    description: formValues.description,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', houseId);
-            
+            const { error } = await sb.from('houses').update({ name: formValues.name, code: formValues.code, color: formValues.color, head_teacher_id: formValues.headTeacherId || null, head_teacher_name: headTeacher?.name || null, description: formValues.description, updated_at: new Date().toISOString() }).eq('id', houseId);
             if (error) throw error;
-            
             Swal.fire('Success!', 'House updated successfully.', 'success');
             await loadHousesFromTable();
-            
-        } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
-        }
+        } catch (error) { Swal.fire('Error!', error.message, 'error'); }
     }
 };
 
 // Delete house
 window.deleteHouseFromTable = async function(houseId) {
     const house = housesList.find(h => h.id === houseId);
-    
-    // Check if house has students
     if (house.student_count > 0) {
-        Swal.fire({
-            title: 'Cannot Delete',
-            html: `House "${house.name}" has <strong>${house.student_count} students</strong> assigned.<br><br>Please reassign or remove students first.`,
-            icon: 'warning',
-            confirmButtonText: 'OK'
-        });
+        Swal.fire({ title: 'Cannot Delete', html: `House "${house.name}" has <strong>${house.student_count} students</strong> assigned.<br><br>Please reassign or remove students first.`, icon: 'warning', confirmButtonText: 'OK' });
         return;
     }
-    
-    const result = await Swal.fire({
-        title: 'Delete House?',
-        html: `Are you sure you want to delete <strong>${escapeHtml(house.name)}</strong>?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete',
-        cancelButtonText: 'Cancel'
-    });
-    
+    const result = await Swal.fire({ title: 'Delete House?', html: `Are you sure you want to delete <strong>${escapeHtml(house.name)}</strong>?`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Yes, delete' });
     if (result.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
         try {
-            const { error } = await sb
-                .from('houses')
-                .delete()
-                .eq('id', houseId);
-            
+            const { error } = await sb.from('houses').delete().eq('id', houseId);
             if (error) throw error;
-            
             Swal.fire('Deleted!', 'House has been removed.', 'success');
             await loadHousesFromTable();
-            
-        } catch (error) {
-            Swal.fire('Error!', error.message, 'error');
-        }
+        } catch (error) { Swal.fire('Error!', error.message, 'error'); }
     }
 };
-// ============================================
-// SAVE ALL HOUSES - SAVE ALL CHANGES AT ONCE
-// ============================================
 
+// Refresh student counts
+window.refreshHouseStudentCounts = async function() {
+    Swal.fire({ title: 'Updating counts...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        const { data: students } = await sb.from('students').select('house_id');
+        const countMap = {};
+        const listMap = {};
+        if (students) {
+            for (const student of students) {
+                if (student.house_id) {
+                    countMap[student.house_id] = (countMap[student.house_id] || 0) + 1;
+                    if (!listMap[student.house_id]) listMap[student.house_id] = [];
+                    listMap[student.house_id].push(student);
+                }
+            }
+        }
+        for (let i = 0; i < housesList.length; i++) {
+            housesList[i].student_count = countMap[housesList[i].id] || 0;
+            housesList[i].student_list = listMap[housesList[i].id] || [];
+        }
+        renderHousesTable();
+        Swal.close();
+        Swal.fire({ title: 'Updated!', text: 'Student counts refreshed.', icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (error) { Swal.close(); Swal.fire('Error!', error.message, 'error'); }
+};
+
+// Save all houses
 window.saveAllHouses = async function() {
-    console.log("Save All Houses button clicked");
-    
-    // Collect all values from the table inputs
     const rows = document.querySelectorAll('#housesTableBody tr');
-    
-    if (rows.length === 0) {
-        Swal.fire('Error', 'No houses to save', 'error');
-        return;
-    }
+    if (rows.length === 0) { Swal.fire('Error', 'No houses to save', 'error'); return; }
     
     const updatedHouses = [];
-    
-    for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
-        
-        // Get values from each input
-        const nameInput = row.querySelector('.house-name');
-        const colorInput = row.querySelector('.house-color');
-        const colorTextInput = row.querySelector('.house-color-text');
-        const codeInput = row.querySelector('.house-code');
-        const headTeacherSelect = row.querySelector('.house-head-teacher');
-        const descInput = row.querySelector('.house-description');
-        
-        const houseName = nameInput ? nameInput.value.trim() : '';
-        const houseColor = colorTextInput ? colorTextInput.value : (colorInput ? colorInput.value : '#01605a');
-        const houseCode = codeInput ? codeInput.value.trim().toUpperCase() : '';
-        const headTeacherId = headTeacherSelect ? headTeacherSelect.value : null;
-        const houseDescription = descInput ? descInput.value.trim() : '';
-        
-        // Get teacher name if selected
+    for (const row of rows) {
+        const houseName = row.querySelector('.house-name')?.value.trim() || '';
+        const houseColor = row.querySelector('.house-color-text')?.value || row.querySelector('.house-color')?.value || '#01605a';
+        const houseCode = row.querySelector('.house-code')?.value.trim().toUpperCase() || '';
+        const headTeacherId = row.querySelector('.house-head-teacher')?.value || null;
+        const houseDescription = row.querySelector('.house-description')?.value.trim() || '';
         let headTeacherName = '';
         if (headTeacherId) {
             const selectedTeacher = teachersList.find(t => t.id == headTeacherId);
-            if (selectedTeacher) {
-                headTeacherName = selectedTeacher.name;
-            }
+            if (selectedTeacher) headTeacherName = selectedTeacher.name;
         }
-        
-        // Get existing house ID
         const houseId = row.getAttribute('data-house-id');
-        
-        if (houseName) {
-            updatedHouses.push({
-                id: houseId || null,
-                name: houseName,
-                color: houseColor,
-                code: houseCode || houseName.substring(0, 3).toUpperCase(),
-                head_teacher_id: headTeacherId || null,
-                head_teacher_name: headTeacherName,
-                description: houseDescription
-            });
-        }
+        if (houseName) updatedHouses.push({ id: houseId || null, name: houseName, color: houseColor, code: houseCode || houseName.substring(0, 3).toUpperCase(), head_teacher_id: headTeacherId || null, head_teacher_name: headTeacherName, description: houseDescription });
     }
     
-    if (updatedHouses.length === 0) {
-        Swal.fire('Error', 'Please add at least one house before saving.', 'error');
-        return;
-    }
+    if (updatedHouses.length === 0) { Swal.fire('Error', 'Please add at least one house before saving.', 'error'); return; }
     
-    Swal.fire({ 
-        title: 'Saving houses...', 
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
-    });
-    
+    Swal.fire({ title: 'Saving houses...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
-        let saved = 0;
-        let errors = 0;
-        
+        let saved = 0, errors = 0;
         for (const house of updatedHouses) {
             if (house.id) {
-                // UPDATE existing house
-                const { error } = await sb
-                    .from('houses')
-                    .update({
-                        name: house.name,
-                        code: house.code,
-                        color: house.color,
-                        head_teacher_id: house.head_teacher_id,
-                        head_teacher_name: house.head_teacher_name,
-                        description: house.description,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', house.id);
-                
-                if (error) {
-                    console.error('Update error:', error);
-                    errors++;
-                } else {
-                    saved++;
-                }
+                const { error } = await sb.from('houses').update({ name: house.name, code: house.code, color: house.color, head_teacher_id: house.head_teacher_id, head_teacher_name: house.head_teacher_name, description: house.description, updated_at: new Date().toISOString() }).eq('id', house.id);
+                error ? errors++ : saved++;
             } else {
-                // INSERT new house
-                const { error } = await sb
-                    .from('houses')
-                    .insert({
-                        name: house.name,
-                        code: house.code,
-                        color: house.color,
-                        head_teacher_id: house.head_teacher_id,
-                        head_teacher_name: house.head_teacher_name,
-                        description: house.description,
-                        created_at: new Date().toISOString()
-                    });
-                
-                if (error) {
-                    console.error('Insert error:', error);
-                    errors++;
-                } else {
-                    saved++;
-                }
+                const { error } = await sb.from('houses').insert({ name: house.name, code: house.code, color: house.color, head_teacher_id: house.head_teacher_id, head_teacher_name: house.head_teacher_name, description: house.description, created_at: new Date().toISOString() });
+                error ? errors++ : saved++;
             }
         }
-        
         Swal.close();
-        
-        if (errors > 0) {
-            Swal.fire('Partial Success', `✅ ${saved} saved | ❌ ${errors} failed`, 'warning');
-        } else {
-            Swal.fire('Success!', `✅ ${saved} houses saved successfully!`, 'success');
-        }
-        
-        // Refresh the list to get new IDs and updated data
+        if (errors > 0) Swal.fire('Partial Success', `✅ ${saved} saved | ❌ ${errors} failed`, 'warning');
+        else Swal.fire('Success!', `✅ ${saved} houses saved successfully!`, 'success');
         await loadHousesFromTable();
-        
-    } catch (error) {
-        Swal.close();
-        console.error('Save error:', error);
-        Swal.fire('Error!', error.message, 'error');
-    }
+    } catch (error) { Swal.close(); Swal.fire('Error!', error.message, 'error'); }
 };
 
 // Initialize houses tab
@@ -19096,15 +19031,11 @@ if (typeof showTab === 'function') {
     const originalShowTab = window.showTab;
     window.showTab = function(tabName) {
         originalShowTab(tabName);
-        if (tabName === 'houses') {
-            loadHousesFromTable();
-        }
+        if (tabName === 'houses') loadHousesFromTable();
     };
 }
 
-console.log('✅ Houses Table Module Loaded');
-
-
+console.log('✅ HOUSES MANAGEMENT - FINAL MASTERPIECE LOADED!');
 // ============================================
 // PART 10: INITIALIZE SETTINGS PAGE
 // ============================================
