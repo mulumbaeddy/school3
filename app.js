@@ -6391,8 +6391,13 @@ window.deleteMark = async function(id) {
     if (!finalConfirm.isConfirmed) return;
 
     Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
     try {
-        await deleteMark(id);
+        // ACTUAL DELETE OPERATION - THIS WAS MISSING!
+        const { error } = await sb.from('marks').delete().eq('id', id);
+        
+        if (error) throw error;
+        
         Swal.fire('Deleted!', 'Mark record has been deleted.', 'success');
         await loadMarksTable();
     } catch (error) {
@@ -6405,6 +6410,7 @@ window.deleteMark = async function(id) {
 window.bulkDeleteMarks = async function() {
     const checkboxes = document.querySelectorAll('.markCheck:checked');
     const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
+    
     if (ids.length === 0) {
         Swal.fire('Error', 'No marks selected', 'error');
         return;
@@ -6431,7 +6437,7 @@ window.bulkDeleteMarks = async function() {
         return;
     }
 
-    // Final confirmation with typing
+    // Final confirmation with typing "DELETE"
     const finalConfirm = await Swal.fire({
         title: '🔴 FINAL CONFIRMATION',
         html: `<p>Authorization successful. Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> mark records.</p>`,
@@ -6450,14 +6456,31 @@ window.bulkDeleteMarks = async function() {
     });
     if (!finalConfirm.isConfirmed) return;
 
-    Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ 
+        title: 'Deleting...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
     try {
-        for (const id of ids) {
-            await deleteMark(id);
-        }
-        Swal.fire('Deleted!', `${ids.length} mark records deleted.`, 'success');
+        // FIXED: Single batch delete instead of loop
+        const { error, count } = await sb
+            .from('marks')
+            .delete()
+            .in('id', ids);
+        
+        if (error) throw error;
+        
+        Swal.fire({
+            title: 'Deleted!', 
+            text: `${ids.length} mark records deleted successfully.`,
+            icon: 'success'
+        });
+        
         await loadMarksTable();
+        
     } catch (error) {
+        console.error('Bulk delete error:', error);
         Swal.fire('Error!', error.message, 'error');
     }
 };
@@ -16115,7 +16138,8 @@ async function generateAlevelBoardHtml() {
                 <button class="tab-btn" onclick="showTab('alevel')">📈 A-Level</button>
                 <button class="tab-btn" onclick="showTab('fee')">💰 Fee Structure</button>
                 <button class="tab-btn" onclick="showTab('academic')">📅 Academic</button>
-                 <button class="tab-btn" onclick="showTab('houses')">🏠 Houses</button> 
+                <button class="tab-btn" onclick="showTab('houses')">🏠 Houses</button> 
+                <button class="tab-btn" onclick="showTab('passwords')">🔑 Passwords</button>
             </div>
             
             <!-- SCHOOL INFO PANEL -->
@@ -16202,6 +16226,8 @@ async function generateAlevelBoardHtml() {
                     </div>
                 </div>
             </div>
+
+
             
  <!-- ============================================ -->
 <!-- PART 3: A-LEVEL PANEL HTML                  -->
@@ -16658,7 +16684,139 @@ async function generateAlevelBoardHtml() {
             </button>
         </div>
      </div>
-     </div>
+     </div> 
+     <!-- ============================================ -->
+<!-- PASSWORD MANAGEMENT TAB PANEL                -->
+<!-- Add this inside your settings container      -->
+<!-- ============================================ -->
+
+<div id="tab-passwords" class="tab-panel">
+    <div class="info-card">
+        <h5><i class="fas fa-key"></i> Password Management</h5>
+        <div class="alert alert-info mb-4">
+            <i class="fas fa-info-circle"></i> 
+            <strong>Security:</strong> Manage user passwords securely. All password changes are logged for audit purposes.
+            <br>
+            <i class="fas fa-shield-alt"></i> Only Super Admin has full access to reset other users' passwords.
+        </div>
+        
+        <!-- ============================================ -->
+        <!-- CHANGE MY OWN PASSWORD                       -->
+        <!-- ============================================ -->
+        <div class="grade-card mb-4">
+            <h6><i class="fas fa-user-lock"></i> Change My Password</h6>
+            <div class="alert alert-warning small mb-3">
+                <i class="fas fa-exclamation-triangle"></i> 
+                <strong>Security Tip:</strong> Change your password regularly. Use a strong password with at least 6 characters.
+            </div>
+            <button class="btn btn-primary" onclick="changeMyPassword()">
+                <i class="fas fa-key"></i> Change My Password
+            </button>
+        </div>
+        
+        <!-- ============================================ -->
+        <!-- MANAGE USER PASSWORDS (SUPER ADMIN ONLY)     -->
+        <!-- ============================================ -->
+        <div class="grade-card mb-4">
+            <h6><i class="fas fa-users-cog"></i> Manage User Passwords</h6>
+            <div class="alert alert-info small mb-3">
+                <i class="fas fa-shield-alt"></i> 
+                <strong>Super Admin Access:</strong> You can reset passwords for any user in the system.
+            </div>
+            
+            <!-- Search and Filter -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <input type="text" id="passwordUserSearch" class="form-control" 
+                           placeholder="🔍 Search by email or name..." 
+                           onkeyup="filterPasswordUsers()">
+                </div>
+                <div class="col-md-3">
+                    <select id="passwordRoleFilter" class="form-select" onchange="filterPasswordUsers()">
+                        <option value="">All Roles</option>
+                        <option value="superadmin">👑 Super Admin</option>
+                        <option value="admin">📊 Admin</option>
+                        <option value="teacher">👨‍🏫 Teacher</option>
+                        <option value="accountant">💰 Accountant</option>
+                        <option value="librarian">📚 Librarian</option>
+                        <option value="secretary">📝 Secretary</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-secondary w-100" onclick="refreshPasswordUsersList()">
+                        <i class="fas fa-sync-alt"></i> Refresh List
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Users Table -->
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-bordered">
+                    <thead class="table-primary">
+                        <tr>
+                            <th>Email</th>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th width="120">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="passwordUsersTableBody">
+                        <tr><td colspan="5" class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin"></i> Loading users...
+                         </span>络
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="alert alert-success mt-3 small">
+                <i class="fas fa-lightbulb"></i> 
+                <strong>Note:</strong> When you reset a user's password, they will need to login with the new password immediately.
+                <br>
+                <i class="fas fa-info-circle"></i> The "Change" button for your own account will verify your current password first.
+            </div>
+        </div>
+        
+        <!-- ============================================ -->
+        <!-- PASSWORD CHANGE LOGS (SUPER ADMIN ONLY)      -->
+        <!-- ============================================ -->
+        <div class="grade-card">
+            <h6><i class="fas fa-history"></i> Password Change Logs</h6>
+            <div class="alert alert-secondary small mb-3">
+                <i class="fas fa-clock"></i> 
+                <strong>Audit Trail:</strong> Shows all password change activities in the system for security monitoring.
+            </div>
+            
+            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                <table class="table table-bordered">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th width="180">Date & Time</th>
+                            <th>User</th>
+                            <th>Changed By</th>
+                            <th width="140">IP Address</th>
+                        </tr>
+                    </thead>
+                    <tbody id="passwordLogsTableBody">
+                        <tr><td colspan="4" class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin"></i> Loading logs...
+                         </span>络
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="text-end mt-3">
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshPasswordUsersList()">
+                    <i class="fas fa-sync-alt"></i> Refresh Logs
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+     
 
         
     `;
@@ -19036,6 +19194,400 @@ if (typeof showTab === 'function') {
 }
 
 console.log('✅ HOUSES MANAGEMENT - FINAL MASTERPIECE LOADED!');
+
+
+
+
+
+// ============================================
+// PASSWORD MANAGEMENT - WITH EDGE FUNCTION
+// ============================================
+
+let allPasswordUsers = [];
+let passwordChangeLogs = [];
+
+function isSuperAdmin() {
+    return currentUserRole === 'superadmin';
+}
+
+async function loadPasswordUsers() {
+    if (!isSuperAdmin()) return [];
+    
+    try {
+        const { data, error } = await sb
+            .from('users')
+            .select('id, email, name, role, created_at, updated_at')
+            .order('email', { ascending: true });
+        
+        if (error) throw error;
+        allPasswordUsers = data || [];
+        renderPasswordUsersTable();
+        return allPasswordUsers;
+    } catch (error) {
+        console.error('Error:', error);
+        return [];
+    }
+}
+
+function renderPasswordUsersTable() {
+    const tbody = document.getElementById('passwordUsersTableBody');
+    if (!tbody) return;
+    
+    if (!isSuperAdmin()) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">
+            <i class="fas fa-lock"></i> Access Denied
+         </span></tr>`;
+        return;
+    }
+    
+    const search = document.getElementById('passwordUserSearch')?.value.toLowerCase() || '';
+    const roleFilter = document.getElementById('passwordRoleFilter')?.value;
+    
+    let filteredUsers = allPasswordUsers;
+    if (search) {
+        filteredUsers = filteredUsers.filter(u => 
+            u.email.toLowerCase().includes(search) || 
+            (u.name && u.name.toLowerCase().includes(search))
+        );
+    }
+    if (roleFilter) {
+        filteredUsers = filteredUsers.filter(u => u.role === roleFilter);
+    }
+    
+    if (filteredUsers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No users found</span></tr>';
+        return;
+    }
+    
+    let html = '';
+    for (const user of filteredUsers) {
+        const roleBadge = getRoleBadgeForPassword(user.role);
+        const isCurrentUser = user.id === currentUser?.id;
+        
+        html += `
+            <tr>
+                <td class="align-middle">${escapeHtml(user.email)}</span></td>
+                <td class="align-middle">${escapeHtml(user.name || '-')}</span></td>
+                <td class="align-middle text-center">${roleBadge}</span></td>
+                <td class="align-middle text-center">
+                    <span class="badge bg-success">Active</span>
+                </span></td>
+                <td class="align-middle text-center">
+                    <button class="btn btn-sm ${isCurrentUser ? 'btn-warning' : 'btn-outline-primary'}" 
+                            onclick="resetUserPassword('${user.id}', '${escapeHtml(user.email)}', '${escapeHtml(user.name || user.email)}')">
+                        <i class="fas fa-key"></i> ${isCurrentUser ? 'Change' : 'Reset'}
+                    </button>
+                </span></td>
+            </tr>
+        `;
+    }
+    tbody.innerHTML = html;
+}
+
+function getRoleBadgeForPassword(role) {
+    const colors = {
+        superadmin: 'bg-danger',
+        admin: 'bg-primary',
+        teacher: 'bg-info',
+        accountant: 'bg-warning text-dark',
+        librarian: 'bg-dark',
+        secretary: 'bg-success'
+    };
+    const color = colors[role] || 'bg-secondary';
+    return `<span class="badge ${color}">${role.toUpperCase()}</span>`;
+}
+
+window.filterPasswordUsers = function() {
+    renderPasswordUsersTable();
+};
+
+window.refreshPasswordUsersList = async function() {
+    Swal.fire({ title: 'Refreshing...', didOpen: () => Swal.showLoading() });
+    await loadPasswordUsers();
+    await loadPasswordChangeLogs();
+    Swal.close();
+    Swal.fire('Refreshed!', 'Users updated.', 'success');
+};
+
+// Call Edge Function to reset password
+async function callResetPasswordEdge(userId, newPassword) {
+    const { data: { session } } = await sb.auth.getSession();
+    
+    if (!session) {
+        throw new Error('No active session');
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/reset-password`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+            userId: userId,
+            newPassword: newPassword
+        })
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(result.error || 'Failed to reset password');
+    }
+    
+    return result;
+}
+
+function generateRandomPassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@#$';
+    let password = '';
+    for (let i = 0; i < 10; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+}
+
+// Reset user password
+window.resetUserPassword = async function(userId, userEmail, userName) {
+    if (!isSuperAdmin()) {
+        Swal.fire('Access Denied', 'Only Super Admin can reset passwords.', 'error');
+        return;
+    }
+    
+    const isOwnAccount = userId === currentUser?.id;
+    
+    const { value: choice } = await Swal.fire({
+        title: isOwnAccount ? 'Change Your Password' : `Reset Password: ${escapeHtml(userName)}`,
+        html: `
+            <div class="text-start">
+                ${!isOwnAccount ? `
+                <div class="mb-3">
+                    <label class="form-label">Reset Method</label>
+                    <select id="resetMethod" class="form-select">
+                        <option value="custom">✏️ Set Custom Password</option>
+                        <option value="random">🎲 Generate Random Password</option>
+                    </select>
+                </div>
+                ` : ''}
+                <div id="customDiv">
+                    <div class="mb-3">
+                        <label>New Password *</label>
+                        <input type="password" id="newPassword" class="form-control">
+                        <small>Minimum 6 characters</small>
+                    </div>
+                    <div class="mb-3">
+                        <label>Confirm Password *</label>
+                        <input type="password" id="confirmPassword" class="form-control">
+                    </div>
+                </div>
+                <div id="randomDiv" style="display:none">
+                    <div class="alert alert-info text-center">
+                        <code id="randomPassword" style="font-size:18px"></code>
+                    </div>
+                </div>
+                ${isOwnAccount ? `
+                <div class="mb-3">
+                    <label>Current Password *</label>
+                    <input type="password" id="currentPassword" class="form-control">
+                </div>
+                ` : ''}
+            </div>
+        `,
+        width: '500px',
+        showCancelButton: true,
+        confirmButtonText: 'Update Password',
+        didOpen: () => {
+            if (!isOwnAccount) {
+                const methodSelect = document.getElementById('resetMethod');
+                const customDiv = document.getElementById('customDiv');
+                const randomDiv = document.getElementById('randomDiv');
+                const randomDisplay = document.getElementById('randomPassword');
+                
+                randomDisplay.textContent = generateRandomPassword();
+                
+                methodSelect.onchange = () => {
+                    if (methodSelect.value === 'custom') {
+                        customDiv.style.display = 'block';
+                        randomDiv.style.display = 'none';
+                    } else {
+                        customDiv.style.display = 'none';
+                        randomDiv.style.display = 'block';
+                        randomDisplay.textContent = generateRandomPassword();
+                    }
+                };
+            }
+        },
+        preConfirm: () => {
+            if (!isOwnAccount) {
+                const method = document.getElementById('resetMethod').value;
+                if (method === 'custom') {
+                    const pwd = document.getElementById('newPassword').value;
+                    const confirm = document.getElementById('confirmPassword').value;
+                    if (!pwd) return Swal.showValidationMessage('Enter password');
+                    if (pwd.length < 6) return Swal.showValidationMessage('Minimum 6 chars');
+                    if (pwd !== confirm) return Swal.showValidationMessage('Passwords do not match');
+                    return { newPassword: pwd, method: 'custom', userId, userName };
+                } else {
+                    const pwd = document.getElementById('randomPassword').textContent;
+                    return { newPassword: pwd, method: 'random', userId, userName };
+                }
+            } else {
+                const pwd = document.getElementById('newPassword').value;
+                const confirm = document.getElementById('confirmPassword').value;
+                const current = document.getElementById('currentPassword').value;
+                if (!current) return Swal.showValidationMessage('Enter current password');
+                if (!pwd) return Swal.showValidationMessage('Enter new password');
+                if (pwd.length < 6) return Swal.showValidationMessage('Minimum 6 chars');
+                if (pwd !== confirm) return Swal.showValidationMessage('Passwords do not match');
+                return { newPassword: pwd, currentPassword: current, isOwnAccount: true, userId };
+            }
+        }
+    });
+    
+    if (choice) {
+        Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
+        
+        try {
+            if (choice.isOwnAccount) {
+                const { error: signError } = await sb.auth.signInWithPassword({
+                    email: currentUser.email,
+                    password: choice.currentPassword
+                });
+                if (signError) throw new Error('Current password incorrect');
+                
+                const { error } = await sb.auth.updateUser({ password: choice.newPassword });
+                if (error) throw error;
+                
+                await logPasswordChange(choice.userId, currentUser.id, 'self');
+                
+                Swal.fire('Success!', 'Password changed. Login again.', 'success').then(() => {
+                    localStorage.clear();
+                    location.reload();
+                });
+            } else {
+                await callResetPasswordEdge(choice.userId, choice.newPassword);
+                await logPasswordChange(choice.userId, currentUser.id, choice.method);
+                
+                let msg = choice.method === 'random' 
+                    ? `<p>Password for ${escapeHtml(choice.userName)} has been reset!</p>
+                       <div class="alert alert-success"><code>${choice.newPassword}</code></div>
+                       <button class="btn btn-sm btn-info" onclick="navigator.clipboard.writeText('${choice.newPassword}')">
+                           <i class="fas fa-copy"></i> Copy Password
+                       </button>`
+                    : `Password for ${escapeHtml(choice.userName)} has been reset.`;
+                
+                Swal.fire({ title: 'Success!', html: msg, icon: 'success' });
+                await loadPasswordUsers();
+                await loadPasswordChangeLogs();
+            }
+        } catch (error) {
+            Swal.fire('Error!', error.message, 'error');
+        }
+    }
+};
+
+window.changeMyPassword = async function() {
+    const { value: form } = await Swal.fire({
+        title: 'Change My Password',
+        html: `
+            <div class="mb-3"><label>Current Password</label><input type="password" id="current" class="form-control"></div>
+            <div class="mb-3"><label>New Password (min 6)</label><input type="password" id="newPwd" class="form-control"></div>
+            <div class="mb-3"><label>Confirm Password</label><input type="password" id="confirm" class="form-control"></div>
+        `,
+        preConfirm: () => {
+            const current = document.getElementById('current').value;
+            const newPwd = document.getElementById('newPwd').value;
+            const confirm = document.getElementById('confirm').value;
+            if (!current) return 'Enter current password';
+            if (!newPwd) return 'Enter new password';
+            if (newPwd.length < 6) return 'Minimum 6 characters';
+            if (newPwd !== confirm) return 'Passwords do not match';
+            return { current, newPwd };
+        }
+    });
+    
+    if (form && typeof form === 'object') {
+        Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+        try {
+            const { error: signError } = await sb.auth.signInWithPassword({
+                email: currentUser.email,
+                password: form.current
+            });
+            if (signError) throw new Error('Current password incorrect');
+            
+            const { error } = await sb.auth.updateUser({ password: form.newPwd });
+            if (error) throw error;
+            
+            await logPasswordChange(currentUser.id, currentUser.id, 'self');
+            
+            Swal.fire('Success!', 'Password changed. Login again.', 'success').then(() => {
+                localStorage.clear();
+                location.reload();
+            });
+        } catch (error) {
+            Swal.fire('Error!', error.message, 'error');
+        }
+    }
+};
+
+async function logPasswordChange(userId, changedBy, method) {
+    try {
+        await sb.from('password_logs').insert({
+            user_id: userId,
+            changed_by: changedBy,
+            changed_at: new Date().toISOString(),
+            method: method
+        });
+    } catch(e) {}
+}
+
+async function loadPasswordChangeLogs() {
+    const tbody = document.getElementById('passwordLogsTableBody');
+    if (!tbody || !isSuperAdmin()) return;
+    
+    try {
+        const { data } = await sb.from('password_logs').select('*').order('changed_at', { ascending: false }).limit(50);
+        if (!data?.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">No logs</td></tr>';
+            return;
+        }
+        
+        let html = '';
+        for (const log of data) {
+            const user = allPasswordUsers.find(u => u.id === log.user_id);
+            const changer = allPasswordUsers.find(u => u.id === log.changed_by);
+            html += `<tr>
+                <td>${new Date(log.changed_at).toLocaleString()}</td>
+                <td>${escapeHtml(user?.name || 'Unknown')}</td>
+                <td>${escapeHtml(changer?.name || 'System')}</td>
+                <td><code>${log.method || 'direct'}</code></td>
+            </tr>`;
+        }
+        tbody.innerHTML = html;
+    } catch(e) {}
+}
+
+// Initialize
+if (typeof showTab === 'function') {
+    const original = window.showTab;
+    window.showTab = function(tabName) {
+        original(tabName);
+        if (tabName === 'passwords' && isSuperAdmin()) {
+            setTimeout(() => { loadPasswordUsers(); loadPasswordChangeLogs(); }, 100);
+        }
+    };
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+console.log('✅ Password Management Ready');
+
+
 // ============================================
 // PART 10: INITIALIZE SETTINGS PAGE
 // ============================================
