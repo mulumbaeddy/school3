@@ -74,7 +74,7 @@ const roleMenus = {
         { page: "marks", icon: "fa-chart-line", label: "Marks" },
         { page: "attendance", icon: "fa-calendar-check", label: "Attendance" },
         { page: "library", icon: "fa-book", label: "Library" },
-        { page: "payments", icon: "fa-credit-card", label: "Payments" },
+        // { page: "payments", icon: "fa-credit-card", label: "Payments" },
         { page: "reports", icon: "fa-file-alt", label: "Reports" },
         { page: "promotion", icon: "fa-arrow-up", label: "Promotion" }
     ],
