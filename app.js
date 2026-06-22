@@ -1,10 +1,9 @@
-const SUPABASE_URL = 'https://dljvmlshqegrwxqduggo.supabase.co';
+SUPABASE_URL = 'https://dljvmlshqegrwxqduggo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsanZtbHNocWVncnd4cWR1Z2dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDE5NDgsImV4cCI6MjA5MDQ3Nzk0OH0.1TjmfFhcy5trfOgfu0Y8iQTeKFUNqvjUnniKUtzvuX8';
 
 let sb = null;
 let currentUser = null;
 let currentUserRole = null;
-let currentLevel = 'olevel';
 let currentPage = 'dashboard';
 // ============================================
 // AUTO-REFRESH SESSION TOKEN
@@ -12868,7 +12867,7 @@ window.bulkDeleteAttendanceRecords = async function() {
 console.log('✅ Attendance Module Loaded - Table Working Properly');
 // ============================================
 // SCHOOL MANAGEMENT SYSTEM - REPORTS MODULE
-// FINAL MASTERPIECE
+// FINAL MASTERPIECE - CLEAN VERSION
 // Complete Fee Calculation | Class Teacher | Academic Terms
 // ============================================
 
@@ -12883,6 +12882,7 @@ let reportsUniversityEntry = {};
 let schoolInfo = {};
 let feeStructureData = [];
 let academicTermsList = [];
+let currentLevel = 'olevel';
 
 // Subsidiary subjects list
 const subsidiarySubjectsList = ['General Paper', 'ICT', 'Subsidiary Mathematics'];
@@ -12911,8 +12911,16 @@ function getCurrentDate() {
     });
 }
 
+function getOlevelGradeDescriptor(percentage) {
+    if (percentage >= 85) return { grade: 'A', descriptor: 'Exceptional' };
+    if (percentage >= 70) return { grade: 'B', descriptor: 'Outstanding' };
+    if (percentage >= 60) return { grade: 'C', descriptor: 'Satisfactory' };
+    if (percentage >= 40) return { grade: 'D', descriptor: 'Basic' };
+    return { grade: 'E', descriptor: 'Elementary' };
+}
+
 // ============================================
-// LOAD SCHOOL SETTINGS (includes class teachers)
+// LOAD SCHOOL SETTINGS
 // ============================================
 
 async function loadSchoolInfoForReport() {
@@ -12946,6 +12954,7 @@ async function loadSchoolInfoForReport() {
             school_address: 'Kampala, Uganda',
             school_phone: '+256 XXX XXX XXX',
             school_email: 'info@school.ug',
+            school_logo: '',
             principal_name: 'Principal',
             director_name: 'Director',
             bursar_name: 'Bursar'
@@ -13036,38 +13045,25 @@ async function loadFeeStructureForReport() {
 // GET TOTAL FEE FOR A STUDENT
 // ============================================
 
-// ============================================
-// FIXED: GET TOTAL FEE FOR A STUDENT (Works for A-Level with streams)
-// ============================================
-
 async function getTotalFeeForStudent(student) {
     if (!student) return 0;
     
-    // Normalize student type
     let studentType = student.student_type || 'Day';
     studentType = studentType.charAt(0).toUpperCase() + studentType.slice(1).toLowerCase();
     
-    // Build possible class names to try
     let possibleClassNames = [student.class];
     
-    // For A-Level, also try with stream appended
     if (currentLevel === 'alevel') {
         let stream = student.stream || 'Arts';
         stream = stream.charAt(0).toUpperCase() + stream.slice(1).toLowerCase();
-        
-        // Try "S.5 Arts" format
         possibleClassNames.push(`${student.class} ${stream}`);
-        
-        // Also try the class name as stored in fee_structure (might be like "S.5 Arts" already)
         if (student.class.includes(' ')) {
             possibleClassNames.push(student.class);
         }
     }
     
-    // Remove duplicates
     possibleClassNames = [...new Set(possibleClassNames)];
     
-    // Try to find fees
     let studentFees = [];
     let matchedClassName = '';
     
@@ -13083,7 +13079,6 @@ async function getTotalFeeForStudent(student) {
         }
     }
     
-    // If still no fees, try without student type filter
     if (studentFees.length === 0) {
         for (const className of possibleClassNames) {
             studentFees = feeStructureData.filter(f => f.class_name === className);
@@ -13098,7 +13093,6 @@ async function getTotalFeeForStudent(student) {
     
     if (total === 0) {
         console.warn(`No fee found for student ${student.name}. Tried class names:`, possibleClassNames);
-        console.log('Available fee structure classes:', [...new Set(feeStructureData.map(f => f.class_name))]);
     }
     
     return total;
@@ -13223,7 +13217,7 @@ async function loadUniversityEntryRequirements() {
 }
 
 // ============================================
-// GET GRADE AND POINTS
+// GET GRADE AND POINTS FROM SETTINGS
 // ============================================
 
 function getGradeAndPointsFromSettings(percentage, subjectName = '') {
@@ -13263,7 +13257,7 @@ function calculateOlevelFinalScore(caScore, examScore) {
 }
 
 // ============================================
-// LOAD MARKS WITH GRADES
+// LOAD MARKS FOR SINGLE REPORT
 // ============================================
 
 async function loadMarksForReport(studentId, exam, year) {
@@ -13302,14 +13296,124 @@ async function loadMarksForReport(studentId, exam, year) {
 }
 
 // ============================================
-// CALCULATE STUDENT FEE STATUS (CORRECT LOGIC)
-// Priority: 1. Past debts -> 2. Current term -> 3. Forward excess
+// LOAD O-LEVEL MARKS
 // ============================================
 
+async function loadOlevelMarksForReport(studentId, exam, year) {
+    try {
+        const { data, error } = await sb
+            .from('marks')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam', exam)
+            .eq('year', year)
+            .eq('level', 'olevel');
+        
+        if (error) throw error;
+        
+        return (data || []).map(m => {
+            const u1 = m.unit1 || 0;
+            const u2 = m.unit2 || 0;
+            const u3 = m.unit3 || 0;
+            const exam80 = m.exam_80 || 0;
+            const unitAvg = (u1 + u2 + u3) / 3;
+            const total20 = (unitAvg / 3) * 20;
+            let total100 = total20 + exam80;
+            total100 = Math.min(100, Math.max(0, total100));
+            const gradeInfo = getOlevelGradeDescriptor(total100);
+            
+            let unitDescriptor = 'Basic';
+            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
+            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
+            
+            return {
+                subject: m.subject,
+                u1, u2, u3,
+                avgUnit: unitAvg.toFixed(1),
+                identifier: Math.round(unitAvg),
+                unitDescriptor: unitDescriptor,
+                total20: total20.toFixed(1),
+                exam80: exam80,
+                total100: total100.toFixed(1),
+                grade: gradeInfo.grade,
+                descriptor: gradeInfo.descriptor,
+                teacher_initials: m.teacher_initials || ''
+            };
+        });
+    } catch (error) {
+        console.error('Error loading O-Level marks:', error);
+        return [];
+    }
+}
+
 // ============================================
-// FIXED: CALCULATE STUDENT FEE STATUS WITH PROPER CARRY FORWARD
-// Priority: 1. Past debts (previous years) -> 2. Previous terms (same year) -> 3. Current term
-// Excess from any term carries forward to next term
+// LOAD A-LEVEL MARKS
+// ============================================
+
+async function loadAlevelMarksForReport(studentId, exam, year) {
+    try {
+        const { data, error } = await sb
+            .from('marks')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam', exam)
+            .eq('year', year)
+            .eq('level', 'alevel');
+        
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            return [];
+        }
+        
+        return data.map(m => {
+            const percentage = (m.marks_obtained / m.max_marks) * 100;
+            const gradeInfo = getGradeAndPointsFromSettings(percentage, m.subject);
+            return {
+                ...m,
+                percentage: percentage,
+                grade: gradeInfo.grade,
+                points: gradeInfo.points,
+                color: gradeInfo.color
+            };
+        });
+    } catch (error) {
+        console.error('Error loading A-Level marks:', error);
+        return [];
+    }
+}
+
+// ============================================
+// GET A-LEVEL CLASS TEACHER
+// ============================================
+
+function getAlevelClassTeacher(student) {
+    if (!student) return 'Not Assigned';
+    
+    const classLetter = student.class;
+    const stream = student.stream || 'Arts';
+    const streamLower = stream.toLowerCase();
+    const classNum = classLetter.replace('S.', '');
+    
+    const possibleKeys = [
+        `teacher_s${classNum}_${streamLower}`,
+        `teacher_${classLetter.toLowerCase().replace('.', '')}_${streamLower}`,
+        `teacher_s${classNum}`,
+        `teacher_${classLetter.toLowerCase().replace('.', '')}`
+    ];
+    
+    for (const key of possibleKeys) {
+        const teacherName = schoolInfo[key];
+        if (teacherName && teacherName !== '') {
+            return teacherName;
+        }
+    }
+    
+    return 'Not Assigned';
+}
+
+// ============================================
+// CALCULATE STUDENT FEE STATUS
 // ============================================
 
 async function calculateStudentFeeStatusForReport(studentId, targetYear, targetTerm) {
@@ -13339,11 +13443,8 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const termOrder = ['Term 1', 'Term 2', 'Term 3'];
     const currentTermIndex = termOrder.indexOf(targetTerm);
     
-    // ============================================
-    // STEP 1: Calculate balance from PREVIOUS YEARS
-    // ============================================
-    let previousYearsBalance = 0; // Positive = debt, Negative = credit
-    
+    // Previous Years Balance
+    let previousYearsBalance = 0;
     const allYears = [...new Set(allPaymentsList.filter(p => p.student_id === studentId).map(p => parseInt(p.year)))].sort();
     
     for (const year of allYears) {
@@ -13369,11 +13470,8 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const previousYearsDebt = previousYearsBalance > 0 ? previousYearsBalance : 0;
     const previousYearsCredit = previousYearsBalance < 0 ? Math.abs(previousYearsBalance) : 0;
     
-    // ============================================
-    // STEP 2: Calculate balance from PREVIOUS TERMS in same year
-    // ============================================
-    let previousTermsBalance = 0; // Positive = debt, Negative = credit
-    
+    // Previous Terms Balance
+    let previousTermsBalance = 0;
     for (let i = 0; i < currentTermIndex; i++) {
         const prevTerm = termOrder[i];
         const prevTermPayments = allPaymentsList.filter(p => 
@@ -13390,9 +13488,7 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const previousTermsDebt = previousTermsBalance > 0 ? previousTermsBalance : 0;
     const previousTermsCredit = previousTermsBalance < 0 ? Math.abs(previousTermsBalance) : 0;
     
-    // ============================================
-    // STEP 3: Get current term payments
-    // ============================================
+    // Current Term Payments
     const currentTermPayments = allPaymentsList.filter(p => 
         p.student_id === studentId && 
         p.year === targetYear && 
@@ -13400,65 +13496,40 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     );
     const currentTermPaid = currentTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     
-    // ============================================
-    // STEP 4: Calculate TOTAL BALANCE BROUGHT FORWARD
-    // This is the amount the student owes from before this term
-    // ============================================
     const totalCarryForward = previousYearsBalance + previousTermsBalance;
     
-    // ============================================
-    // STEP 5: Calculate what the student needs to pay this term
-    // If they have credit, it reduces what they owe
-    // ============================================
     let amountNeededForCurrentTerm = termFee;
     let remainingCredit = 0;
     
     if (totalCarryForward < 0) {
-        // Student has credit from before
         const creditAmount = Math.abs(totalCarryForward);
         if (creditAmount >= termFee) {
-            // Credit covers full term fee
             amountNeededForCurrentTerm = 0;
             remainingCredit = creditAmount - termFee;
         } else {
-            // Credit partially covers term fee
             amountNeededForCurrentTerm = termFee - creditAmount;
             remainingCredit = 0;
         }
     } else if (totalCarryForward > 0) {
-        // Student has debt from before - they need to pay that too
         amountNeededForCurrentTerm = termFee + totalCarryForward;
     }
     
-    // ============================================
-    // STEP 6: Calculate current balance
-    // ============================================
     let balance = amountNeededForCurrentTerm - currentTermPaid;
-    
-    // If there's remaining credit from before, it gets added to balance (negative = credit)
     if (remainingCredit > 0) {
         balance = balance - remainingCredit;
     }
     
-    // ============================================
-    // STEP 7: Calculate total expected and total paid for display
-    // ============================================
     let totalExpected = termFee;
     let totalPaid = currentTermPaid;
     
-    // Apply previous credits if any
     if (previousYearsCredit > 0 || previousTermsCredit > 0) {
         const totalCredit = previousYearsCredit + previousTermsCredit;
         totalPaid += totalCredit;
     }
     
-    // Add previous debts to expected
     if (previousYearsDebt > 0) totalExpected += previousYearsDebt;
     if (previousTermsDebt > 0) totalExpected += previousTermsDebt;
     
-    // ============================================
-    // STEP 8: Determine STATUS
-    // ============================================
     let status = '', statusColor = '', statusBadge = '';
     
     if (balance <= 0) {
@@ -13475,14 +13546,11 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
         statusBadge = '❌ Defaulter';
     }
     
-    // For display, make balance positive for "Due" and negative for "Credit"
-    const displayBalance = balance;
-    
     return {
         termFee: termFee,
         expected: totalExpected,
         paid: totalPaid,
-        balance: displayBalance,
+        balance: balance,
         previousYearsDebt: previousYearsDebt,
         previousYearsCredit: previousYearsCredit,
         previousTermsDebt: previousTermsDebt,
@@ -13614,236 +13682,404 @@ function getRemarkMessage(totalPoints, avgPercentage, division) {
 }
 
 // ============================================
-// GENERATE REPORT CARD HTML
+// GENERATE O-LEVEL REPORT CARD HTML
 // ============================================
 
-function generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
+function generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus) {
+    let totalSum = 0;
+    for (const m of marks) totalSum += parseFloat(m.total100);
+    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
+    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
+    const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    const subjectsHtml = marks.map(m => `
+        <tr>
+            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</td>
+        </tr>
+    `).join('');
+    
+    let feeDisplay = '';
+    if (feeStatus && feeStatus.status !== 'NO_FEE') {
+        const balanceAmount = Math.abs(feeStatus.balance || 0);
+        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
+        
+        feeDisplay = `
+            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
+                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
+                    <div><strong>Balance:</strong> ${balanceText}</div>
+                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    const logoWatermark = schoolInfo.school_logo ? 
+        `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: 0; pointer-events: none;">
+            <img src="${schoolInfo.school_logo}" style="width: 700px; max-width: 70vw; height: auto;">
+        </div>` : '';
+    
+    return `
+        <div class="report-container" style="max-width: 1300px; margin: 0 auto; background: white; position: relative; font-family: 'Times New Roman', Arial, sans-serif; border: 2px solid #000;">
+            ${logoWatermark}
+            
+            <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    ${schoolInfo.school_logo ? 
+                        `<img src="${schoolInfo.school_logo}" style="height: 70px; width: 70px; object-fit: contain;">` : 
+                        `<span style="font-size: 35px;">🏫</span>`
+                    }
+                    <div>
+                        <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">${escapeHtml(schoolInfo.school_name || 'KIDIKI SECONDARY SCHOOL')}</h1>
+                        <p style="margin: 3px 0 0; font-size: 11px;">${escapeHtml(schoolInfo.school_address || 'P.O BOX 2815, KAMULI')} | Tel: ${escapeHtml(schoolInfo.school_phone || '0758 918361')}</p>
+                    </div>
+                </div>
+                <h2 style="margin: 10px 0 0; font-size: 18px; text-decoration: underline;">${exam} ASSESSMENT REPORT</h2>
+                <p style="margin: 3px 0 0; font-size: 12px;">Year ${year} | ${currentDate}</p>
+            </div>
+            
+            <div style="margin: 15px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div><strong>Student:</strong> ${escapeHtml(student.name)}</div>
+                    <div><strong>Admission No:</strong> ${student.admission_no || '-'}</div>
+                    <div><strong>Class:</strong> ${student.class}</div>
+                    <div><strong>Stream:</strong> ${student.stream || '-'}</div>
+                    <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
+                </div>
+            </div>
+            
+            ${feeDisplay}
+            
+            <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">SUBJECT</th>
+                            <th colspan="3" style="border: 1px solid #000; padding: 8px;">UNIT SCORES</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">AVR</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">ID</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Descriptor</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Exam/80</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Total/100</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Grade</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Comment</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Initials</th>
+                        </tr>
+                        <tr>
+                            <th style="border: 1px solid #000; padding: 6px;">U1</th>
+                            <th style="border: 1px solid #000; padding: 6px;">U2</th>
+                            <th style="border: 1px solid #000; padding: 6px;">U3</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${subjectsHtml}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
+                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
+                    <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
+                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
+                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
+                </div>
+            </div>
+            
+            <div style="margin: 0 20px 15px 20px;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+                    <thead>
+                        <tr><th colspan="4" style="border: 1px solid #000; padding: 6px; text-align: center;">GRADING SCALE</th></tr>
+                        <tr style="background: #f5f5f5;">
+                            <th style="border: 1px solid #000; padding: 5px;">Score</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Grade</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Descriptor</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Interpretation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin: 0 20px 15px 20px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <div style="flex: 1;">
+                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
+                        <strong>CLASS TEACHER'S COMMENT</strong>
+                    </div>
+                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
+                        <div style="text-align: right;">Signature: _________________</div>
+                        <div style="margin-top: 5px;">Name: ${escapeHtml(classTeacher)}</div>
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
+                        <strong>HEAD TEACHER'S COMMENT</strong>
+                    </div>
+                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
+                        <div style="text-align: right;">Signature: _________________</div>
+                        <div style="margin-top: 5px;">Name: ${escapeHtml(schoolInfo.principal_name || 'HEAD TEACHER')}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin: 0 20px 20px 20px; padding: 10px; border: 1px solid #000; text-align: center; font-size: 11px; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <span>📅 Term ended: ${currentDate}</span>
+                    <span>🔹 Next Term Begins: _______________</span>
+                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================
+// GENERATE A-LEVEL SINGLE REPORT CARD HTML
+// ============================================
+
+function generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
     let totalPoints = 0;
     let totalPercentage = 0;
     
     const subjectsHtml = marks.map(m => {
         let percentage = m.percentage;
-        
         totalPoints += m.points;
         totalPercentage += percentage;
         
-        if (currentLevel === 'olevel') {
-            const caScore = m.ca_score || 0;
-            const examScore = m.exam_score || 0;
-            return `
-                <tr style="border-bottom: 1px solid #e0e0e0;">
-                    <td style="padding: 10px 8px;"><strong>${escapeHtml(m.subject)}</strong></td>
-                    <td style="padding: 10px 8px; text-align: center;">${caScore.toFixed(1)}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${examScore.toFixed(1)}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${percentage.toFixed(1)}%</span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><span class="grade-badge" style="background: ${m.color};">${m.grade}</span></span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><strong>${m.points}</strong></span></td>
-                </tr>
-            `;
-        } else {
-            const finalScore = m.marks_obtained || 0;
-            const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
-            return `
-                <tr style="border-bottom: 1px solid #e0e0e0;">
-                    <td style="padding: 10px 8px;">
-                        <strong>${escapeHtml(m.subject)}</strong>
-                        ${isSubsidiary ? '<span class="badge bg-secondary ms-2" style="font-size: 10px;">Sub</span>' : ''}
-                    </span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${finalScore}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${m.max_marks}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${percentage.toFixed(1)}%</span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><span class="grade-badge" style="background: ${m.color};">${m.grade}</span></span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><strong>${m.points}</strong></span></td>
-                </tr>
-            `;
-        }
+        const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
+        const finalScore = m.marks_obtained || 0;
+        
+        return `
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+                <td style="padding: 10px 8px; border: 1px solid #ddd;">
+                    <strong>${escapeHtml(m.subject)}</strong>
+                    ${isSubsidiary ? '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 9px; margin-left: 5px;">Sub</span>' : ''}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">${finalScore}</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">${m.max_marks}</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">${percentage.toFixed(1)}%</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">
+                    <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; background: ${m.color || '#6c757d'};">${m.grade}</span>
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;"><strong>${m.points}</strong></td>
+            </tr>
+        `;
     }).join('');
     
     const avgPercentage = marks.length > 0 ? (totalPercentage / marks.length).toFixed(1) : 0;
     const division = calculateGradeDivision(avgPercentage, totalPoints);
-    const levelName = currentLevel === 'olevel' ? 'UCE REPORT CARD' : 'UACE REPORT CARD';
+    const levelName = 'UACE REPORT CARD';
     
     let universityEligibility = null;
-    let promotionStatus = null;
-    
     if (currentLevel === 'alevel') {
         universityEligibility = checkUniversityEligibility(totalPoints, marks);
-    } else if (exam === 'Term 3') {
-        promotionStatus = checkOlevelPromotion(avgPercentage, student.class);
     }
     
-    const tableHeaders = currentLevel === 'olevel' 
-        ? `<tr style="background: #01605a; color: white;">
-            <th style="padding: 10px;">Subject</th>
-            <th style="padding: 10px;">CA</th>
-            <th style="padding: 10px;">Exam</th>
-            <th style="padding: 10px;">%</th>
-            <th style="padding: 10px;">Grade</th>
-            <th style="padding: 10px;">Points</th>
-            </tr>`
-        : `<tr style="background: #01605a; color: white;">
-            <th style="padding: 10px;">Subject</th>
-            <th style="padding: 10px;">Marks</th>
-            <th style="padding: 10px;">Max</th>
-            <th style="padding: 10px;">%</th>
-            <th style="padding: 10px;">Grade</th>
-            <th style="padding: 10px;">Points</th>
-            </tr>`;
+    const tableHeaders = `
+        <tr style="background: #01605a; color: white;">
+            <th style="padding: 10px; border: 1px solid #01605a;">Subject</th>
+            <th style="padding: 10px; border: 1px solid #01605a;">Marks</th>
+            <th style="padding: 10px; border: 1px solid #01605a;">Max</th>
+            <th style="padding: 10px; border: 1px solid #01605a;">%</th>
+            <th style="padding: 10px; border: 1px solid #01605a;">Grade</th>
+            <th style="padding: 10px; border: 1px solid #01605a;">Points</th>
+        </tr>
+    `;
     
-    // Fee display section
     let feeDisplay = '';
     if (feeStatus && feeStatus.status !== 'NO_FEE') {
+        const balanceColor = feeStatus.balance > 0 ? '#dc3545' : '#28a745';
         feeDisplay = `
-            <div style="background: ${feeStatus.statusColor}20; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid ${feeStatus.statusColor};">
-                <table style="width: 100%; border: none; font-size: 13px;">
+            <div style="background: ${feeStatus.statusColor}20; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid ${feeStatus.statusColor};">
+                <table style="width: 100%; border: none; font-size: 12px;">
                     <tr style="background: #01605a10;">
-                        <td colspan="3" style="padding: 8px; text-align: center; font-weight: bold;">💰 FEE STATEMENT FOR ${exam} ${year}</td>
+                        <td colspan="3" style="padding: 6px; text-align: center; font-weight: bold;">💰 FEE STATEMENT FOR ${exam} ${year}</td>
                     </tr>
                     <tr>
-                        <td style="width: 45%; padding: 6px;"><strong>Term Fee:</strong></td>
-                        <td style="width: 55%; padding: 6px;" colspan="2">${formatCurrency(feeStatus.termFee)}</span></td>
+                        <td style="width: 45%; padding: 4px;"><strong>Term Fee:</strong></td>
+                        <td style="width: 55%; padding: 4px;" colspan="2">${formatCurrency(feeStatus.termFee)}</td>
                     </tr>
                     ${feeStatus.previousYearsDebt > 0 ? `
                     <tr style="background: #fff3cd;">
-                        <td style="padding: 6px;"><strong>⚠️ Previous Years Debt:</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-danger">${formatCurrency(feeStatus.previousYearsDebt)}</span></td>
+                        <td style="padding: 4px;"><strong>⚠️ Previous Years Debt:</strong></td>
+                        <td style="padding: 4px;" colspan="2" style="color: #dc3545;">${formatCurrency(feeStatus.previousYearsDebt)}</td>
                     </tr>` : ''}
                     ${feeStatus.previousYearsCredit > 0 ? `
                     <tr style="background: #d4edda;">
-                        <td style="padding: 6px;"><strong>✅ Previous Years Credit:</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-success">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</span></td>
+                        <td style="padding: 4px;"><strong>✅ Previous Years Credit:</strong></td>
+                        <td style="padding: 4px;" colspan="2" style="color: #28a745;">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</td>
                     </tr>` : ''}
                     ${feeStatus.previousTermsDebt > 0 ? `
                     <tr style="background: #fff3cd;">
-                        <td style="padding: 6px;"><strong>⚠️ Previous Terms Debt (${year}):</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-danger">${formatCurrency(feeStatus.previousTermsDebt)}</span></td>
+                        <td style="padding: 4px;"><strong>⚠️ Previous Terms Debt:</strong></td>
+                        <td style="padding: 4px;" colspan="2" style="color: #dc3545;">${formatCurrency(feeStatus.previousTermsDebt)}</td>
                     </tr>` : ''}
                     ${feeStatus.previousTermsCredit > 0 ? `
                     <tr style="background: #d4edda;">
-                        <td style="padding: 6px;"><strong>✅ Previous Terms Credit (${year}):</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-success">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</span></td>
+                        <td style="padding: 4px;"><strong>✅ Previous Terms Credit:</strong></td>
+                        <td style="padding: 4px;" colspan="2" style="color: #28a745;">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</td>
                     </tr>` : ''}
                     <tr style="border-top: 1px solid #ddd;">
-                        <td style="padding: 6px;"><strong>Total Expected:</strong></td>
-                        <td style="padding: 6px;" colspan="2">${formatCurrency(feeStatus.expected)}</span></td>
+                        <td style="padding: 4px;"><strong>Total Expected:</strong></td>
+                        <td style="padding: 4px;" colspan="2">${formatCurrency(feeStatus.expected)}</td>
                     </tr>
                     <tr>
-                        <td style="padding: 6px;"><strong>Paid This Term:</strong></td>
-                        <td style="padding: 6px;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</span></td>
+                        <td style="padding: 4px;"><strong>Paid This Term:</strong></td>
+                        <td style="padding: 4px;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</td>
                     </tr>
                     <tr style="border-top: 1px solid #ddd; background: ${feeStatus.balance > 0 ? '#f8d7da' : '#d4edda'}">
-                        <td style="padding: 8px;"><strong>💰 Current Balance:</strong></td>
-                        <td style="padding: 8px;" colspan="2">
-                            <strong class="${feeStatus.balance > 0 ? 'text-danger' : 'text-success'}">
+                        <td style="padding: 6px;"><strong>💰 Current Balance:</strong></td>
+                        <td style="padding: 6px;" colspan="2">
+                            <strong style="color: ${balanceColor};">
                                 ${formatCurrency(Math.abs(feeStatus.balance))} ${feeStatus.balance > 0 ? '(Due)' : '(Credit - Carries Forward)'}
                             </strong>
-                        </span></td>
+                        </td>
                     </tr>
                     <tr>
-                        <td colspan="3" style="text-align: center; padding-top: 10px;">
-                            <span style="background: ${feeStatus.statusColor}; color: white; padding: 5px 15px; border-radius: 20px; font-size: 12px;">
+                        <td colspan="3" style="text-align: center; padding-top: 8px;">
+                            <span style="background: ${feeStatus.statusColor}; color: white; padding: 3px 12px; border-radius: 20px; font-size: 11px;">
                                 ${feeStatus.statusBadge}
                             </span>
-                        </span></td>
+                        </td>
                     </tr>
                 </table>
             </div>
         `;
     } else if (feeStatus && feeStatus.status === 'NO_FEE') {
         feeDisplay = `
-            <div style="background: #ffc10720; padding: 12px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+            <div style="background: #ffc10720; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
                 <div style="text-align: center;">
-                    <strong>⚠️ No fee structure found for this student.</strong><br>
-                    <small>Please add fee structure in Settings → Fee Structure tab.</small>
+                    <strong>⚠️ No fee structure found for this student.</strong>
                 </div>
             </div>
         `;
     }
     
     return `
-        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1);">
-            ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.12; z-index: 0; width: 50%; max-width: 350px;">` : ''}
+        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; padding: 20px;">
+            ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.08; z-index: 0; width: 40%; max-width: 300px;">` : ''}
             
-            <div style="position: relative; z-index: 1; padding: 25px;">
-                <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px solid #01605a; padding-bottom: 15px;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-                        ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="width: 60px; height: 60px; object-fit: contain;">` : ''}
+            <div style="position: relative; z-index: 1;">
+                <div style="text-align: center; margin-bottom: 15px; border-bottom: 3px solid #01605a; padding-bottom: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                        ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="width: 50px; height: 50px; object-fit: contain;">` : ''}
                         <div>
-                            <h1 style="color: #01605a; margin: 0; font-size: 22px;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
-                            <p style="margin: 5px 0 0; font-style: italic;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
+                            <h1 style="color: #01605a; margin: 0; font-size: 20px;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
+                            <p style="margin: 3px 0 0; font-style: italic; font-size: 11px;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
                         </div>
                     </div>
-                    <p style="margin: 10px 0 0; font-size: 10px;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
                 </div>
                 
-                <div style="text-align: center; margin-bottom: 15px;">
-                    <h2 style="color: #ff862d; margin: 0; font-size: 18px;">${levelName}</h2>
-                    <p><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <h2 style="color: #ff862d; margin: 0; font-size: 17px;">${levelName}</h2>
+                    <p style="font-size: 12px;"><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
                 </div>
                 
-                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 20px;">
-                    <table style="width: 100%; border: none;">
-                        <tr><td style="width: 50%;"><strong>Student:</strong> ${escapeHtml(student.name)}</span><td><strong>Admission No:</strong> ${student.admission_no || '-'}</span></tr>
-                        <tr><td><strong>Class:</strong> ${student.class}</span><td><strong>Stream:</strong> ${student.stream || '-'}</span></tr>
-                        <tr><td><strong>Type:</strong> ${student.student_type || 'Day'}</span><td><strong>Combination:</strong> ${student.combination || 'N/A'}</span></tr>
-                        <tr><td colspan="2"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</span></tr>
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #e0e0e0;">
+                    <table style="width: 100%; border: none; font-size: 12px;">
+                        <tr>
+                            <td style="width: 50%; padding: 3px;"><strong>Student:</strong> ${escapeHtml(student.name)}</td>
+                            <td style="padding: 3px;"><strong>Admission No:</strong> ${student.admission_no || '-'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 3px;"><strong>Class:</strong> ${student.class}</td>
+                            <td style="padding: 3px;"><strong>Stream:</strong> ${student.stream || '-'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 3px;"><strong>Type:</strong> ${student.student_type || 'Day'}</td>
+                            <td style="padding: 3px;"><strong>Combination:</strong> ${student.combination || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="padding: 3px;"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</td>
+                        </tr>
                     </table>
                 </div>
                 
                 ${feeDisplay}
                 
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px;">
                     <thead>${tableHeaders}</thead>
                     <tbody>${subjectsHtml}</tbody>
                     <tfoot>
                         <tr style="background: #f0f0f0;">
-                            <td colspan="5" style="padding: 10px; text-align: right;"><strong>TOTAL / AVERAGE:</strong></td>
-                            <td style="padding: 10px; text-align: center;"><strong>${currentLevel === 'alevel' ? totalPoints + ' pts' : avgPercentage + '%'}</strong></td>
+                            <td colspan="5" style="padding: 8px; text-align: right; border: 1px solid #ddd;"><strong>TOTAL POINTS:</strong></td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;"><strong>${totalPoints} pts</strong></td>
                         </tr>
                     </tfoot>
                 </table>
                 
-                <div style="background: linear-gradient(135deg, #01605a, #ff862d); padding: 15px; border-radius: 10px; margin-bottom: 20px; color: white;">
+                <div style="background: linear-gradient(135deg, #01605a, #ff862d); padding: 12px; border-radius: 8px; margin-bottom: 15px; color: white;">
                     <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
-                        <div style="text-align: center;"><div style="font-size: 22px; font-weight: bold;">${currentLevel === 'alevel' ? totalPoints : avgPercentage}%</div><div style="font-size: 11px;">${currentLevel === 'alevel' ? 'POINTS' : 'AVERAGE'}</div></div>
-                        <div style="text-align: center;"><div style="font-size: 22px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 0 15px; border-radius: 30px;">${division.division}</div><div style="font-size: 11px;">DIVISION</div></div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: bold;">${totalPoints}</div>
+                            <div style="font-size: 10px;">POINTS</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 0 15px; border-radius: 30px;">${division.division}</div>
+                            <div style="font-size: 10px;">DIVISION</div>
+                        </div>
                     </div>
                 </div>
                 
-                <div style="text-align: center; margin-bottom: 15px; padding: 8px; background: ${division.color}20; border-radius: 8px;">
-                    <strong>${division.name}:</strong> ${division.description}
-                </div>
-                
-                ${currentLevel === 'alevel' && universityEligibility ? `
-                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: ${universityEligibility.eligible ? '#d4edda' : '#f8d7da'}; color: ${universityEligibility.eligible ? '#155724' : '#721c24'};">
+                ${universityEligibility ? `
+                    <div style="text-align: center; margin-bottom: 12px; padding: 6px; border-radius: 6px; background: ${universityEligibility.eligible ? '#d4edda' : '#f8d7da'}; color: ${universityEligibility.eligible ? '#155724' : '#721c24'}; font-size: 12px;">
                         <strong>🏛️ UNIVERSITY ELIGIBILITY: ${universityEligibility.eligible ? '✅ ELIGIBLE' : '❌ NOT ELIGIBLE'}</strong>
-                        ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets the minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
+                        ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
                     </div>
                 ` : ''}
                 
-                ${currentLevel === 'olevel' && promotionStatus ? `
-                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: ${promotionStatus.promoted ? '#d4edda' : '#f8d7da'}; color: ${promotionStatus.promoted ? '#155724' : '#721c24'};">
-                        <strong>🎓 PROMOTION STATUS: ${promotionStatus.promoted ? '✅ PROMOTED' : '❌ NOT PROMOTED'}</strong>
-                        <br><small>${promotionStatus.remarks} | Next Class: ${promotionStatus.next_class}</small>
-                    </div>
-                ` : ''}
-                
-                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ff862d;">
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 12px; border-left: 4px solid #ff862d; font-size: 12px;">
                     <strong>📝 REMARKS:</strong>
-                    <p style="margin: 8px 0 0;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
+                    <p style="margin: 5px 0 0;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
                 </div>
                 
-                <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>${escapeHtml(classTeacher)}<br><small>Class Teacher</small></div>
-                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}</div>
-                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>Parent's Signature</div>
+                <div style="display: flex; justify-content: space-between; margin-top: 15px; font-size: 11px;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="width: 80%; border-bottom: 1px solid #000; margin: 0 auto 4px; height: 20px;"></div>
+                        ${escapeHtml(classTeacher)}<br><small>Class Teacher</small>
+                    </div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="width: 80%; border-bottom: 1px solid #000; margin: 0 auto 4px; height: 20px;"></div>
+                        ${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}<br><small>Head Teacher</small>
+                    </div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="width: 80%; border-bottom: 1px solid #000; margin: 0 auto 4px; height: 20px;"></div>
+                        Parent's Signature
+                    </div>
                 </div>
                 
-                <div style="text-align: center; font-size: 9px; margin-top: 15px; color: #999;">System-generated report</div>
+                <div style="text-align: center; font-size: 8px; margin-top: 10px; color: #999;">System-generated report</div>
             </div>
         </div>
         ${!isForPrint ? '<div class="text-center mt-3"><button class="btn btn-success" onclick="printReportCard()"><i class="fas fa-print"></i> Print Report</button></div>' : ''}
     `;
+}
+
+// ============================================
+// GENERATE A-LEVEL BULK REPORT CARD (NO PRINT BUTTON)
+// ============================================
+
+function generateAlevelBulkReportCard(student, marks, exam, year, feeStatus, classTeacher) {
+    return generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, true);
 }
 
 // ============================================
@@ -13857,10 +14093,8 @@ window.printReportCard = function() {
         return;
     }
     
-    // Try to open print window
     const printWindow = window.open('', '_blank');
     
-    // Check if popup was blocked
     if (!printWindow) {
         Swal.fire({
             title: 'Popup Blocked!',
@@ -13895,7 +14129,6 @@ window.printReportCard = function() {
         `);
         printWindow.document.close();
         
-        // Small delay to ensure content is loaded
         setTimeout(function() {
             printWindow.print();
             printWindow.onafterprint = function() {
@@ -13905,7 +14138,6 @@ window.printReportCard = function() {
         
     } catch (error) {
         console.error('Print error:', error);
-
         Swal.fire('Print Error', 'Could not print the report. Please try again.', 'error');
     }
 };
@@ -13951,7 +14183,14 @@ window.generateSingleReport = async function() {
             return;
         }
         
-        const reportHtml = generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher);
+        let reportHtml;
+        if (currentLevel === 'olevel') {
+            const olevelMarks = await loadOlevelMarksForReport(studentId, exam, year);
+            reportHtml = generateOlevelReportHTML(student, olevelMarks, exam, year, classTeacher, schoolInfo, feeStatus);
+        } else {
+            reportHtml = generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, false);
+        }
+        
         document.getElementById('reportPreview').innerHTML = reportHtml;
         document.getElementById('reportPreview').style.display = 'block';
         Swal.close();
@@ -13965,557 +14204,9 @@ window.generateSingleReport = async function() {
 };
 
 // ============================================
-// GENERATE BULK REPORTS
+// GENERATE O-LEVEL SINGLE REPORT
 // ============================================
 
-window.generateBulkReports = async function() {
-    const className = document.getElementById('bulkClass').value;
-    const stream = document.getElementById('bulkStream').value;
-    const exam = document.getElementById('bulkExam').value;
-    const year = document.getElementById('bulkYear').value;
-    
-    if (!className) {
-        Swal.fire('Error', 'Please select a class', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadGradingRulesForReport();
-        await loadUniversityEntryRequirements();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        await loadSchoolInfoForReport();
-        
-        let query = sb.from('students').select('*').eq('class', className);
-        if (stream) query = query.eq('stream', stream);
-        
-        const { data: students, error: studentError } = await query;
-        if (studentError) throw studentError;
-        
-        if (!students || students.length === 0) {
-            Swal.fire('No Students', 'No students found', 'info');
-            return;
-        }
-        
-        const allReports = [];
-        for (const student of students) {
-            const marks = await loadMarksForReport(student.id, exam, year);
-            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
-            const classTeacher = getClassTeacher(student);
-            if (marks.length > 0) {
-                allReports.push({ student, marks, feeStatus, classTeacher });
-            }
-        }
-        
-        if (allReports.length === 0) {
-            Swal.fire('No Data', 'No marks found', 'info');
-            return;
-        }
-        
-        const printWindow = window.open('', '_blank');
-        let allReportsHtml = '';
-        
-        for (let i = 0; i < allReports.length; i++) {
-            const { student, marks, feeStatus, classTeacher } = allReports[i];
-            allReportsHtml += generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher, true);
-            if (i < allReports.length - 1) {
-                allReportsHtml += '<div style="page-break-before: always;"></div>';
-            }
-        }
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Bulk Reports - ${className}</title>
-                <style>
-                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
-                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; font-size: 12px; }
-                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #ddd; padding: 8px; }
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
-                    <button onclick="window.print()">🖨️ Print All</button>
-                    <button onclick="window.close()">❌ Close</button>
-                </div>
-                ${allReportsHtml}
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        Swal.close();
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
-};
-
-// Add this new function - for O-Level only
-window.generateBulkOlevelReports = async function() {
-    const className = document.getElementById('bulkClass').value;
-    const stream = document.getElementById('bulkStream').value;
-    const exam = document.getElementById('bulkExam').value;
-    const year = document.getElementById('bulkYear').value;
-    
-    if (!className) {
-        Swal.fire('Error', 'Please select a class', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadSchoolInfoForReport();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        
-        let query = sb.from('students').select('*').eq('class', className);
-        if (stream && stream !== '') query = query.eq('stream', stream);
-        
-        const { data: students, error: studentError } = await query;
-        if (studentError) throw studentError;
-        
-        if (!students || students.length === 0) {
-            Swal.fire('No Students', 'No students found', 'info');
-            return;
-        }
-        
-        const allReports = [];
-        for (const student of students) {
-            // Use O-Level marks loader
-            const marks = await loadOlevelMarksForReport(student.id, exam, year);
-            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
-            const classTeacher = getClassTeacher(student);
-            if (marks.length > 0) {
-                allReports.push({ student, marks, feeStatus, classTeacher });
-            }
-        }
-        
-        if (allReports.length === 0) {
-            Swal.fire('No Data', 'No marks found for these students', 'info');
-            return;
-        }
-        
-        const printWindow = window.open('', '_blank');
-        let allReportsHtml = '';
-        
-        for (let i = 0; i < allReports.length; i++) {
-            const { student, marks, feeStatus, classTeacher } = allReports[i];
-            // Use O-Level report generator
-            allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus);
-            if (i < allReports.length - 1) {
-                allReportsHtml += '<div style="page-break-before: always;"></div>';
-            }
-        }
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Bulk O-Level Reports - ${className}</title>
-                <style>
-                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
-                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; }
-                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #000; padding: 8px; }
-                    .report-container { margin: 0 auto; border: 1px solid #000; }
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
-                    <button onclick="window.print()">🖨️ Print All</button>
-                    <button onclick="window.close()">❌ Close</button>
-                </div>
-                ${allReportsHtml}
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        Swal.close();
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
-};
-
-// ============================================
-// RENDER REPORTS PAGE
-// ============================================
-
-async function renderReports() {
-    await loadSchoolInfoForReport();
-    await loadGradingRulesForReport();
-    await loadUniversityEntryRequirements();
-    await loadFeeStructureForReport();
-    await loadAllPaymentsForReport();
-    await loadStudentsForReport();
-    await loadAcademicTermsForReports();
-    
-    const classOptions = currentLevel === 'olevel' 
-        ? ['S.1', 'S.2', 'S.3', 'S.4']
-        : ['S.5', 'S.6'];
-    
-    const currentYear = new Date().getFullYear();
-    
-    return `
-        <div class="card shadow-sm mb-3">
-            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-file-alt"></i> Student Report Card</h5>
-                <small>Complete Academic & Financial Report | Fee Calculation: Past Debts → Current Term → Forward Credit</small>
-            </div>
-            <div class="card-body">
-                <div class="row mb-4">
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Select Student</label>
-                        <select id="reportStudent" class="form-select">
-                            <option value="">-- Select Student --</option>
-                            ${reportsStudentsList.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.admission_no}) - ${s.class}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Term/Exam</label>
-                        <select id="reportExam" class="form-select">
-                            <option value="">-- Select Term --</option>
-                            <option value="Term 1">📘 Term 1</option>
-                            <option value="Term 2">📙 Term 2</option>
-                            <option value="Term 3">📗 Term 3</option>
-                            <option value="Mid-Term">📝 Mid-Term</option>
-                            <option value="Mock">🎯 Mock</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Year</label>
-                        <input type="text" id="reportYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
-                    </div>
-                    <div class="col-md-2">
-    <label class="form-label fw-bold">&nbsp;</label>
-    <button class="btn btn-primary w-100" onclick="${currentLevel === 'olevel' ? 'generateOlevelReport()' : 'generateSingleReport()'}">
-        <i class="fas fa-file-alt"></i> Generate
-    </button>
-</div>
-                </div>
-                
-                <hr>
-                
-                <div class="row">
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Bulk Class</label>
-                        <select id="bulkClass" class="form-select">
-                            <option value="">-- Select Class --</option>
-                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Stream</label>
-                        <select id="bulkStream" class="form-select">
-                            <option value="">-- All Streams --</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                            <option value="Arts">Arts</option>
-                            <option value="Sciences">Sciences</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">Term/Exam</label>
-                        <select id="bulkExam" class="form-select">
-                            <option value="">-- Select Term --</option>
-                            <option value="Term 1">📘 Term 1</option>
-                            <option value="Term 2">📙 Term 2</option>
-                            <option value="Term 3">📗 Term 3</option>
-                            <option value="Mid-Term">📝 Mid-Term</option>
-                            <option value="Mock">🎯 Mock</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">Year</label>
-                        <input type="text" id="bulkYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">&nbsp;</label>
-                       <button class="btn btn-info w-100" onclick="${currentLevel === 'olevel' ? 'generateBulkOlevelReports()' : 'generateBulkReports'}">
-    <i class="fas fa-print"></i> Print Bulk
-</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="reportPreview" style="display: none;"></div>
-    `;
-}
-// ============================================
-// NEW O-LEVEL REPORT FUNCTIONS (Image Format)
-// A-Level functions remain UNCHANGED
-// ============================================
-
-// Helper: Get descriptor for O-Level
-function getOlevelDescriptor(avg) {
-    if (avg >= 0.9 && avg <= 1.4) return 'BASIC';
-    if (avg >= 1.5 && avg <= 2.4) return 'MODERATE';
-    if (avg >= 2.5 && avg <= 3.0) return 'OUTSTANDING';
-    return 'BASIC';
-}
-
-// Load O-Level marks with A1, A2 format
-async function loadOlevelMarksForReport(studentId, exam, year) {
-    try {
-        const { data, error } = await sb
-            .from('marks')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('exam', exam)
-            .eq('year', year)
-            .eq('level', 'olevel');
-        
-        if (error) throw error;
-        
-        return (data || []).map(m => {
-            const u1 = m.unit1 || 0;
-            const u2 = m.unit2 || 0;
-            const u3 = m.unit3 || 0;
-            const exam80 = m.exam_80 || 0;
-            const unitAvg = (u1 + u2 + u3) / 3;
-            const total20 = (unitAvg / 3) * 20;
-            let total100 = total20 + exam80;
-            total100 = Math.min(100, Math.max(0, total100));
-            const gradeInfo = getOlevelGradeDescriptor(total100);
-            
-            let unitDescriptor = 'Basic';
-            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
-            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
-            
-            return {
-                subject: m.subject,
-                u1, u2, u3,
-                avgUnit: unitAvg.toFixed(1),
-                identifier: Math.round(unitAvg),
-                unitDescriptor: unitDescriptor,
-                total20: total20.toFixed(1),
-                exam80: exam80,
-                total100: total100.toFixed(1),
-                grade: gradeInfo.grade,
-                descriptor: gradeInfo.descriptor,
-                teacher_initials: m.teacher_initials || ''
-            };
-        });
-    } catch (error) {
-        console.error('Error loading O-Level marks:', error);
-        return [];
-    }
-}
-// Generate O-Level report card HTML (Image Format)
-function generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus) {
-    let totalSum = 0;
-    for (const m of marks) totalSum += parseFloat(m.total100);
-    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
-    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
-    const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    
-    const subjectsHtml = marks.map(m => `
-        <tr>
-            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</span>
-        </tr>
-    `).join('');
-    
-    // Fee Status Display
-    let feeDisplay = '';
-    if (feeStatus) {
-        const balanceAmount = Math.abs(feeStatus.balance || 0);
-        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
-        
-        feeDisplay = `
-            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
-                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
-                    <div><strong>Balance:</strong> ${balanceText}</div>
-                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Large watermark logo
-    const logoWatermark = schoolInfo.school_logo ? 
-        `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: 0; pointer-events: none;">
-            <img src="${schoolInfo.school_logo}" style="width: 700px; max-width: 70vw; height: auto;">
-        </div>` : '';
-    
-    return `
-        <div class="report-container" style="max-width: 1300px; margin: 0 auto; background: white; position: relative; font-family: 'Times New Roman', Arial, sans-serif; border: 2px solid #000;">
-            
-            <!-- Large Watermark Logo Background -->
-            ${logoWatermark}
-            
-            <!-- CLEAN SIMPLE HEADER - ONE LINE, NO EXTRA BORDERS -->
-            <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-                    ${schoolInfo.school_logo ? 
-                        `<img src="${schoolInfo.school_logo}" style="height: 70px; width: 70px; object-fit: contain;">` : 
-                        `<span style="font-size: 35px;">🏫</span>`
-                    }
-                    <div>
-                        <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">${escapeHtml(schoolInfo.school_name || 'KIDIKI SECONDARY SCHOOL')}</h1>
-                        <p style="margin: 3px 0 0; font-size: 11px;">${escapeHtml(schoolInfo.school_address || 'P.O BOX 2815, KAMULI')} | Tel: ${escapeHtml(schoolInfo.school_phone || '0758 918361')}</p>
-                    </div>
-                </div>
-                <h2 style="margin: 10px 0 0; font-size: 18px; text-decoration: underline;">${exam} ASSESSMENT REPORT</h2>
-                <p style="margin: 3px 0 0; font-size: 12px;">Year ${year} | ${currentDate}</p>
-            </div>
-            
-            <!-- Student Info - Clean horizontal layout -->
-            <div style="margin: 15px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <div><strong>Student:</strong> ${escapeHtml(student.name)}</div>
-                    <div><strong>Admission No:</strong> ${student.admission_no || '-'}</div>
-                    <div><strong>Class:</strong> ${student.class}</div>
-                    <div><strong>Stream:</strong> ${student.stream || '-'}</div>
-                    <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
-                </div>
-            </div>
-            
-            <!-- Fee Statement -->
-            ${feeDisplay}
-            
-            <!-- Main Results Table -->
-            <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">SUBJECT</th>
-                            <th colspan="3" style="border: 1px solid #000; padding: 8px;">UNIT SCORES</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">AVR</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">ID</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Descriptor</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Exam/80</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Total/100</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Grade</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Comment</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Initials</th>
-                        </tr>
-                        <tr>
-                            <th style="border: 1px solid #000; padding: 6px;">U1</th>
-                            <th style="border: 1px solid #000; padding: 6px;">U2</th>
-                            <th style="border: 1px solid #000; padding: 6px;">U3</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${subjectsHtml}
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Overall Achievement - Clean -->
-            <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
-                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
-                    <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
-                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
-                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
-                </div>
-            </div>
-            
-            <!-- Grading Scale - Compact -->
-            <div style="margin: 0 20px 15px 20px;">
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
-                    <thead>
-                        <tr><th colspan="4" style="border: 1px solid #000; padding: 6px; text-align: center;">GRADING SCALE</th></tr>
-                        <tr style="background: #f5f5f5;">
-                            <th style="border: 1px solid #000; padding: 5px;">Score</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Grade</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Descriptor</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Interpretation</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Comments Section - Simple -->
-            <div style="margin: 0 20px 15px 20px; display: flex; gap: 15px; flex-wrap: wrap;">
-                <div style="flex: 1;">
-                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
-                        <strong>CLASS TEACHER'S COMMENT</strong>
-                    </div>
-                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
-                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
-                        <div style="text-align: right;">Signature: _________________</div>
-                        <div style="margin-top: 5px;">Name: ${escapeHtml(classTeacher)}</div>
-                    </div>
-                </div>
-                <div style="flex: 1;">
-                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
-                        <strong>HEAD TEACHER'S COMMENT</strong>
-                    </div>
-                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
-                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
-                        <div style="text-align: right;">Signature: _________________</div>
-                        <div style="margin-top: 5px;">Name: ${escapeHtml(schoolInfo.principal_name || 'HEAD TEACHER')}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Footer -->
-            <div style="margin: 0 20px 20px 20px; padding: 10px; border: 1px solid #000; text-align: center; font-size: 11px; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <span>📅 Term ended: ${currentDate}</span>
-                    <span>🔹 Next Term Begins: _______________</span>
-                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
-                </div>
-            </div>
-        </div>
-        <div class="text-center mt-3 no-print" style="margin-bottom: 30px;">
-            <button class="btn btn-primary" onclick="window.printReportCard()" style="padding: 10px 30px; font-size: 16px;">
-                <i class="fas fa-print"></i> Print Report
-            </button>
-        </div>
-    `;
-}
-// NEW O-Level generate function
 window.generateOlevelReport = async function() {
     const studentId = document.getElementById('reportStudent').value;
     const exam = document.getElementById('reportExam').value;
@@ -14560,12 +14251,467 @@ window.generateOlevelReport = async function() {
 };
 
 // ============================================
+// GENERATE O-LEVEL BULK REPORTS
+// ============================================
+
+window.generateBulkOlevelReports = async function() {
+    const className = document.getElementById('bulkClass').value;
+    const stream = document.getElementById('bulkStream').value;
+    const exam = document.getElementById('bulkExam').value;
+    const year = document.getElementById('bulkYear').value;
+    
+    if (!className) {
+        Swal.fire('Error', 'Please select a class', 'error');
+        return;
+    }
+    if (!exam) {
+        Swal.fire('Error', 'Please select a term/exam', 'error');
+        return;
+    }
+    if (!year) {
+        Swal.fire('Error', 'Please enter a year', 'error');
+        return;
+    }
+    
+    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        await loadSchoolInfoForReport();
+        await loadFeeStructureForReport();
+        await loadAllPaymentsForReport();
+        
+        let query = sb.from('students').select('*').eq('class', className);
+        if (stream && stream !== '') query = query.eq('stream', stream);
+        
+        const { data: students, error: studentError } = await query;
+        if (studentError) throw studentError;
+        
+        if (!students || students.length === 0) {
+            Swal.fire('No Students', 'No students found', 'info');
+            return;
+        }
+        
+        const allReports = [];
+        for (const student of students) {
+            const marks = await loadOlevelMarksForReport(student.id, exam, year);
+            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
+            const classTeacher = getClassTeacher(student);
+            if (marks.length > 0) {
+                allReports.push({ student, marks, feeStatus, classTeacher });
+            }
+        }
+        
+        if (allReports.length === 0) {
+            Swal.fire('No Data', 'No marks found for these students', 'info');
+            return;
+        }
+        
+        const printWindow = window.open('', '_blank');
+        let allReportsHtml = '';
+        
+        for (let i = 0; i < allReports.length; i++) {
+            const { student, marks, feeStatus, classTeacher } = allReports[i];
+            allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus);
+            if (i < allReports.length - 1) {
+                allReportsHtml += '<div style="page-break-after: always;"></div>';
+            }
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Bulk O-Level Reports - ${className}</title>
+                <style>
+                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
+                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; }
+                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #000; padding: 8px; }
+                    .report-container { margin: 0 auto; border: 1px solid #000; }
+                </style>
+            </head>
+            <body>
+                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+                    <button onclick="window.print()">🖨️ Print All</button>
+                    <button onclick="window.close()">❌ Close</button>
+                </div>
+                ${allReportsHtml}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        Swal.close();
+        
+    } catch (error) {
+        Swal.close();
+        Swal.fire('Error', error.message, 'error');
+    }
+};
+
+// ============================================
+// GENERATE A-LEVEL BULK REPORTS
+// ============================================
+
+window.generateBulkReports = async function() {
+    console.log('🔄 A-Level Bulk Reports Started');
+    
+    const className = document.getElementById('bulkClass')?.value;
+    const stream = document.getElementById('bulkStream')?.value;
+    const exam = document.getElementById('bulkExam')?.value;
+    const year = document.getElementById('bulkYear')?.value;
+    
+    if (!className) {
+        Swal.fire('Error', 'Please select a class', 'error');
+        return;
+    }
+    if (!exam) {
+        Swal.fire('Error', 'Please select a term/exam', 'error');
+        return;
+    }
+    if (!year) {
+        Swal.fire('Error', 'Please enter a year', 'error');
+        return;
+    }
+    
+    Swal.fire({ 
+        title: 'Generating A-Level Reports...', 
+        text: 'Loading student data...',
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    try {
+        await loadSchoolInfoForReport();
+        await loadGradingRulesForReport();
+        await loadUniversityEntryRequirements();
+        await loadFeeStructureForReport();
+        await loadAllPaymentsForReport();
+        await loadStudentsForReport();
+        
+        let query = sb.from('students').select('*').eq('class', className);
+        if (stream && stream !== '') {
+            query = query.eq('stream', stream);
+        }
+        
+        const { data: students, error: studentError } = await query;
+        if (studentError) throw studentError;
+        
+        if (!students || students.length === 0) {
+            Swal.fire({
+                title: 'No Students Found',
+                text: `No A-Level students found in ${className}${stream ? ' - ' + stream : ''}`,
+                icon: 'info'
+            });
+            return;
+        }
+        
+        Swal.update({ text: `Processing ${students.length} A-Level students...` });
+        
+        const allReports = [];
+        let skippedCount = 0;
+        
+        for (const student of students) {
+            const marks = await loadAlevelMarksForReport(student.id, exam, year);
+            
+            if (marks.length === 0) {
+                skippedCount++;
+                continue;
+            }
+            
+            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
+            const classTeacher = getAlevelClassTeacher(student);
+            
+            allReports.push({ student, marks, feeStatus, classTeacher });
+        }
+        
+        if (allReports.length === 0) {
+            Swal.fire({
+                title: 'No Data Found',
+                html: `
+                    <div class="text-start">
+                        <p>No marks found for A-Level students in ${className}${stream ? ' - ' + stream : ''}</p>
+                        <p class="text-muted">Skipped ${skippedCount} students without marks.</p>
+                        <hr>
+                        <p><strong>Tip:</strong> Make sure you have entered marks for these students in the Marks module.</p>
+                    </div>
+                `,
+                icon: 'info'
+            });
+            return;
+        }
+        
+        Swal.update({ text: `Generating ${allReports.length} A-Level report cards...` });
+        
+        const printWindow = window.open('', '_blank');
+        
+        if (!printWindow) {
+            Swal.fire({
+                title: 'Popup Blocked!',
+                html: 'Please allow popups for this website to print reports.',
+                icon: 'warning'
+            });
+            return;
+        }
+        
+        let allReportsHtml = '';
+        for (let i = 0; i < allReports.length; i++) {
+            const { student, marks, feeStatus, classTeacher } = allReports[i];
+            allReportsHtml += generateAlevelBulkReportCard(
+                student, marks, exam, year, feeStatus, classTeacher
+            );
+            if (i < allReports.length - 1) {
+                allReportsHtml += '<div style="page-break-after: always;"></div>';
+            }
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>A-Level Bulk Reports - ${className}</title>
+                <style>
+                    @media print {
+                        body { margin: 0; padding: 0; background: white; }
+                        .no-print { display: none !important; }
+                        .report-container { 
+                            page-break-after: always; 
+                            border: none !important;
+                            box-shadow: none !important;
+                            margin: 0 !important;
+                            padding: 20px !important;
+                            border-radius: 0 !important;
+                        }
+                        .report-container:last-child { page-break-after: avoid; }
+                    }
+                    @media screen {
+                        body { 
+                            font-family: 'Times New Roman', Arial, sans-serif;
+                            padding: 15px;
+                            font-size: 12px;
+                            background: #f0f0f0;
+                        }
+                        .report-container {
+                            max-width: 950px;
+                            margin: 0 auto 20px auto;
+                            padding: 20px;
+                            background: white;
+                            border-radius: 8px;
+                            border: 1px solid #ddd;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }
+                    }
+                    .grade-badge {
+                        display: inline-block;
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        color: white;
+                        font-weight: bold;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                    }
+                    .no-print {
+                        text-align: center;
+                        margin-bottom: 20px;
+                        background: white;
+                        padding: 15px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    }
+                    .no-print button {
+                        padding: 10px 30px;
+                        border: none;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        margin: 0 10px;
+                        font-size: 14px;
+                        font-weight: bold;
+                    }
+                    .btn-print {
+                        background: #01605a;
+                        color: white;
+                    }
+                    .btn-print:hover {
+                        background: #014a45;
+                    }
+                    .btn-close {
+                        background: #dc3545;
+                        color: white;
+                    }
+                    .btn-close:hover {
+                        background: #c82333;
+                    }
+                    .print-info {
+                        margin-top: 8px;
+                        color: #666;
+                        font-size: 12px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="no-print">
+                    <button class="btn-print" onclick="window.print()">🖨️ Print All Reports</button>
+                    <button class="btn-close" onclick="window.close()">❌ Close Window</button>
+                    <div class="print-info">
+                        <strong>${allReports.length}</strong> A-Level reports generated for <strong>${className}</strong> ${stream ? '- ' + stream : ''} | ${exam} ${year}
+                        ${skippedCount > 0 ? `| ⚠️ ${skippedCount} students skipped (no marks)` : ''}
+                    </div>
+                </div>
+                ${allReportsHtml}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        Swal.close();
+        
+        setTimeout(() => {
+            printWindow.print();
+        }, 1500);
+        
+    } catch (error) {
+        Swal.close();
+        console.error('A-Level Bulk Report Error:', error);
+        Swal.fire({
+            title: 'Error Generating A-Level Reports',
+            text: error.message || 'An unexpected error occurred',
+            icon: 'error'
+        });
+    }
+};
+
+// ============================================
+// RENDER REPORTS PAGE
+// ============================================
+
+async function renderReports() {
+    await loadSchoolInfoForReport();
+    await loadGradingRulesForReport();
+    await loadUniversityEntryRequirements();
+    await loadFeeStructureForReport();
+    await loadAllPaymentsForReport();
+    await loadStudentsForReport();
+    await loadAcademicTermsForReports();
+    
+    const classOptions = currentLevel === 'olevel' 
+        ? ['S.1', 'S.2', 'S.3', 'S.4']
+        : ['S.5', 'S.6'];
+    
+    const currentYear = new Date().getFullYear();
+    
+    const generateButton = currentLevel === 'olevel' 
+        ? `onclick="generateOlevelReport()"`
+        : `onclick="generateSingleReport()"`;
+    
+    const bulkButton = currentLevel === 'olevel'
+        ? `onclick="generateBulkOlevelReports()"`
+        : `onclick="generateBulkReports()"`;
+    
+    return `
+        <div class="card shadow-sm mb-3">
+            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
+                <h5 class="mb-0"><i class="fas fa-file-alt"></i> Student Report Card</h5>
+                <small>Complete Academic & Financial Report | Fee Calculation: Past Debts → Current Term → Forward Credit</small>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Select Student</label>
+                        <select id="reportStudent" class="form-select">
+                            <option value="">-- Select Student --</option>
+                            ${reportsStudentsList.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.admission_no}) - ${s.class}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Term/Exam</label>
+                        <select id="reportExam" class="form-select">
+                            <option value="">-- Select Term --</option>
+                            <option value="Term 1">📘 Term 1</option>
+                            <option value="Term 2">📙 Term 2</option>
+                            <option value="Term 3">📗 Term 3</option>
+                            <option value="Mid-Term">📝 Mid-Term</option>
+                            <option value="Mock">🎯 Mock</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Year</label>
+                        <input type="text" id="reportYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button class="btn btn-primary w-100" ${generateButton}>
+                            <i class="fas fa-file-alt"></i> Generate
+                        </button>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Bulk Class</label>
+                        <select id="bulkClass" class="form-select">
+                            <option value="">-- Select Class --</option>
+                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Stream</label>
+                        <select id="bulkStream" class="form-select">
+                            <option value="">-- All Streams --</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Sciences">Sciences</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Term/Exam</label>
+                        <select id="bulkExam" class="form-select">
+                            <option value="">-- Select Term --</option>
+                            <option value="Term 1">📘 Term 1</option>
+                            <option value="Term 2">📙 Term 2</option>
+                            <option value="Term 3">📗 Term 3</option>
+                            <option value="Mid-Term">📝 Mid-Term</option>
+                            <option value="Mock">🎯 Mock</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Year</label>
+                        <input type="text" id="bulkYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button class="btn btn-info w-100" ${bulkButton}>
+                            <i class="fas fa-print"></i> Print Bulk
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="reportPreview" style="display: none;"></div>
+    `;
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 
-console.log('✅ Reports Module Loaded - Final Masterpiece');
+console.log('✅ Reports Module Loaded - Clean Version');
 console.log('✅ Fee Calculation: Past Debts → Current Term → Forward Credit');
 console.log('✅ Class Teacher from School Settings');
+console.log('✅ O-Level and A-Level report formats preserved');
 
 // ============================================
 // PROMOTION MODULE - WITH A-LEVEL STREAM SELECTION
