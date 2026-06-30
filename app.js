@@ -1,9 +1,10 @@
-SUPABASE_URL = 'https://dljvmlshqegrwxqduggo.supabase.co';
+const SUPABASE_URL = 'https://dljvmlshqegrwxqduggo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsanZtbHNocWVncnd4cWR1Z2dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDE5NDgsImV4cCI6MjA5MDQ3Nzk0OH0.1TjmfFhcy5trfOgfu0Y8iQTeKFUNqvjUnniKUtzvuX8';
 
 let sb = null;
 let currentUser = null;
 let currentUserRole = null;
+let currentLevel = 'olevel';
 let currentPage = 'dashboard';
 // ============================================
 // AUTO-REFRESH SESSION TOKEN
@@ -7709,10 +7710,7 @@ function escapeHtml(text) {
 }
 
 // ============================================
-// LIBRARY MODULE - FINAL MASTERPIECE
-// Complete with: Books, Borrowing, History, Fine Management, Categories, Reports, Settings
-// Role-Based Access: Superadmin/Admin/Librarian = Full | Others = View Only
-// Settings Tab: SUPER ADMIN ONLY
+// LIBRARY MODULE - COMPLETE WORKING VERSION
 // ============================================
 
 // ============================================
@@ -7729,7 +7727,6 @@ let currentFineFilter = 'all';
 // Constants
 let DAILY_FINE_RATE = 500;
 let BORROW_DAYS = 14;
-
 
 // ============================================
 // CHECK USER PERMISSIONS
@@ -7854,16 +7851,28 @@ async function libGetTeachers() {
 }
 
 async function libAddBook(bookData) {
+    // Validate required fields
+    if (!bookData.title || bookData.title.trim() === '') {
+        throw new Error('Book title is required!');
+    }
+    
     const { data, error } = await sb
         .from('books')
         .insert([{
-            ...bookData,
-            level: currentLevel,
+            isbn: bookData.isbn || '',
+            title: bookData.title.trim(),
+            author: bookData.author || '',
+            publisher: bookData.publisher || '',
+            category: bookData.category || '',
+            copies: parseInt(bookData.copies) || 1,
             borrowed_count: 0,
+            level: currentLevel,
+            description: bookData.description || '',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         }])
         .select();
+    
     if (error) throw error;
     return data[0];
 }
@@ -7872,11 +7881,18 @@ async function libUpdateBook(id, bookData) {
     const { data, error } = await sb
         .from('books')
         .update({
-            ...bookData,
+            isbn: bookData.isbn || '',
+            title: bookData.title.trim(),
+            author: bookData.author || '',
+            publisher: bookData.publisher || '',
+            category: bookData.category || '',
+            copies: parseInt(bookData.copies) || 1,
+            description: bookData.description || '',
             updated_at: new Date().toISOString()
         })
         .eq('id', id)
         .select();
+    
     if (error) throw error;
     return data[0];
 }
@@ -7920,11 +7936,16 @@ async function libAddFine(fineData) {
     const { data, error } = await sb
         .from('library_fines')
         .insert([{
-            ...fineData,
-            created_at: new Date().toISOString(),
-            status: 'PENDING'
+            borrower_id: fineData.borrower_id,
+            borrower_type: fineData.borrower_type,
+            reason: fineData.reason,
+            amount: fineData.amount,
+            description: fineData.description || '',
+            status: 'PENDING',
+            created_at: new Date().toISOString()
         }])
         .select();
+    
     if (error) throw error;
     return data[0];
 }
@@ -7963,6 +7984,94 @@ async function libGetFines() {
         console.error('Error loading fines:', error);
         return [];
     }
+}
+
+// ============================================
+// VERIFY SUPER ADMIN PASSWORD
+// ============================================
+
+async function verifySuperAdminPasswordForDelete() {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Super Admin Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-danger mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        This action requires Super Administrator approval.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Super Admin Password</label>
+                        <input type="password" id="superAdminPassword" class="form-control" 
+                               placeholder="Enter Super Admin password" autocomplete="off">
+                        <small class="text-muted">A Super Admin must authorize this deletion.</small>
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize Deletion',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('superAdminPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            Swal.clickConfirm();
+                        }
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const password = document.getElementById('superAdminPassword')?.value;
+                
+                if (!password) {
+                    Swal.showValidationMessage('Please enter Super Admin password');
+                    return false;
+                }
+                
+                try {
+                    const { data: superAdminData, error: superAdminError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', 'superadmin')
+                        .limit(1)
+                        .single();
+                    
+                    if (superAdminError) {
+                        Swal.showValidationMessage('Could not verify Super Admin credentials');
+                        return false;
+                    }
+                    
+                    const { data, error } = await sb.auth.signInWithPassword({
+                        email: superAdminData.email,
+                        password: password
+                    });
+                    
+                    if (error) {
+                        const errorDiv = document.getElementById('passwordError');
+                        if (errorDiv) errorDiv.style.display = 'block';
+                        Swal.showValidationMessage('Incorrect Super Admin password');
+                        return false;
+                    }
+                    
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed. Please try again.');
+                    return false;
+                }
+            }
+        }).then((result) => {
+            resolve(result.isConfirmed);
+        });
+    });
 }
 
 // ============================================
@@ -8095,7 +8204,6 @@ async function loadFinesTable() {
     await libGetTeachers();
     const canManage = canManageLibrary();
     
-    // Populate borrower dropdown for add fine form
     if (canManage) {
         const borrowerTypeSelect = document.getElementById('fineBorrowerType');
         const borrowerIdSelect = document.getElementById('fineBorrowerId');
@@ -8111,7 +8219,6 @@ async function loadFinesTable() {
         updateBorrowerList();
     }
     
-    // Apply filter
     let filteredFines = libraryFines;
     if (currentFineFilter === 'pending') filteredFines = libraryFines.filter(f => f.status === 'PENDING');
     else if (currentFineFilter === 'paid') filteredFines = libraryFines.filter(f => f.status === 'PAID');
@@ -8187,7 +8294,7 @@ async function loadCategoriesTable() {
 }
 
 // ============================================
-// LOAD LIBRARY REPORTS (IMPROVED)
+// LOAD LIBRARY REPORTS
 // ============================================
 
 async function loadLibraryReports() {
@@ -8389,99 +8496,8 @@ window.markFinePaid = async function(fineId) {
     }
 };
 
-
 // ============================================
-// VERIFY SUPER ADMIN PASSWORD (For Librarian/Admin)
-// ============================================
-
-async function verifySuperAdminPasswordForDelete() {
-    return new Promise((resolve) => {
-        Swal.fire({
-            title: '🔐 Super Admin Authorization Required',
-            html: `
-                <div class="text-start">
-                    <div class="alert alert-danger mb-3">
-                        <i class="fas fa-shield-alt"></i> 
-                        <strong>Authorization Required!</strong><br>
-                        This action requires Super Administrator approval.
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Super Admin Password</label>
-                        <input type="password" id="superAdminPassword" class="form-control" 
-                               placeholder="Enter Super Admin password" autocomplete="off">
-                        <small class="text-muted">A Super Admin must authorize this deletion.</small>
-                    </div>
-                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
-                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
-                    </div>
-                </div>
-            `,
-            width: '450px',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check"></i> Authorize Deletion',
-            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
-            confirmButtonColor: '#d33',
-            allowOutsideClick: false,
-            didOpen: () => {
-                const passwordInput = document.getElementById('superAdminPassword');
-                if (passwordInput) {
-                    passwordInput.focus();
-                    passwordInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            Swal.clickConfirm();
-                        }
-                    });
-                }
-            },
-            preConfirm: async () => {
-                const password = document.getElementById('superAdminPassword')?.value;
-                
-                if (!password) {
-                    Swal.showValidationMessage('Please enter Super Admin password');
-                    return false;
-                }
-                
-                try {
-                    // Get super admin email from users table
-                    const { data: superAdminData, error: superAdminError } = await sb
-                        .from('users')
-                        .select('email')
-                        .eq('role', 'superadmin')
-                        .limit(1)
-                        .single();
-                    
-                    if (superAdminError) {
-                        Swal.showValidationMessage('Could not verify Super Admin credentials');
-                        return false;
-                    }
-                    
-                    // Verify password with Supabase
-                    const { data, error } = await sb.auth.signInWithPassword({
-                        email: superAdminData.email,
-                        password: password
-                    });
-                    
-                    if (error) {
-                        const errorDiv = document.getElementById('passwordError');
-                        if (errorDiv) errorDiv.style.display = 'block';
-                        Swal.showValidationMessage('Incorrect Super Admin password');
-                        return false;
-                    }
-                    
-                    return true;
-                } catch (err) {
-                    Swal.showValidationMessage('Verification failed. Please try again.');
-                    return false;
-                }
-            }
-        }).then((result) => {
-            resolve(result.isConfirmed);
-        });
-    });
-}
-
-// ============================================
-// DELETE FINE - PROMPTS FOR PASSWORD IF NOT SUPER ADMIN
+// DELETE FINE
 // ============================================
 
 window.deleteFine = async function(fineId) {
@@ -8489,7 +8505,6 @@ window.deleteFine = async function(fineId) {
     const fine = libraryFines.find(f => f.id === fineId);
     if (!fine) return;
     
-    // First confirmation
     const confirmDelete = await Swal.fire({
         title: 'Delete Fine?',
         html: `<p>Are you sure you want to delete this fine?</p>
@@ -8506,7 +8521,6 @@ window.deleteFine = async function(fineId) {
     
     if (!confirmDelete.isConfirmed) return;
     
-    // If not Super Admin, verify Super Admin password
     if (!isSuperAdmin) {
         const passwordVerified = await verifySuperAdminPasswordForDelete();
         if (!passwordVerified) {
@@ -8537,53 +8551,246 @@ window.deleteFine = async function(fineId) {
 };
 
 // ============================================
-// BOOK MANAGEMENT FUNCTIONS
+// BOOK MANAGEMENT FUNCTIONS - FIXED!
 // ============================================
 
 window.showAddBookModal = function() {
-    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to add books.', 'error'); return; }
+    if (!canManageLibrary()) { 
+        Swal.fire('Access Denied', 'You do not have permission to add books.', 'error'); 
+        return; 
+    }
+    
     Swal.fire({
         title: '<i class="fas fa-book"></i> Add New Book',
-        html: `<div class="text-start"><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">ISBN</label><input type="text" id="bookIsbn" class="form-control" placeholder="978-3-16-148410-0"></div><div class="col-md-6"><label class="form-label fw-bold">Title *</label><input type="text" id="bookTitle" class="form-control" placeholder="Book title"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Author</label><input type="text" id="bookAuthor" class="form-control" placeholder="Author name"></div><div class="col-md-6"><label class="form-label fw-bold">Publisher</label><input type="text" id="bookPublisher" class="form-control" placeholder="Publisher name"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Category</label><select id="bookCategory" class="form-select"><option value="English">English</option><option value="Mathematics">Mathematics</option><option value="Science">Science</option><option value="Biology">Biology</option><option value="Chemistry">Chemistry</option><option value="Physics">Physics</option><option value="History">History</option><option value="Geography">Geography</option><option value="Economics">Economics</option><option value="Fiction">Fiction</option><option value="Reference">Reference</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Copies</label><input type="number" id="bookCopies" class="form-control" value="1" min="1"></div></div><div class="mb-3"><label class="form-label fw-bold">Description</label><textarea id="bookDescription" class="form-control" rows="2" placeholder="Book description..."></textarea></div><div class="alert alert-info"><i class="fas fa-info-circle"></i> This book will be added to <strong>${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}</strong> library</div></div>`,
-        width: '600px', showCancelButton: true, confirmButtonText: '<i class="fas fa-save"></i> Save Book',
+        html: `
+            <div class="text-start">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">ISBN</label>
+                        <input type="text" id="bookIsbnInput" class="form-control" placeholder="978-3-16-148410-0">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-danger">Book Title *</label>
+                        <input type="text" id="bookTitleInput" class="form-control" placeholder="Enter book title" autofocus>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Author</label>
+                        <input type="text" id="bookAuthorInput" class="form-control" placeholder="Author name">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Publisher</label>
+                        <input type="text" id="bookPublisherInput" class="form-control" placeholder="Publisher name">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Category</label>
+                        <select id="bookCategoryInput" class="form-select">
+                            <option value="English">English</option>
+                            <option value="Mathematics">Mathematics</option>
+                            <option value="Science">Science</option>
+                            <option value="Biology">Biology</option>
+                            <option value="Chemistry">Chemistry</option>
+                            <option value="Physics">Physics</option>
+                            <option value="History">History</option>
+                            <option value="Geography">Geography</option>
+                            <option value="Economics">Economics</option>
+                            <option value="Fiction">Fiction</option>
+                            <option value="Reference">Reference</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Copies</label>
+                        <input type="number" id="bookCopiesInput" class="form-control" value="1" min="1">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Description</label>
+                    <textarea id="bookDescriptionInput" class="form-control" rows="2" placeholder="Book description..."></textarea>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> This book will be added to <strong>${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}</strong> library
+                </div>
+            </div>
+        `,
+        width: '600px',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-save"></i> Save Book',
+        cancelButtonText: 'Cancel',
         preConfirm: () => {
-            const title = document.getElementById('bookTitle').value.trim();
-            if (!title) return Swal.showValidationMessage('Book title is required!');
-            return { isbn: document.getElementById('bookIsbn').value, title: title, author: document.getElementById('bookAuthor').value, publisher: document.getElementById('bookPublisher').value, category: document.getElementById('bookCategory').value, copies: parseInt(document.getElementById('bookCopies').value) || 1, description: document.getElementById('bookDescription').value };
+            // Get the title input - using new ID
+            const titleInput = document.getElementById('bookTitleInput');
+            
+            // Check if element exists
+            if (!titleInput) {
+                Swal.showValidationMessage('Form error: Title input not found. Please refresh and try again.');
+                return false;
+            }
+            
+            const title = titleInput.value.trim();
+            
+            // Check if title has value
+            if (!title) {
+                Swal.showValidationMessage('⚠️ Book title is required! Please enter a title.');
+                return false;
+            }
+            
+            // Get all other values
+            const isbn = document.getElementById('bookIsbnInput')?.value || '';
+            const author = document.getElementById('bookAuthorInput')?.value || '';
+            const publisher = document.getElementById('bookPublisherInput')?.value || '';
+            const category = document.getElementById('bookCategoryInput')?.value || 'General';
+            const copies = parseInt(document.getElementById('bookCopiesInput')?.value) || 1;
+            const description = document.getElementById('bookDescriptionInput')?.value || '';
+            
+            // Return the book data
+            return {
+                isbn: isbn,
+                title: title,
+                author: author,
+                publisher: publisher,
+                category: category,
+                copies: copies,
+                description: description
+            };
         }
     }).then(async (result) => {
         if (result.value) {
-            Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            try { await libAddBook(result.value); Swal.fire('Success!', 'Book added successfully.', 'success'); await refreshLibrary(); } 
-            catch (error) { Swal.fire('Error!', error.message, 'error'); }
-        }
-    });
-};
-
-window.editBook = async function(id) {
-    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to edit books.', 'error'); return; }
-    const book = libraryBooks.find(b => b.id === id);
-    if (!book) return;
-    Swal.fire({
-        title: '<i class="fas fa-edit"></i> Edit Book',
-        html: `<div class="text-start"><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">ISBN</label><input type="text" id="bookIsbn" class="form-control" value="${escapeHtml(book.isbn || '')}"></div><div class="col-md-6"><label class="form-label fw-bold">Title *</label><input type="text" id="bookTitle" class="form-control" value="${escapeHtml(book.title)}"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Author</label><input type="text" id="bookAuthor" class="form-control" value="${escapeHtml(book.author || '')}"></div><div class="col-md-6"><label class="form-label fw-bold">Publisher</label><input type="text" id="bookPublisher" class="form-control" value="${escapeHtml(book.publisher || '')}"></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label fw-bold">Category</label><select id="bookCategory" class="form-select"><option value="English" ${book.category === 'English' ? 'selected' : ''}>English</option><option value="Mathematics" ${book.category === 'Mathematics' ? 'selected' : ''}>Mathematics</option><option value="Science" ${book.category === 'Science' ? 'selected' : ''}>Science</option><option value="Biology" ${book.category === 'Biology' ? 'selected' : ''}>Biology</option><option value="Chemistry" ${book.category === 'Chemistry' ? 'selected' : ''}>Chemistry</option><option value="Physics" ${book.category === 'Physics' ? 'selected' : ''}>Physics</option><option value="Economics" ${book.category === 'Economics' ? 'selected' : ''}>Economics</option><option value="General Paper" ${book.category === 'General Paper' ? 'selected' : ''}>General Paper</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Copies</label><input type="number" id="bookCopies" class="form-control" value="${book.copies}" min="1"></div></div></div>`,
-        width: '600px', showCancelButton: true, confirmButtonText: '<i class="fas fa-save"></i> Update Book',
-        preConfirm: () => {
-            const title = document.getElementById('bookTitle').value.trim();
-            if (!title) return Swal.showValidationMessage('Title required');
-            return { isbn: document.getElementById('bookIsbn').value, title: title, author: document.getElementById('bookAuthor').value, publisher: document.getElementById('bookPublisher').value, category: document.getElementById('bookCategory').value, copies: parseInt(document.getElementById('bookCopies').value) || 1 };
-        }
-    }).then(async (result) => {
-        if (result.value) {
-            Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            try { await libUpdateBook(id, result.value); Swal.fire('Success!', 'Book updated.', 'success'); await refreshLibrary(); } 
-            catch (error) { Swal.fire('Error!', error.message, 'error'); }
+            Swal.fire({ 
+                title: 'Saving...', 
+                allowOutsideClick: false, 
+                didOpen: () => Swal.showLoading() 
+            });
+            
+            try { 
+                await libAddBook(result.value); 
+                Swal.fire('✅ Success!', 'Book added successfully.', 'success'); 
+                await refreshLibrary(); 
+            } catch (error) {
+                console.error('Error saving book:', error);
+                Swal.fire('❌ Error!', error.message || 'Failed to add book', 'error'); 
+            }
         }
     });
 };
 
 // ============================================
-// DELETE SINGLE BOOK - PROMPTS FOR PASSWORD IF NOT SUPER ADMIN
+// EDIT BOOK
+// ============================================
+
+window.editBook = async function(id) {
+    if (!canManageLibrary()) { 
+        Swal.fire('Access Denied', 'You do not have permission to edit books.', 'error'); 
+        return; 
+    }
+    
+    const book = libraryBooks.find(b => b.id === id);
+    if (!book) return;
+    
+    Swal.fire({
+        title: '<i class="fas fa-edit"></i> Edit Book',
+        html: `
+            <div class="text-start">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">ISBN</label>
+                        <input type="text" id="editBookIsbnInput" class="form-control" value="${escapeHtml(book.isbn || '')}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-danger">Book Title *</label>
+                        <input type="text" id="editBookTitleInput" class="form-control" value="${escapeHtml(book.title)}">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Author</label>
+                        <input type="text" id="editBookAuthorInput" class="form-control" value="${escapeHtml(book.author || '')}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Publisher</label>
+                        <input type="text" id="editBookPublisherInput" class="form-control" value="${escapeHtml(book.publisher || '')}">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Category</label>
+                        <select id="editBookCategoryInput" class="form-select">
+                            <option value="English" ${book.category === 'English' ? 'selected' : ''}>English</option>
+                            <option value="Mathematics" ${book.category === 'Mathematics' ? 'selected' : ''}>Mathematics</option>
+                            <option value="Science" ${book.category === 'Science' ? 'selected' : ''}>Science</option>
+                            <option value="Biology" ${book.category === 'Biology' ? 'selected' : ''}>Biology</option>
+                            <option value="Chemistry" ${book.category === 'Chemistry' ? 'selected' : ''}>Chemistry</option>
+                            <option value="Physics" ${book.category === 'Physics' ? 'selected' : ''}>Physics</option>
+                            <option value="History" ${book.category === 'History' ? 'selected' : ''}>History</option>
+                            <option value="Geography" ${book.category === 'Geography' ? 'selected' : ''}>Geography</option>
+                            <option value="Economics" ${book.category === 'Economics' ? 'selected' : ''}>Economics</option>
+                            <option value="Fiction" ${book.category === 'Fiction' ? 'selected' : ''}>Fiction</option>
+                            <option value="Reference" ${book.category === 'Reference' ? 'selected' : ''}>Reference</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Copies</label>
+                        <input type="number" id="editBookCopiesInput" class="form-control" value="${book.copies}" min="1">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Description</label>
+                    <textarea id="editBookDescriptionInput" class="form-control" rows="2">${escapeHtml(book.description || '')}</textarea>
+                </div>
+            </div>
+        `,
+        width: '600px',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-save"></i> Update Book',
+        cancelButtonText: 'Cancel',
+        preConfirm: () => {
+            const titleInput = document.getElementById('editBookTitleInput');
+            
+            if (!titleInput) {
+                Swal.showValidationMessage('Form error: Title input not found.');
+                return false;
+            }
+            
+            const title = titleInput.value.trim();
+            
+            if (!title) {
+                Swal.showValidationMessage('⚠️ Book title is required!');
+                return false;
+            }
+            
+            return {
+                isbn: document.getElementById('editBookIsbnInput')?.value || '',
+                title: title,
+                author: document.getElementById('editBookAuthorInput')?.value || '',
+                publisher: document.getElementById('editBookPublisherInput')?.value || '',
+                category: document.getElementById('editBookCategoryInput')?.value || 'General',
+                copies: parseInt(document.getElementById('editBookCopiesInput')?.value) || 1,
+                description: document.getElementById('editBookDescriptionInput')?.value || ''
+            };
+        }
+    }).then(async (result) => {
+        if (result.value) {
+            Swal.fire({ 
+                title: 'Updating...', 
+                allowOutsideClick: false, 
+                didOpen: () => Swal.showLoading() 
+            });
+            
+            try { 
+                await libUpdateBook(id, result.value); 
+                Swal.fire('✅ Success!', 'Book updated.', 'success'); 
+                await refreshLibrary(); 
+            } catch (error) {
+                Swal.fire('❌ Error!', error.message, 'error'); 
+            }
+        }
+    });
+};
+
+// ============================================
+// DELETE SINGLE BOOK
 // ============================================
 
 window.deleteBookItem = async function(id) {
@@ -8591,13 +8798,11 @@ window.deleteBookItem = async function(id) {
     const book = libraryBooks.find(b => b.id === id);
     if (!book) return;
     
-    // First confirmation
     const confirmDelete = await Swal.fire({
         title: 'Delete Book?',
         html: `<p>Are you sure you want to delete:<br>
                <strong>"${escapeHtml(book.title)}"</strong>?</p>
                <p class="text-danger">⚠️ This action cannot be undone!</p>
-               <p>All borrowing records for this book will also be affected.</p>
                ${!isSuperAdmin ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
@@ -8608,7 +8813,6 @@ window.deleteBookItem = async function(id) {
     
     if (!confirmDelete.isConfirmed) return;
     
-    // If not Super Admin, verify Super Admin password
     if (!isSuperAdmin) {
         const passwordVerified = await verifySuperAdminPasswordForDelete();
         if (!passwordVerified) {
@@ -8622,107 +8826,62 @@ window.deleteBookItem = async function(id) {
         }
     }
     
-    // Final confirmation
-    const finalConfirm = await Swal.fire({
-        title: '🔴 Final Confirmation',
-        html: `<p>${!isSuperAdmin ? 'Super Admin authorized. ' : ''}Are you absolutely sure you want to delete<br>
-               <strong>"${escapeHtml(book.title)}"</strong>?</p>`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Delete Permanently',
-        cancelButtonText: 'Cancel'
+    Swal.fire({ 
+        title: 'Deleting...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
     });
     
-    if (finalConfirm.isConfirmed) {
-        Swal.fire({ 
-            title: 'Deleting...', 
-            text: 'Removing book from library...',
-            allowOutsideClick: false, 
-            didOpen: () => Swal.showLoading() 
-        });
-        
-        try {
-            await libDeleteBook(id);
-            Swal.fire({
-                title: '✅ Deleted!',
-                text: 'Book has been removed successfully.',
-                icon: 'success',
-                timer: 1500,
-                showConfirmButton: false
-            });
-            await refreshLibrary();
-        } catch (error) {
-            Swal.fire({
-                title: '❌ Error!',
-                text: error.message,
-                icon: 'error',
-                confirmButtonText: 'OK'
-            });
-        }
+    try {
+        await libDeleteBook(id);
+        Swal.fire('✅ Deleted!', 'Book has been removed.', 'success');
+        await refreshLibrary();
+    } catch (error) {
+        Swal.fire('❌ Error!', error.message, 'error');
     }
 };
 
 // ============================================
-// DELETE ALL BOOKS - PROMPTS FOR PASSWORD IF NOT SUPER ADMIN
+// DELETE ALL BOOKS
 // ============================================
 
 window.confirmDeleteAllBooks = async function() {
     const isSuperAdmin = (currentUserRole === 'superadmin');
     
     if (libraryBooks.length === 0) {
-        Swal.fire({
-            title: 'ℹ️ No Books',
-            text: 'There are no books to delete.',
-            icon: 'info',
-            confirmButtonText: 'OK'
-        });
+        Swal.fire('ℹ️ No Books', 'There are no books to delete.', 'info');
         return;
     }
     
-    // First confirmation
     const firstConfirm = await Swal.fire({
         title: '⚠️ DELETE ALL BOOKS',
-        html: `<p>You are about to delete <strong style="color: red; font-size: 24px;">${libraryBooks.length}</strong> books from the library.</p>
+        html: `<p>You are about to delete <strong style="color: red; font-size: 24px;">${libraryBooks.length}</strong> books.</p>
                <p class="text-danger"><strong>⚠️ THIS ACTION CANNOT BE UNDONE! ⚠️</strong></p>
-               <p>All borrowing records, fines, and history will also be affected.</p>
-               ${!isSuperAdmin ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization will be required to proceed.</p>' : ''}
-               <hr>
-               <p>Are you sure you want to continue?</p>`,
+               ${!isSuperAdmin ? '<p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization required.</p>' : ''}`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: '<i class="fas fa-trash"></i> Yes, Continue',
-        cancelButtonText: '<i class="fas fa-times"></i> Cancel'
+        confirmButtonText: 'Yes, Continue',
+        cancelButtonText: 'Cancel'
     });
     
     if (!firstConfirm.isConfirmed) return;
     
-    // If not Super Admin, verify Super Admin password
     if (!isSuperAdmin) {
         const passwordVerified = await verifySuperAdminPasswordForDelete();
         if (!passwordVerified) {
-            Swal.fire({
-                title: '⛔ Access Denied',
-                text: 'Super Admin authorization failed. Delete operation cancelled.',
-                icon: 'error',
-                confirmButtonText: 'OK'
-            });
+            Swal.fire('⛔ Access Denied', 'Super Admin authorization failed.', 'error');
             return;
         }
     }
     
-    // Final confirmation
     const finalConfirm = await Swal.fire({
         title: '🔴 FINAL CONFIRMATION',
-        html: `<p>${!isSuperAdmin ? 'Super Admin authorized. ' : ''}This is your last chance to cancel.</p>
-               <p>Type <strong style="color: red;">"DELETE ALL"</strong> to permanently delete <strong>${libraryBooks.length}</strong> books.</p>`,
+        html: `<p>Type <strong style="color: red;">"DELETE ALL"</strong> to permanently delete <strong>${libraryBooks.length}</strong> books.</p>`,
         input: 'text',
         inputPlaceholder: 'Type DELETE ALL here',
         showCancelButton: true,
         confirmButtonText: 'Permanently Delete',
-        cancelButtonText: 'Cancel',
         confirmButtonColor: '#d33',
         preConfirm: (inputValue) => {
             if (inputValue !== 'DELETE ALL') {
@@ -8735,35 +8894,20 @@ window.confirmDeleteAllBooks = async function() {
     
     if (finalConfirm.isConfirmed) {
         Swal.fire({ 
-            title: '🗑️ Deleting all books...', 
-            text: 'Please wait while we delete all library books.',
+            title: 'Deleting all books...', 
             allowOutsideClick: false, 
             didOpen: () => Swal.showLoading() 
         });
         
         try {
             await libDeleteAllBooks();
-            
-            // Also delete related borrowings and fines
             await sb.from('borrowings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             await sb.from('library_fines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             
-            Swal.fire({
-                title: '✅ Deleted!',
-                html: `<strong>${libraryBooks.length}</strong> books have been permanently deleted from the library.<br><br>
-                       All borrowing records and fines have also been cleared.`,
-                icon: 'success',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#28a745'
-            });
+            Swal.fire('✅ Deleted!', `${libraryBooks.length} books permanently deleted.`, 'success');
             await refreshLibrary();
         } catch (error) {
-            Swal.fire({
-                title: '❌ Error!',
-                text: error.message,
-                icon: 'error',
-                confirmButtonText: 'OK'
-            });
+            Swal.fire('❌ Error!', error.message, 'error');
         }
     }
 };
@@ -8773,11 +8917,20 @@ window.confirmDeleteAllBooks = async function() {
 // ============================================
 
 window.showBorrowBookModal = async function() {
-    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to borrow books.', 'error'); return; }
-    await libGetBooks(); await libGetStudents(); await libGetTeachers();
+    if (!canManageLibrary()) { 
+        Swal.fire('Access Denied', 'You do not have permission to borrow books.', 'error'); 
+        return; 
+    }
+    
+    await libGetBooks(); 
+    await libGetStudents(); 
+    await libGetTeachers();
     
     const availableBooks = libraryBooks.filter(b => (b.copies - b.borrowed_count) > 0);
-    if (availableBooks.length === 0) { Swal.fire('Info', 'No books available for borrowing.', 'info'); return; }
+    if (availableBooks.length === 0) { 
+        Swal.fire('Info', 'No books available for borrowing.', 'info'); 
+        return; 
+    }
     
     let bookOptions = '<option value="">-- Select Book --</option>';
     for (const b of availableBooks) {
@@ -8789,15 +8942,55 @@ window.showBorrowBookModal = async function() {
     
     Swal.fire({
         title: '<i class="fas fa-hand-holding-heart"></i> Borrow Book',
-        html: `<div class="text-start"><div class="mb-3"><label class="form-label fw-bold">📖 Select Book *</label><select id="borrowBookId" class="form-select">${bookOptions}</select></div><div class="mb-3"><label class="form-label fw-bold">👤 Borrower Type *</label><select id="borrowerType" class="form-select"><option value="student">Student</option><option value="teacher">Teacher</option></select></div><div id="studentDiv"><label class="form-label fw-bold">🎓 Select Student *</label><select id="borrowStudentId" class="form-select">${studentOptions}</select></div><div id="teacherDiv" style="display:none"><label class="form-label fw-bold">👨‍🏫 Select Teacher *</label><select id="borrowTeacherId" class="form-select">${teacherOptions}</select></div><div class="mt-3"><label class="form-label fw-bold">📅 Due Date (${BORROW_DAYS} days)</label><input type="date" id="borrowDueDate" class="form-control" value="${getDefaultReturnDate()}"></div><div class="mt-2"><label class="form-label fw-bold">📝 Remarks</label><textarea id="borrowRemarks" class="form-control" rows="2"></textarea></div><div class="alert alert-info mt-2"><i class="fas fa-info-circle"></i> Late return fine: ${formatMoney(DAILY_FINE_RATE)} per day</div></div>`,
-        width: '550px', showCancelButton: true, confirmButtonText: '<i class="fas fa-check"></i> Borrow Book',
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📖 Select Book *</label>
+                    <select id="borrowBookId" class="form-select">${bookOptions}</select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">👤 Borrower Type *</label>
+                    <select id="borrowerType" class="form-select">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                    </select>
+                </div>
+                <div id="studentDiv">
+                    <label class="form-label fw-bold">🎓 Select Student *</label>
+                    <select id="borrowStudentId" class="form-select">${studentOptions}</select>
+                </div>
+                <div id="teacherDiv" style="display:none">
+                    <label class="form-label fw-bold">👨‍🏫 Select Teacher *</label>
+                    <select id="borrowTeacherId" class="form-select">${teacherOptions}</select>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label fw-bold">📅 Due Date (${BORROW_DAYS} days)</label>
+                    <input type="date" id="borrowDueDate" class="form-control" value="${getDefaultReturnDate()}">
+                </div>
+                <div class="mt-2">
+                    <label class="form-label fw-bold">📝 Remarks</label>
+                    <textarea id="borrowRemarks" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="alert alert-info mt-2">
+                    <i class="fas fa-info-circle"></i> Late return fine: ${formatMoney(DAILY_FINE_RATE)} per day
+                </div>
+            </div>
+        `,
+        width: '550px', 
+        showCancelButton: true, 
+        confirmButtonText: '<i class="fas fa-check"></i> Borrow Book',
         didOpen: () => {
             const typeSelect = document.getElementById('borrowerType');
             const studentDiv = document.getElementById('studentDiv');
             const teacherDiv = document.getElementById('teacherDiv');
             typeSelect.onchange = () => {
-                if (typeSelect.value === 'student') { studentDiv.style.display = 'block'; teacherDiv.style.display = 'none'; } 
-                else { studentDiv.style.display = 'none'; teacherDiv.style.display = 'block'; }
+                if (typeSelect.value === 'student') { 
+                    studentDiv.style.display = 'block'; 
+                    teacherDiv.style.display = 'none'; 
+                } else { 
+                    studentDiv.style.display = 'none'; 
+                    teacherDiv.style.display = 'block'; 
+                }
             };
         },
         preConfirm: () => {
@@ -8805,11 +8998,23 @@ window.showBorrowBookModal = async function() {
             const borrowerType = document.getElementById('borrowerType').value;
             let borrowerId = '';
             if (!bookId) return Swal.showValidationMessage('Select a book');
-            if (borrowerType === 'student') { borrowerId = document.getElementById('borrowStudentId').value; if (!borrowerId) return Swal.showValidationMessage('Select a student'); } 
-            else { borrowerId = document.getElementById('borrowTeacherId').value; if (!borrowerId) return Swal.showValidationMessage('Select a teacher'); }
+            if (borrowerType === 'student') { 
+                borrowerId = document.getElementById('borrowStudentId').value; 
+                if (!borrowerId) return Swal.showValidationMessage('Select a student'); 
+            } else { 
+                borrowerId = document.getElementById('borrowTeacherId').value; 
+                if (!borrowerId) return Swal.showValidationMessage('Select a teacher'); 
+            }
             const bookSelect = document.getElementById('borrowBookId');
             const bookTitle = bookSelect.options[bookSelect.selectedIndex]?.dataset?.title || '';
-            return { bookId, bookTitle, borrowerId, borrowerType, dueDate: document.getElementById('borrowDueDate').value, remarks: document.getElementById('borrowRemarks').value };
+            return { 
+                bookId, 
+                bookTitle, 
+                borrowerId, 
+                borrowerType, 
+                dueDate: document.getElementById('borrowDueDate').value, 
+                remarks: document.getElementById('borrowRemarks').value 
+            };
         }
     }).then(async (result) => {
         if (result.value) {
@@ -8817,42 +9022,111 @@ window.showBorrowBookModal = async function() {
             try {
                 const book = libraryBooks.find(b => b.id === result.value.bookId);
                 await libUpdateBook(result.value.bookId, { ...book, borrowed_count: (book.borrowed_count || 0) + 1 });
-                await libAddBorrowing({ book_id: result.value.bookId, book_title: result.value.bookTitle, borrower_id: result.value.borrowerId, borrower_type: result.value.borrowerType, borrow_date: new Date().toISOString().split('T')[0], expected_return_date: result.value.dueDate, status: 'BORROWED', remarks: result.value.remarks, created_at: new Date().toISOString() });
+                await libAddBorrowing({ 
+                    book_id: result.value.bookId, 
+                    book_title: result.value.bookTitle, 
+                    borrower_id: result.value.borrowerId, 
+                    borrower_type: result.value.borrowerType, 
+                    borrow_date: new Date().toISOString().split('T')[0], 
+                    expected_return_date: result.value.dueDate, 
+                    status: 'BORROWED', 
+                    remarks: result.value.remarks, 
+                    created_at: new Date().toISOString() 
+                });
                 Swal.fire('Success!', 'Book borrowed successfully.', 'success');
                 await refreshLibrary();
-            } catch (error) { Swal.fire('Error!', error.message, 'error'); }
+            } catch (error) { 
+                Swal.fire('Error!', error.message, 'error'); 
+            }
         }
     });
 };
 
 window.returnBook = async function(borrowingId) {
-    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to return books.', 'error'); return; }
-    await libGetBorrowings(); await libGetBooks(); await libGetStudents(); await libGetTeachers();
+    if (!canManageLibrary()) { 
+        Swal.fire('Access Denied', 'You do not have permission to return books.', 'error'); 
+        return; 
+    }
+    
+    await libGetBorrowings(); 
+    await libGetBooks(); 
+    await libGetStudents(); 
+    await libGetTeachers();
     
     const borrowing = libraryBorrowings.find(b => b.id === borrowingId);
-    if (!borrowing) { Swal.fire('Error', 'Borrowing record not found', 'error'); return; }
+    if (!borrowing) { 
+        Swal.fire('Error', 'Borrowing record not found', 'error'); 
+        return; 
+    }
+    
     const fine = calculateFine(borrowing.expected_return_date);
     const borrowerName = getBorrowerName(borrowing);
     
     Swal.fire({
         title: 'Return Book',
-        html: `<div class="text-start"><p><strong>📖 Book:</strong> ${escapeHtml(borrowing.book_title)}</p><p><strong>👤 Borrower:</strong> ${escapeHtml(borrowerName)}</p><p><strong>📅 Borrow Date:</strong> ${borrowing.borrow_date}</p><p><strong>⏰ Due Date:</strong> ${borrowing.expected_return_date}</p>${fine > 0 ? `<p class="text-danger"><strong>💰 Late Fine:</strong> ${formatMoney(fine)}</p>` : '<p class="text-success">✅ No fine - Returned on time</p>'}<div class="mb-3"><label class="form-label fw-bold">📅 Actual Return Date</label><input type="date" id="returnDateInput" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>${fine > 0 ? `<div class="mb-3"><label class="form-label fw-bold">💰 Fine Paid?</label><select id="finePaidSelect" class="form-select"><option value="no">No</option><option value="yes">Yes</option></select></div>` : ''}<div class="mb-3"><label class="form-label fw-bold">📝 Remarks</label><textarea id="returnRemarksText" class="form-control" rows="2"></textarea></div></div>`,
-        width: '500px', showCancelButton: true, confirmButtonText: '<i class="fas fa-check"></i> Confirm Return',
+        html: `
+            <div class="text-start">
+                <p><strong>📖 Book:</strong> ${escapeHtml(borrowing.book_title)}</p>
+                <p><strong>👤 Borrower:</strong> ${escapeHtml(borrowerName)}</p>
+                <p><strong>📅 Borrow Date:</strong> ${borrowing.borrow_date}</p>
+                <p><strong>⏰ Due Date:</strong> ${borrowing.expected_return_date}</p>
+                ${fine > 0 ? `<p class="text-danger"><strong>💰 Late Fine:</strong> ${formatMoney(fine)}</p>` : '<p class="text-success">✅ No fine - Returned on time</p>'}
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Actual Return Date</label>
+                    <input type="date" id="returnDateInput" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                ${fine > 0 ? `
+                <div class="mb-3">
+                    <label class="form-label fw-bold">💰 Fine Paid?</label>
+                    <select id="finePaidSelect" class="form-select">
+                        <option value="no">No</option>
+                        <option value="yes">Yes</option>
+                    </select>
+                </div>` : ''}
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Remarks</label>
+                    <textarea id="returnRemarksText" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+        `,
+        width: '500px', 
+        showCancelButton: true, 
+        confirmButtonText: '<i class="fas fa-check"></i> Confirm Return',
         preConfirm: () => {
             const returnDate = document.getElementById('returnDateInput')?.value;
             if (!returnDate) return Swal.showValidationMessage('Please select a return date');
-            return { returnDate, finePaid: fine > 0 ? document.getElementById('finePaidSelect')?.value === 'yes' : false, remarks: document.getElementById('returnRemarksText')?.value || '' };
+            return { 
+                returnDate, 
+                finePaid: fine > 0 ? document.getElementById('finePaidSelect')?.value === 'yes' : false, 
+                remarks: document.getElementById('returnRemarksText')?.value || '' 
+            };
         }
     }).then(async (result) => {
         if (result.isConfirmed) {
             Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
                 const book = libraryBooks.find(b => b.id === borrowing.book_id);
-                await sb.from('borrowings').update({ actual_return_date: result.value.returnDate, status: 'RETURNED', fine_amount: fine, fine_paid: result.value.finePaid, return_remarks: result.value.remarks, updated_at: new Date().toISOString() }).eq('id', borrowingId);
-                if (book) await sb.from('books').update({ borrowed_count: Math.max(0, (book.borrowed_count || 0) - 1), updated_at: new Date().toISOString() }).eq('id', book.id);
+                await sb.from('borrowings').update({ 
+                    actual_return_date: result.value.returnDate, 
+                    status: 'RETURNED', 
+                    fine_amount: fine, 
+                    fine_paid: result.value.finePaid, 
+                    return_remarks: result.value.remarks, 
+                    updated_at: new Date().toISOString() 
+                }).eq('id', borrowingId);
+                
+                if (book) {
+                    await sb.from('books').update({ 
+                        borrowed_count: Math.max(0, (book.borrowed_count || 0) - 1), 
+                        updated_at: new Date().toISOString() 
+                    }).eq('id', book.id);
+                }
+                
                 Swal.fire('Success!', `Book returned successfully.${fine > 0 ? ` Fine: ${formatMoney(fine)}` : ''}`, 'success');
                 await refreshLibrary();
-            } catch (error) { Swal.fire('Error!', error.message, 'error'); }
+            } catch (error) { 
+                Swal.fire('Error!', error.message, 'error'); 
+            }
         }
     });
 };
@@ -8863,7 +9137,16 @@ window.returnBook = async function(borrowingId) {
 
 window.exportBooksData = async function() {
     await libGetBooks();
-    const exportData = libraryBooks.map(b => ({ 'ISBN': b.isbn || '-', 'Title': b.title, 'Author': b.author || '-', 'Publisher': b.publisher || '-', 'Category': b.category || '-', 'Total Copies': b.copies || 0, 'Borrowed': b.borrowed_count || 0, 'Available': (b.copies || 0) - (b.borrowed_count || 0) }));
+    const exportData = libraryBooks.map(b => ({ 
+        'ISBN': b.isbn || '-', 
+        'Title': b.title, 
+        'Author': b.author || '-', 
+        'Publisher': b.publisher || '-', 
+        'Category': b.category || '-', 
+        'Total Copies': b.copies || 0, 
+        'Borrowed': b.borrowed_count || 0, 
+        'Available': (b.copies || 0) - (b.borrowed_count || 0) 
+    }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}_Books`);
@@ -8872,59 +9155,68 @@ window.exportBooksData = async function() {
 };
 
 window.showAddCategoryModal = function() {
-    if (!canManageLibrary()) { Swal.fire('Access Denied', 'You do not have permission to add categories.', 'error'); return; }
-    Swal.fire({ title: 'Add New Category', input: 'text', inputLabel: 'Category Name', inputPlaceholder: 'e.g., Science Fiction, Biography', showCancelButton: true, confirmButtonText: 'Add' }).then(async (result) => {
-        if (result.value) Swal.fire('Success!', `Category "${result.value}" added. You can now assign it to books.`, 'success');
+    if (!canManageLibrary()) { 
+        Swal.fire('Access Denied', 'You do not have permission to add categories.', 'error'); 
+        return; 
+    }
+    Swal.fire({ 
+        title: 'Add New Category', 
+        input: 'text', 
+        inputLabel: 'Category Name', 
+        inputPlaceholder: 'e.g., Science Fiction, Biography', 
+        showCancelButton: true, 
+        confirmButtonText: 'Add' 
+    }).then(async (result) => {
+        if (result.value) {
+            Swal.fire('Success!', `Category "${result.value}" added. You can now assign it to books.`, 'success');
+        }
     });
 };
 
 window.viewBooksByCategory = function(category) {
     const booksInCategory = libraryBooks.filter(b => b.category === category);
-    if (booksInCategory.length === 0) { Swal.fire('No Books', `No books found in category: ${category}`, 'info'); return; }
+    if (booksInCategory.length === 0) { 
+        Swal.fire('No Books', `No books found in category: ${category}`, 'info'); 
+        return; 
+    }
+    
     let booksHtml = '<div class="table-responsive"><table class="table table-bordered"><thead class="table-light"><tr><th>Title</th><th>Author</th><th>Copies</th><th>Available</th></tr></thead><tbody>';
     for (const book of booksInCategory) {
         const available = (book.copies || 0) - (book.borrowed_count || 0);
-        booksHtml += `<tr>}<strong>${escapeHtml(book.title)}</strong></td>}<td>${escapeHtml(book.author || '-')}</td><td class="text-center">${book.copies}</td><td class="text-center">${available}</td></tr>`;
+        booksHtml += `<tr>
+            <td><strong>${escapeHtml(book.title)}</strong></td>
+            <td>${escapeHtml(book.author || '-')}</td>
+            <td class="text-center">${book.copies}</td>
+            <td class="text-center">${available}</td>
+        </tr>`;
     }
-    booksHtml += '</tbody>}</div>';
-    Swal.fire({ title: `Books in Category: ${category}`, html: booksHtml, width: '700px', confirmButtonText: 'Close' });
+    booksHtml += '</tbody></table></div>';
+    
+    Swal.fire({ 
+        title: `Books in Category: ${category}`, 
+        html: booksHtml, 
+        width: '700px', 
+        confirmButtonText: 'Close' 
+    });
 };
 
 window.saveLibrarySettings = function() {
-    if (currentUserRole !== 'superadmin') { Swal.fire('Access Denied', 'Only Super Admin can change library settings.', 'error'); return; }
+    if (currentUserRole !== 'superadmin') { 
+        Swal.fire('Access Denied', 'Only Super Admin can change library settings.', 'error'); 
+        return; 
+    }
     const borrowDays = parseInt(document.getElementById('libBorrowDays')?.value) || 14;
     const dailyFine = parseInt(document.getElementById('libDailyFine')?.value) || 500;
-    Swal.fire({ title: 'Settings Saved', html: `<strong>Borrow Duration:</strong> ${borrowDays} days<br><strong>Daily Fine:</strong> ${formatMoney(dailyFine)}`, icon: 'success' });
+    
+    DAILY_FINE_RATE = dailyFine;
+    BORROW_DAYS = borrowDays;
+    
+    Swal.fire({ 
+        title: 'Settings Saved', 
+        html: `<strong>Borrow Duration:</strong> ${borrowDays} days<br><strong>Daily Fine:</strong> ${formatMoney(dailyFine)}`, 
+        icon: 'success' 
+    });
 };
-
-// ============================================
-// REFRESH LIBRARY
-// ============================================
-
-async function refreshLibrary() {
-    await libGetBooks();
-    await libGetBorrowings();
-    await libGetStudents();
-    await libGetTeachers();
-    await libGetFines();
-    await loadBooksTable();
-    const activeTab = document.querySelector('.lib-tab-btn.active');
-    if (activeTab) {
-        const onclick = activeTab.getAttribute('onclick');
-        if (onclick) {
-            const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
-            if (tabName && tabName[1]) {
-                if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
-                else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
-                else if (tabName[1] === 'fines') await loadFinesTable();
-                else if (tabName[1] === 'categories') await loadCategoriesTable();
-                else if (tabName[1] === 'reports') await loadLibraryReports();
-            }
-        }
-    }
-}
-
-window.refreshLibrary = refreshLibrary;
 
 // ============================================
 // TAB SWITCHING FUNCTION
@@ -8939,6 +9231,7 @@ function switchLibraryTab(tabName) {
         btn.style.background = '#f0f0f0';
         btn.style.color = '#6c757d';
     });
+    
     let tabId = '';
     if (tabName === 'inventory') tabId = 'libTabInventory';
     else if (tabName === 'borrowed') tabId = 'libTabBorrowed';
@@ -8947,8 +9240,10 @@ function switchLibraryTab(tabName) {
     else if (tabName === 'categories') tabId = 'libTabCategories';
     else if (tabName === 'reports') tabId = 'libTabReports';
     else if (tabName === 'settings') tabId = 'libTabSettings';
+    
     const selectedTab = document.getElementById(tabId);
     if (selectedTab) selectedTab.style.display = 'block';
+    
     const activeBtn = Array.from(tabBtns).find(btn => {
         const onclick = btn.getAttribute('onclick');
         return onclick && onclick.includes(tabName);
@@ -8957,6 +9252,7 @@ function switchLibraryTab(tabName) {
         activeBtn.style.background = 'linear-gradient(135deg, #01605a, #ff862d)';
         activeBtn.style.color = 'white';
     }
+    
     if (tabName === 'borrowed') loadCurrentlyBorrowedTable();
     else if (tabName === 'history') loadBorrowingHistoryTable();
     else if (tabName === 'fines') loadFinesTable();
@@ -8965,7 +9261,51 @@ function switchLibraryTab(tabName) {
 }
 
 // ============================================
-// RENDER LIBRARY PAGE (MAIN)
+// REFRESH LIBRARY
+// ============================================
+
+window.refreshLibrary = async function() {
+    try {
+        await Promise.all([
+            libGetBooks(),
+            libGetBorrowings(),
+            libGetStudents(),
+            libGetTeachers(),
+            libGetFines()
+        ]);
+        
+        await loadBooksTable();
+        
+        const activeTab = document.querySelector('.lib-tab-btn.active');
+        if (activeTab) {
+            const onclick = activeTab.getAttribute('onclick');
+            if (onclick) {
+                const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
+                if (tabName && tabName[1]) {
+                    if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
+                    else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
+                    else if (tabName[1] === 'fines') await loadFinesTable();
+                    else if (tabName[1] === 'categories') await loadCategoriesTable();
+                    else if (tabName[1] === 'reports') await loadLibraryReports();
+                }
+            }
+        }
+        
+        Swal.fire({
+            title: 'Refreshed!',
+            text: 'Library data has been updated.',
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false
+        });
+    } catch (error) {
+        console.error('Refresh error:', error);
+        Swal.fire('Error!', 'Failed to refresh library data.', 'error');
+    }
+};
+
+// ============================================
+// RENDER LIBRARY PAGE
 // ============================================
 
 async function renderLibrary() {
@@ -9016,190 +9356,331 @@ async function renderLibrary() {
     </div>
     
     <!-- TAB 1: BOOKS INVENTORY -->
-<!-- TAB 1: BOOKS INVENTORY -->
-<div id="libTabInventory" class="lib-tab-content active">
-    <div class="card shadow-sm">
-        <div class="card-header bg-white" style="border-bottom: 2px solid #01605a;">
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    ${canManage ? `
-                    <button class="btn btn-primary btn-sm action-btn" onclick="showAddBookModal()" style="background: linear-gradient(135deg, #01605a, #ff862d); border: none;">
-                        <i class="fas fa-plus"></i> Add Book
-                    </button>
-                    <button class="btn btn-warning btn-sm ms-2 action-btn" onclick="showBorrowBookModal()">
-                        <i class="fas fa-hand-holding-heart"></i> Borrow Book
-                    </button>
-                    ${currentUserRole === 'superadmin' ? `
-                    <button class="btn btn-danger btn-sm ms-2 action-btn" onclick="confirmDeleteAllBooks()">
-                        <i class="fas fa-trash-alt"></i> Delete All Books
-                    </button>
-                    ` : ''}
-                    ` : ''}
-                    <button class="btn btn-success btn-sm ms-2 action-btn" onclick="exportBooksData()">
-                        <i class="fas fa-file-excel"></i> Export
-                    </button>
-                    <button class="btn btn-secondary btn-sm ms-2 action-btn" onclick="refreshLibrary()">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-                </div>
-                <div class="col-md-4">
-                    <input type="text" id="bookSearch" class="form-control form-control-sm" placeholder="🔍 Search books..." onkeyup="filterBooks()" style="border: 2px solid #01605a; border-radius: 8px;">
+    <div id="libTabInventory" class="lib-tab-content active">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white" style="border-bottom: 2px solid #01605a;">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        ${canManage ? `
+                        <button class="btn btn-primary btn-sm action-btn" onclick="showAddBookModal()" style="background: linear-gradient(135deg, #01605a, #ff862d); border: none;">
+                            <i class="fas fa-plus"></i> Add Book
+                        </button>
+                        <button class="btn btn-warning btn-sm ms-2 action-btn" onclick="showBorrowBookModal()">
+                            <i class="fas fa-hand-holding-heart"></i> Borrow Book
+                        </button>
+                        ${currentUserRole === 'superadmin' ? `
+                        <button class="btn btn-danger btn-sm ms-2 action-btn" onclick="confirmDeleteAllBooks()">
+                            <i class="fas fa-trash-alt"></i> Delete All Books
+                        </button>
+                        ` : ''}
+                        ` : ''}
+                        <button class="btn btn-success btn-sm ms-2 action-btn" onclick="exportBooksData()">
+                            <i class="fas fa-file-excel"></i> Export
+                        </button>
+                        <button class="btn btn-secondary btn-sm ms-2 action-btn" onclick="refreshLibrary()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" id="bookSearch" class="form-control form-control-sm" placeholder="🔍 Search books..." onkeyup="filterBooks()" style="border: 2px solid #01605a; border-radius: 8px;">
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                <table class="table table-bordered mb-0">
-                    <thead class="table-primary sticky-top">
-                        <tr>
-                            ${canManage ? '<th width="30"><input type="checkbox" id="selectAllBooks"></th>' : ''}
-                            <th>ISBN</th>
-                            <th>Title</th>
-                            <th>Author</th>
-                            <th>Category</th>
-                            <th>Copies</th>
-                            <th>Available</th>
-                            ${canManage ? '<th width="100">Actions</th>' : ''}
-                        </tr>
-                    </thead>
-                    <tbody id="booksTableBody">
-                        <tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading books...</span>络
-                    </tbody>
-                </table>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-bordered mb-0">
+                        <thead class="table-primary sticky-top">
+                            <tr>
+                                ${canManage ? '<th width="30"><input type="checkbox" id="selectAllBooks"></th>' : ''}
+                                <th>ISBN</th>
+                                <th>Title</th>
+                                <th>Author</th>
+                                <th>Category</th>
+                                <th>Copies</th>
+                                <th>Available</th>
+                                ${canManage ? '<th width="100">Actions</th>' : ''}
+                            </tr>
+                        </thead>
+                        <tbody id="booksTableBody">
+                            <tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading books...</span>络
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
-</div>    
+    
     <!-- TAB 2: CURRENTLY BORROWED -->
-    <div id="libTabBorrowed" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #01605a;"><h6 class="mb-0"><i class="fas fa-hand-holding-heart"></i> Currently Borrowed Books</h6></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 450px; overflow-y: auto;"><table class="table table-bordered mb-0"><thead class="table-primary sticky-top"><tr><th>Borrower</th><th>Type</th><th>Book Title</th><th>Borrow Date</th><th>Due Date</th><th>Status</th><th>Fine (UGX)</th>${canManage ? '<th>Action</th>' : ''}</tr></thead><tbody id="borrowedBooksTableBody"><tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody></table></div></div></div></div>
+    <div id="libTabBorrowed" class="lib-tab-content" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white" style="border-bottom: 2px solid #01605a;">
+                <h6 class="mb-0"><i class="fas fa-hand-holding-heart"></i> Currently Borrowed Books</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-bordered mb-0">
+                        <thead class="table-primary sticky-top">
+                            <tr>
+                                <th>Borrower</th>
+                                <th>Type</th>
+                                <th>Book Title</th>
+                                <th>Borrow Date</th>
+                                <th>Due Date</th>
+                                <th>Status</th>
+                                <th>Fine (UGX)</th>
+                                ${canManage ? '<th>Action</th>' : ''}
+                            </tr>
+                        </thead>
+                        <tbody id="borrowedBooksTableBody">
+                            <tr><td colspan="${canManage ? 8 : 7}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- TAB 3: BORROWING HISTORY -->
-    <div id="libTabHistory" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #01605a;"><div class="row"><div class="col-md-6"><h6 class="mb-0"><i class="fas fa-history"></i> Borrowing History</h6></div><div class="col-md-6"><input type="text" id="historySearch" class="form-control form-control-sm" placeholder="🔍 Search by borrower or book..." onkeyup="filterHistory()" style="border: 2px solid #01605a; border-radius: 8px;"></div></div></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 450px; overflow-y: auto;"><table class="table table-bordered mb-0"><thead class="table-primary sticky-top"><tr><th>Borrower</th><th>Type</th><th>Book Title</th><th>Borrow Date</th><th>Return Date</th><th>Fine Paid</th><th>Status</th></tr></thead><tbody id="historyTableBody"><tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody></table></div></div></div></div>
+    <div id="libTabHistory" class="lib-tab-content" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white" style="border-bottom: 2px solid #01605a;">
+                <div class="row">
+                    <div class="col-md-6"><h6 class="mb-0"><i class="fas fa-history"></i> Borrowing History</h6></div>
+                    <div class="col-md-6">
+                        <input type="text" id="historySearch" class="form-control form-control-sm" placeholder="🔍 Search by borrower or book..." onkeyup="filterHistory()" style="border: 2px solid #01605a; border-radius: 8px;">
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-bordered mb-0">
+                        <thead class="table-primary sticky-top">
+                            <tr>
+                                <th>Borrower</th>
+                                <th>Type</th>
+                                <th>Book Title</th>
+                                <th>Borrow Date</th>
+                                <th>Return Date</th>
+                                <th>Fine Paid</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- TAB 4: FINE MANAGEMENT -->
-    <div id="libTabFines" class="lib-tab-content" style="display: none;"><div class="row"><div class="col-md-4"><div class="card shadow-sm"><div class="card-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;"><h6 class="mb-0"><i class="fas fa-plus-circle"></i> Add New Fine</h6></div><div class="card-body">${canManage ? `<div class="mb-3"><label class="form-label fw-bold">👤 Borrower Type</label><select id="fineBorrowerType" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;"><option value="student">📚 Student</option><option value="teacher">👨‍🏫 Teacher</option></select></div><div class="mb-3"><label class="form-label fw-bold">🔍 Select Borrower</label><select id="fineBorrowerId" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;"><option value="">-- Select --</option></select></div><div class="mb-3"><label class="form-label fw-bold">⚠️ Reason</label><select id="fineReason" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;"><option value="Late Return">⏰ Late Return</option><option value="Damaged Book">📖 Damaged Book</option><option value="Lost Book">❌ Lost Book</option><option value="Overdue">📅 Overdue (30+ days)</option><option value="Other">📝 Other</option></select></div><div class="mb-3"><label class="form-label fw-bold">💰 Amount (UGX)</label><input type="number" id="fineAmount" class="form-control" placeholder="Enter amount" style="border: 2px solid #dc3545; border-radius: 8px;"></div><div class="mb-3"><label class="form-label fw-bold">📝 Description</label><textarea id="fineDescription" class="form-control" rows="2" placeholder="Additional details..." style="border-radius: 8px;"></textarea></div><button class="btn btn-danger w-100" onclick="addLibraryFine()" style="background: linear-gradient(135deg, #dc3545, #c82333); border: none; padding: 10px; border-radius: 8px;"><i class="fas fa-save"></i> Add Fine</button>` : `<div class="alert alert-warning text-center"><i class="fas fa-lock"></i> You do not have permission to add fines.</div>`}</div></div></div><div class="col-md-8"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #dc3545;"><div class="row align-items-center"><div class="col-md-6"><h6 class="mb-0"><i class="fas fa-list"></i> Fine Records</h6></div><div class="col-md-6"><div class="btn-group w-100" role="group"><button class="btn btn-sm btn-outline-success" onclick="filterFines('all')" style="border-radius: 8px 0 0 8px;">All</button><button class="btn btn-sm btn-outline-warning" onclick="filterFines('pending')">Pending</button><button class="btn btn-sm btn-outline-info" onclick="filterFines('paid')" style="border-radius: 0 8px 8px 0;">Paid</button></div></div></div></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 450px; overflow-y: auto;"><table class="table table-bordered mb-0"><thead class="table-danger"><tr><th>Borrower</th><th>Type</th><th>Reason</th><th>Amount</th><th>Date</th><th>Status</th>${canManage ? '<th>Action</th>' : ''}</tr></thead><tbody id="finesTableBody"><td><td colspan="${canManage ? 7 : 6}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading fines...</span>络</tbody></table></div></div></div></div></div></div>
+    <div id="libTabFines" class="lib-tab-content" style="display: none;">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;">
+                        <h6 class="mb-0"><i class="fas fa-plus-circle"></i> Add New Fine</h6>
+                    </div>
+                    <div class="card-body">
+                        ${canManage ? `
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">👤 Borrower Type</label>
+                            <select id="fineBorrowerType" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;">
+                                <option value="student">📚 Student</option>
+                                <option value="teacher">👨‍🏫 Teacher</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">🔍 Select Borrower</label>
+                            <select id="fineBorrowerId" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;">
+                                <option value="">-- Select --</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">⚠️ Reason</label>
+                            <select id="fineReason" class="form-select" style="border: 2px solid #dc3545; border-radius: 8px;">
+                                <option value="Late Return">⏰ Late Return</option>
+                                <option value="Damaged Book">📖 Damaged Book</option>
+                                <option value="Lost Book">❌ Lost Book</option>
+                                <option value="Overdue">📅 Overdue (30+ days)</option>
+                                <option value="Other">📝 Other</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">💰 Amount (UGX)</label>
+                            <input type="number" id="fineAmount" class="form-control" placeholder="Enter amount" style="border: 2px solid #dc3545; border-radius: 8px;">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">📝 Description</label>
+                            <textarea id="fineDescription" class="form-control" rows="2" placeholder="Additional details..." style="border-radius: 8px;"></textarea>
+                        </div>
+                        <button class="btn btn-danger w-100" onclick="addLibraryFine()" style="background: linear-gradient(135deg, #dc3545, #c82333); border: none; padding: 10px; border-radius: 8px;">
+                            <i class="fas fa-save"></i> Add Fine
+                        </button>
+                        ` : `
+                        <div class="alert alert-warning text-center">
+                            <i class="fas fa-lock"></i> You do not have permission to add fines.
+                        </div>`}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white" style="border-bottom: 2px solid #dc3545;">
+                        <div class="row align-items-center">
+                            <div class="col-md-6"><h6 class="mb-0"><i class="fas fa-list"></i> Fine Records</h6></div>
+                            <div class="col-md-6">
+                                <div class="btn-group w-100" role="group">
+                                    <button class="btn btn-sm btn-outline-success" onclick="filterFines('all')" style="border-radius: 8px 0 0 8px;">All</button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="filterFines('pending')">Pending</button>
+                                    <button class="btn btn-sm btn-outline-info" onclick="filterFines('paid')" style="border-radius: 0 8px 8px 0;">Paid</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                            <table class="table table-bordered mb-0">
+                                <thead class="table-danger">
+                                    <tr>
+                                        <th>Borrower</th>
+                                        <th>Type</th>
+                                        <th>Reason</th>
+                                        <th>Amount</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        ${canManage ? '<th>Action</th>' : ''}
+                                    </tr>
+                                </thead>
+                                <tbody id="finesTableBody">
+                                    <tr><td colspan="${canManage ? 7 : 6}" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading fines...</span>络
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- TAB 5: CATEGORIES -->
-    <div id="libTabCategories" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header bg-white" style="border-bottom: 2px solid #01605a;"><div class="row"><div class="col-md-8"><h6 class="mb-0"><i class="fas fa-tags"></i> Book Categories</h6></div>${canManage ? '<div class="col-md-4"><button class="btn btn-sm btn-primary w-100 action-btn" onclick="showAddCategoryModal()" style="background: linear-gradient(135deg, #01605a, #ff862d); border: none;"><i class="fas fa-plus"></i> Add Category</button></div>' : ''}</div></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-bordered mb-0"><thead class="table-primary"><tr><th>Category</th><th>Total Books</th><th>Borrowed</th><th>Available</th><th>Action</th></tr></thead><tbody id="categoriesTableBody"></tbody></table></div></div></div></div>
+    <div id="libTabCategories" class="lib-tab-content" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white" style="border-bottom: 2px solid #01605a;">
+                <div class="row">
+                    <div class="col-md-8"><h6 class="mb-0"><i class="fas fa-tags"></i> Book Categories</h6></div>
+                    ${canManage ? '<div class="col-md-4"><button class="btn btn-sm btn-primary w-100 action-btn" onclick="showAddCategoryModal()" style="background: linear-gradient(135deg, #01605a, #ff862d); border: none;"><i class="fas fa-plus"></i> Add Category</button></div>' : ''}
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Category</th>
+                                <th>Total Books</th>
+                                <th>Borrowed</th>
+                                <th>Available</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoriesTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- TAB 6: REPORTS -->
-    <div id="libTabReports" class="lib-tab-content" style="display: none;"><div class="row"><div class="col-md-6"><div class="card shadow-sm"><div class="card-header bg-primary text-white"><h6 class="mb-0"><i class="fas fa-chart-line"></i> Most Popular Books</h6></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 400px;"><table class="table table-bordered mb-0"><thead class="table-light sticky-top"><tr><th>Book Title</th><th style="width: 100px;">Times Borrowed</th></tr></thead><tbody id="popularBooksTableBody"></tbody></table></div></div></div></div><div class="col-md-6"><div class="card shadow-sm"><div class="card-header bg-info text-white"><h6 class="mb-0"><i class="fas fa-trophy"></i> Top Borrowers</h6></div><div class="card-body p-0"><div class="table-responsive" style="max-height: 400px;"><table class="table table-bordered mb-0"><thead class="table-light sticky-top"><tr><th style="width: 60px;">Rank</th><th>Borrower</th><th style="width: 80px;">Type</th><th style="width: 100px;">Total</th><th style="width: 60px;">Action</th></tr></thead><tbody id="topBorrowersTableBody"></tbody></table></div></div></div></div></div></div>
+    <div id="libTabReports" class="lib-tab-content" style="display: none;">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0"><i class="fas fa-chart-line"></i> Most Popular Books</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 400px;">
+                            <table class="table table-bordered mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr><th>Book Title</th><th style="width: 100px;">Times Borrowed</th></tr>
+                                </thead>
+                                <tbody id="popularBooksTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0"><i class="fas fa-trophy"></i> Top Borrowers</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 400px;">
+                            <table class="table table-bordered mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width: 60px;">Rank</th>
+                                        <th>Borrower</th>
+                                        <th style="width: 80px;">Type</th>
+                                        <th style="width: 100px;">Total</th>
+                                        <th style="width: 60px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="topBorrowersTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- TAB 7: SETTINGS (SUPER ADMIN ONLY) -->
-    ${currentUserRole === 'superadmin' ? `<div id="libTabSettings" class="lib-tab-content" style="display: none;"><div class="card shadow-sm"><div class="card-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;"><h6 class="mb-0"><i class="fas fa-cog"></i> Library Settings <span class="badge bg-light text-danger ms-2">Super Admin Only</span></h6></div><div class="card-body"><div class="alert alert-warning"><i class="fas fa-shield-alt"></i> <strong>Super Admin Access Only</strong> - These settings control global library behavior.</div><div class="row"><div class="col-md-6"><label class="form-label fw-bold">📅 Borrow Duration (Days)</label><input type="number" id="libBorrowDays" class="form-control" value="${BORROW_DAYS}" style="border: 2px solid #01605a; border-radius: 8px;"><small class="text-muted">Default number of days a book can be borrowed</small></div><div class="col-md-6"><label class="form-label fw-bold">💰 Daily Fine Rate (UGX)</label><input type="number" id="libDailyFine" class="form-control" value="${DAILY_FINE_RATE}" style="border: 2px solid #01605a; border-radius: 8px;"><small class="text-muted">Fine charged per day for late returns</small></div></div><div class="row mt-3"><div class="col-md-12"><div class="alert alert-info"><i class="fas fa-info-circle"></i> <strong>Note:</strong> Changes to these settings will affect all future borrowings.</div></div></div><div class="text-end mt-3"><button class="btn btn-danger action-btn" onclick="saveLibrarySettings()" style="background: linear-gradient(135deg, #dc3545, #c82333); border: none; padding: 10px 30px;"><i class="fas fa-save"></i> Save Settings</button></div></div></div></div>` : ''}
+    ${currentUserRole === 'superadmin' ? `
+    <div id="libTabSettings" class="lib-tab-content" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;">
+                <h6 class="mb-0"><i class="fas fa-cog"></i> Library Settings <span class="badge bg-light text-danger ms-2">Super Admin Only</span></h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-shield-alt"></i> <strong>Super Admin Access Only</strong> - These settings control global library behavior.
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">📅 Borrow Duration (Days)</label>
+                        <input type="number" id="libBorrowDays" class="form-control" value="${BORROW_DAYS}" style="border: 2px solid #01605a; border-radius: 8px;">
+                        <small class="text-muted">Default number of days a book can be borrowed</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">💰 Daily Fine Rate (UGX)</label>
+                        <input type="number" id="libDailyFine" class="form-control" value="${DAILY_FINE_RATE}" style="border: 2px solid #01605a; border-radius: 8px;">
+                        <small class="text-muted">Fine charged per day for late returns</small>
+                    </div>
+                </div>
+                <div class="text-end mt-3">
+                    <button class="btn btn-danger action-btn" onclick="saveLibrarySettings()" style="background: linear-gradient(135deg, #dc3545, #c82333); border: none; padding: 10px 30px;">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>` : ''}
     `;
 }
 
-
 // ============================================
-// REFRESH BUTTON FUNCTION - LIBRARY MODULE
+// INITIALIZATION
 // ============================================
 
-window.refreshLibrary = async function() {
-    // Show loading state on refresh button
-    const refreshBtn = document.querySelector('#libTabInventory .btn-secondary');
-    if (refreshBtn) {
-        const originalText = refreshBtn.innerHTML;
-        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
-        refreshBtn.disabled = true;
-        
-        try {
-            // Reload all library data
-            await Promise.all([
-                libGetBooks(),
-                libGetBorrowings(),
-                libGetStudents(),
-                libGetTeachers(),
-                libGetFines()
-            ]);
-            
-            // Reload the current active table
-            await loadBooksTable();
-            
-            // Check which tab is active and reload its data
-            const activeTab = document.querySelector('.lib-tab-btn.active');
-            if (activeTab) {
-                const onclick = activeTab.getAttribute('onclick');
-                if (onclick) {
-                    const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
-                    if (tabName && tabName[1]) {
-                        if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
-                        else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
-                        else if (tabName[1] === 'fines') await loadFinesTable();
-                        else if (tabName[1] === 'categories') await loadCategoriesTable();
-                        else if (tabName[1] === 'reports') await loadLibraryReports();
-                    }
-                }
-            }
-            
-            // Show success message
-            Swal.fire({
-                title: 'Refreshed!',
-                text: 'Library data has been updated successfully.',
-                icon: 'success',
-                timer: 1500,
-                showConfirmButton: false
-            });
-            
-        } catch (error) {
-            console.error('Refresh error:', error);
-            Swal.fire({
-                title: 'Error!',
-                text: 'Failed to refresh library data.',
-                icon: 'error',
-                timer: 2000,
-                showConfirmButton: false
-            });
-        } finally {
-            // Restore button
-            refreshBtn.innerHTML = originalText;
-            refreshBtn.disabled = false;
-        }
-    } else {
-        // Fallback refresh without button animation
-        try {
-            await Promise.all([
-                libGetBooks(),
-                libGetBorrowings(),
-                libGetStudents(),
-                libGetTeachers(),
-                libGetFines()
-            ]);
-            
-            await loadBooksTable();
-            
-            const activeTab = document.querySelector('.lib-tab-btn.active');
-            if (activeTab) {
-                const onclick = activeTab.getAttribute('onclick');
-                if (onclick) {
-                    const tabName = onclick.match(/switchLibraryTab\('(.+?)'\)/);
-                    if (tabName && tabName[1]) {
-                        if (tabName[1] === 'borrowed') await loadCurrentlyBorrowedTable();
-                        else if (tabName[1] === 'history') await loadBorrowingHistoryTable();
-                        else if (tabName[1] === 'fines') await loadFinesTable();
-                        else if (tabName[1] === 'categories') await loadCategoriesTable();
-                        else if (tabName[1] === 'reports') await loadLibraryReports();
-                    }
-                }
-            }
-            
-            Swal.fire({
-                title: 'Refreshed!',
-                text: 'Library data has been updated.',
-                icon: 'success',
-                timer: 1500,
-                showConfirmButton: false
-            });
-        } catch (error) {
-            Swal.fire('Error!', 'Failed to refresh library data.', 'error');
-        }
-    }
-};
-
-console.log('✅ LIBRARY MODULE LOADED - FINAL MASTERPIECE');
+console.log('✅ LIBRARY MODULE LOADED - COMPLETE WORKING VERSION');
 console.log('✅ Features: Books | Borrowing | History | Fine Management | Categories | Reports | Settings');
 console.log('✅ Role-Based Access: Superadmin/Admin/Librarian = Full Access | Others = View Only');
 console.log('✅ Settings Tab: SUPER ADMIN ONLY');
+console.log('✅ Book Title Validation: FIXED!');
 // ============================================
 // PAYMENTS MODULE - FINAL MASTERPIECE WITH SCHOOL INFO INTEGRATION
 // O-Level & A-Level | Real-time Fee Updates | Full Functionality
@@ -12867,7 +13348,7 @@ window.bulkDeleteAttendanceRecords = async function() {
 console.log('✅ Attendance Module Loaded - Table Working Properly');
 // ============================================
 // SCHOOL MANAGEMENT SYSTEM - REPORTS MODULE
-// FINAL MASTERPIECE - CLEAN VERSION
+// FINAL MASTERPIECE
 // Complete Fee Calculation | Class Teacher | Academic Terms
 // ============================================
 
@@ -12882,7 +13363,6 @@ let reportsUniversityEntry = {};
 let schoolInfo = {};
 let feeStructureData = [];
 let academicTermsList = [];
-let currentLevel = 'olevel';
 
 // Subsidiary subjects list
 const subsidiarySubjectsList = ['General Paper', 'ICT', 'Subsidiary Mathematics'];
@@ -12911,16 +13391,8 @@ function getCurrentDate() {
     });
 }
 
-function getOlevelGradeDescriptor(percentage) {
-    if (percentage >= 85) return { grade: 'A', descriptor: 'Exceptional' };
-    if (percentage >= 70) return { grade: 'B', descriptor: 'Outstanding' };
-    if (percentage >= 60) return { grade: 'C', descriptor: 'Satisfactory' };
-    if (percentage >= 40) return { grade: 'D', descriptor: 'Basic' };
-    return { grade: 'E', descriptor: 'Elementary' };
-}
-
 // ============================================
-// LOAD SCHOOL SETTINGS
+// LOAD SCHOOL SETTINGS (includes class teachers)
 // ============================================
 
 async function loadSchoolInfoForReport() {
@@ -12954,7 +13426,6 @@ async function loadSchoolInfoForReport() {
             school_address: 'Kampala, Uganda',
             school_phone: '+256 XXX XXX XXX',
             school_email: 'info@school.ug',
-            school_logo: '',
             principal_name: 'Principal',
             director_name: 'Director',
             bursar_name: 'Bursar'
@@ -13045,25 +13516,38 @@ async function loadFeeStructureForReport() {
 // GET TOTAL FEE FOR A STUDENT
 // ============================================
 
+// ============================================
+// FIXED: GET TOTAL FEE FOR A STUDENT (Works for A-Level with streams)
+// ============================================
+
 async function getTotalFeeForStudent(student) {
     if (!student) return 0;
     
+    // Normalize student type
     let studentType = student.student_type || 'Day';
     studentType = studentType.charAt(0).toUpperCase() + studentType.slice(1).toLowerCase();
     
+    // Build possible class names to try
     let possibleClassNames = [student.class];
     
+    // For A-Level, also try with stream appended
     if (currentLevel === 'alevel') {
         let stream = student.stream || 'Arts';
         stream = stream.charAt(0).toUpperCase() + stream.slice(1).toLowerCase();
+        
+        // Try "S.5 Arts" format
         possibleClassNames.push(`${student.class} ${stream}`);
+        
+        // Also try the class name as stored in fee_structure (might be like "S.5 Arts" already)
         if (student.class.includes(' ')) {
             possibleClassNames.push(student.class);
         }
     }
     
+    // Remove duplicates
     possibleClassNames = [...new Set(possibleClassNames)];
     
+    // Try to find fees
     let studentFees = [];
     let matchedClassName = '';
     
@@ -13079,6 +13563,7 @@ async function getTotalFeeForStudent(student) {
         }
     }
     
+    // If still no fees, try without student type filter
     if (studentFees.length === 0) {
         for (const className of possibleClassNames) {
             studentFees = feeStructureData.filter(f => f.class_name === className);
@@ -13093,6 +13578,7 @@ async function getTotalFeeForStudent(student) {
     
     if (total === 0) {
         console.warn(`No fee found for student ${student.name}. Tried class names:`, possibleClassNames);
+        console.log('Available fee structure classes:', [...new Set(feeStructureData.map(f => f.class_name))]);
     }
     
     return total;
@@ -13217,7 +13703,7 @@ async function loadUniversityEntryRequirements() {
 }
 
 // ============================================
-// GET GRADE AND POINTS FROM SETTINGS
+// GET GRADE AND POINTS
 // ============================================
 
 function getGradeAndPointsFromSettings(percentage, subjectName = '') {
@@ -13257,7 +13743,7 @@ function calculateOlevelFinalScore(caScore, examScore) {
 }
 
 // ============================================
-// LOAD MARKS FOR SINGLE REPORT
+// LOAD MARKS WITH GRADES
 // ============================================
 
 async function loadMarksForReport(studentId, exam, year) {
@@ -13296,124 +13782,14 @@ async function loadMarksForReport(studentId, exam, year) {
 }
 
 // ============================================
-// LOAD O-LEVEL MARKS
+// CALCULATE STUDENT FEE STATUS (CORRECT LOGIC)
+// Priority: 1. Past debts -> 2. Current term -> 3. Forward excess
 // ============================================
 
-async function loadOlevelMarksForReport(studentId, exam, year) {
-    try {
-        const { data, error } = await sb
-            .from('marks')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('exam', exam)
-            .eq('year', year)
-            .eq('level', 'olevel');
-        
-        if (error) throw error;
-        
-        return (data || []).map(m => {
-            const u1 = m.unit1 || 0;
-            const u2 = m.unit2 || 0;
-            const u3 = m.unit3 || 0;
-            const exam80 = m.exam_80 || 0;
-            const unitAvg = (u1 + u2 + u3) / 3;
-            const total20 = (unitAvg / 3) * 20;
-            let total100 = total20 + exam80;
-            total100 = Math.min(100, Math.max(0, total100));
-            const gradeInfo = getOlevelGradeDescriptor(total100);
-            
-            let unitDescriptor = 'Basic';
-            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
-            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
-            
-            return {
-                subject: m.subject,
-                u1, u2, u3,
-                avgUnit: unitAvg.toFixed(1),
-                identifier: Math.round(unitAvg),
-                unitDescriptor: unitDescriptor,
-                total20: total20.toFixed(1),
-                exam80: exam80,
-                total100: total100.toFixed(1),
-                grade: gradeInfo.grade,
-                descriptor: gradeInfo.descriptor,
-                teacher_initials: m.teacher_initials || ''
-            };
-        });
-    } catch (error) {
-        console.error('Error loading O-Level marks:', error);
-        return [];
-    }
-}
-
 // ============================================
-// LOAD A-LEVEL MARKS
-// ============================================
-
-async function loadAlevelMarksForReport(studentId, exam, year) {
-    try {
-        const { data, error } = await sb
-            .from('marks')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('exam', exam)
-            .eq('year', year)
-            .eq('level', 'alevel');
-        
-        if (error) throw error;
-        
-        if (!data || data.length === 0) {
-            return [];
-        }
-        
-        return data.map(m => {
-            const percentage = (m.marks_obtained / m.max_marks) * 100;
-            const gradeInfo = getGradeAndPointsFromSettings(percentage, m.subject);
-            return {
-                ...m,
-                percentage: percentage,
-                grade: gradeInfo.grade,
-                points: gradeInfo.points,
-                color: gradeInfo.color
-            };
-        });
-    } catch (error) {
-        console.error('Error loading A-Level marks:', error);
-        return [];
-    }
-}
-
-// ============================================
-// GET A-LEVEL CLASS TEACHER
-// ============================================
-
-function getAlevelClassTeacher(student) {
-    if (!student) return 'Not Assigned';
-    
-    const classLetter = student.class;
-    const stream = student.stream || 'Arts';
-    const streamLower = stream.toLowerCase();
-    const classNum = classLetter.replace('S.', '');
-    
-    const possibleKeys = [
-        `teacher_s${classNum}_${streamLower}`,
-        `teacher_${classLetter.toLowerCase().replace('.', '')}_${streamLower}`,
-        `teacher_s${classNum}`,
-        `teacher_${classLetter.toLowerCase().replace('.', '')}`
-    ];
-    
-    for (const key of possibleKeys) {
-        const teacherName = schoolInfo[key];
-        if (teacherName && teacherName !== '') {
-            return teacherName;
-        }
-    }
-    
-    return 'Not Assigned';
-}
-
-// ============================================
-// CALCULATE STUDENT FEE STATUS
+// FIXED: CALCULATE STUDENT FEE STATUS WITH PROPER CARRY FORWARD
+// Priority: 1. Past debts (previous years) -> 2. Previous terms (same year) -> 3. Current term
+// Excess from any term carries forward to next term
 // ============================================
 
 async function calculateStudentFeeStatusForReport(studentId, targetYear, targetTerm) {
@@ -13443,8 +13819,11 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const termOrder = ['Term 1', 'Term 2', 'Term 3'];
     const currentTermIndex = termOrder.indexOf(targetTerm);
     
-    // Previous Years Balance
-    let previousYearsBalance = 0;
+    // ============================================
+    // STEP 1: Calculate balance from PREVIOUS YEARS
+    // ============================================
+    let previousYearsBalance = 0; // Positive = debt, Negative = credit
+    
     const allYears = [...new Set(allPaymentsList.filter(p => p.student_id === studentId).map(p => parseInt(p.year)))].sort();
     
     for (const year of allYears) {
@@ -13470,8 +13849,11 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const previousYearsDebt = previousYearsBalance > 0 ? previousYearsBalance : 0;
     const previousYearsCredit = previousYearsBalance < 0 ? Math.abs(previousYearsBalance) : 0;
     
-    // Previous Terms Balance
-    let previousTermsBalance = 0;
+    // ============================================
+    // STEP 2: Calculate balance from PREVIOUS TERMS in same year
+    // ============================================
+    let previousTermsBalance = 0; // Positive = debt, Negative = credit
+    
     for (let i = 0; i < currentTermIndex; i++) {
         const prevTerm = termOrder[i];
         const prevTermPayments = allPaymentsList.filter(p => 
@@ -13488,7 +13870,9 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const previousTermsDebt = previousTermsBalance > 0 ? previousTermsBalance : 0;
     const previousTermsCredit = previousTermsBalance < 0 ? Math.abs(previousTermsBalance) : 0;
     
-    // Current Term Payments
+    // ============================================
+    // STEP 3: Get current term payments
+    // ============================================
     const currentTermPayments = allPaymentsList.filter(p => 
         p.student_id === studentId && 
         p.year === targetYear && 
@@ -13496,40 +13880,65 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     );
     const currentTermPaid = currentTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     
+    // ============================================
+    // STEP 4: Calculate TOTAL BALANCE BROUGHT FORWARD
+    // This is the amount the student owes from before this term
+    // ============================================
     const totalCarryForward = previousYearsBalance + previousTermsBalance;
     
+    // ============================================
+    // STEP 5: Calculate what the student needs to pay this term
+    // If they have credit, it reduces what they owe
+    // ============================================
     let amountNeededForCurrentTerm = termFee;
     let remainingCredit = 0;
     
     if (totalCarryForward < 0) {
+        // Student has credit from before
         const creditAmount = Math.abs(totalCarryForward);
         if (creditAmount >= termFee) {
+            // Credit covers full term fee
             amountNeededForCurrentTerm = 0;
             remainingCredit = creditAmount - termFee;
         } else {
+            // Credit partially covers term fee
             amountNeededForCurrentTerm = termFee - creditAmount;
             remainingCredit = 0;
         }
     } else if (totalCarryForward > 0) {
+        // Student has debt from before - they need to pay that too
         amountNeededForCurrentTerm = termFee + totalCarryForward;
     }
     
+    // ============================================
+    // STEP 6: Calculate current balance
+    // ============================================
     let balance = amountNeededForCurrentTerm - currentTermPaid;
+    
+    // If there's remaining credit from before, it gets added to balance (negative = credit)
     if (remainingCredit > 0) {
         balance = balance - remainingCredit;
     }
     
+    // ============================================
+    // STEP 7: Calculate total expected and total paid for display
+    // ============================================
     let totalExpected = termFee;
     let totalPaid = currentTermPaid;
     
+    // Apply previous credits if any
     if (previousYearsCredit > 0 || previousTermsCredit > 0) {
         const totalCredit = previousYearsCredit + previousTermsCredit;
         totalPaid += totalCredit;
     }
     
+    // Add previous debts to expected
     if (previousYearsDebt > 0) totalExpected += previousYearsDebt;
     if (previousTermsDebt > 0) totalExpected += previousTermsDebt;
     
+    // ============================================
+    // STEP 8: Determine STATUS
+    // ============================================
     let status = '', statusColor = '', statusBadge = '';
     
     if (balance <= 0) {
@@ -13546,11 +13955,14 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
         statusBadge = '❌ Defaulter';
     }
     
+    // For display, make balance positive for "Due" and negative for "Credit"
+    const displayBalance = balance;
+    
     return {
         termFee: termFee,
         expected: totalExpected,
         paid: totalPaid,
-        balance: balance,
+        balance: displayBalance,
         previousYearsDebt: previousYearsDebt,
         previousYearsCredit: previousYearsCredit,
         previousTermsDebt: previousTermsDebt,
@@ -13682,404 +14094,236 @@ function getRemarkMessage(totalPoints, avgPercentage, division) {
 }
 
 // ============================================
-// GENERATE O-LEVEL REPORT CARD HTML
+// GENERATE REPORT CARD HTML
 // ============================================
 
-function generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus) {
-    let totalSum = 0;
-    for (const m of marks) totalSum += parseFloat(m.total100);
-    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
-    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
-    const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    
-    const subjectsHtml = marks.map(m => `
-        <tr>
-            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</td>
-        </tr>
-    `).join('');
-    
-    let feeDisplay = '';
-    if (feeStatus && feeStatus.status !== 'NO_FEE') {
-        const balanceAmount = Math.abs(feeStatus.balance || 0);
-        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
-        
-        feeDisplay = `
-            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
-                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
-                    <div><strong>Balance:</strong> ${balanceText}</div>
-                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    const logoWatermark = schoolInfo.school_logo ? 
-        `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: 0; pointer-events: none;">
-            <img src="${schoolInfo.school_logo}" style="width: 700px; max-width: 70vw; height: auto;">
-        </div>` : '';
-    
-    return `
-        <div class="report-container" style="max-width: 1300px; margin: 0 auto; background: white; position: relative; font-family: 'Times New Roman', Arial, sans-serif; border: 2px solid #000;">
-            ${logoWatermark}
-            
-            <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-                    ${schoolInfo.school_logo ? 
-                        `<img src="${schoolInfo.school_logo}" style="height: 70px; width: 70px; object-fit: contain;">` : 
-                        `<span style="font-size: 35px;">🏫</span>`
-                    }
-                    <div>
-                        <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">${escapeHtml(schoolInfo.school_name || 'KIDIKI SECONDARY SCHOOL')}</h1>
-                        <p style="margin: 3px 0 0; font-size: 11px;">${escapeHtml(schoolInfo.school_address || 'P.O BOX 2815, KAMULI')} | Tel: ${escapeHtml(schoolInfo.school_phone || '0758 918361')}</p>
-                    </div>
-                </div>
-                <h2 style="margin: 10px 0 0; font-size: 18px; text-decoration: underline;">${exam} ASSESSMENT REPORT</h2>
-                <p style="margin: 3px 0 0; font-size: 12px;">Year ${year} | ${currentDate}</p>
-            </div>
-            
-            <div style="margin: 15px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <div><strong>Student:</strong> ${escapeHtml(student.name)}</div>
-                    <div><strong>Admission No:</strong> ${student.admission_no || '-'}</div>
-                    <div><strong>Class:</strong> ${student.class}</div>
-                    <div><strong>Stream:</strong> ${student.stream || '-'}</div>
-                    <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
-                </div>
-            </div>
-            
-            ${feeDisplay}
-            
-            <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">SUBJECT</th>
-                            <th colspan="3" style="border: 1px solid #000; padding: 8px;">UNIT SCORES</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">AVR</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">ID</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Descriptor</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Exam/80</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Total/100</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Grade</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Comment</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Initials</th>
-                        </tr>
-                        <tr>
-                            <th style="border: 1px solid #000; padding: 6px;">U1</th>
-                            <th style="border: 1px solid #000; padding: 6px;">U2</th>
-                            <th style="border: 1px solid #000; padding: 6px;">U3</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${subjectsHtml}
-                    </tbody>
-                </table>
-            </div>
-            
-            <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
-                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
-                    <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
-                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
-                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
-                </div>
-            </div>
-            
-            <div style="margin: 0 20px 15px 20px;">
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
-                    <thead>
-                        <tr><th colspan="4" style="border: 1px solid #000; padding: 6px; text-align: center;">GRADING SCALE</th></tr>
-                        <tr style="background: #f5f5f5;">
-                            <th style="border: 1px solid #000; padding: 5px;">Score</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Grade</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Descriptor</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Interpretation</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            
-            <div style="margin: 0 20px 15px 20px; display: flex; gap: 15px; flex-wrap: wrap;">
-                <div style="flex: 1;">
-                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
-                        <strong>CLASS TEACHER'S COMMENT</strong>
-                    </div>
-                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
-                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
-                        <div style="text-align: right;">Signature: _________________</div>
-                        <div style="margin-top: 5px;">Name: ${escapeHtml(classTeacher)}</div>
-                    </div>
-                </div>
-                <div style="flex: 1;">
-                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
-                        <strong>HEAD TEACHER'S COMMENT</strong>
-                    </div>
-                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
-                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
-                        <div style="text-align: right;">Signature: _________________</div>
-                        <div style="margin-top: 5px;">Name: ${escapeHtml(schoolInfo.principal_name || 'HEAD TEACHER')}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="margin: 0 20px 20px 20px; padding: 10px; border: 1px solid #000; text-align: center; font-size: 11px; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <span>📅 Term ended: ${currentDate}</span>
-                    <span>🔹 Next Term Begins: _______________</span>
-                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================
-// GENERATE A-LEVEL SINGLE REPORT CARD HTML
-// ============================================
-
-function generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
+function generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
     let totalPoints = 0;
     let totalPercentage = 0;
     
     const subjectsHtml = marks.map(m => {
         let percentage = m.percentage;
+        
         totalPoints += m.points;
         totalPercentage += percentage;
         
-        const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
-        const finalScore = m.marks_obtained || 0;
-        
-        return `
-            <tr style="border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 10px 8px; border: 1px solid #ddd;">
-                    <strong>${escapeHtml(m.subject)}</strong>
-                    ${isSubsidiary ? '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 9px; margin-left: 5px;">Sub</span>' : ''}
-                </td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">${finalScore}</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">${m.max_marks}</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">${percentage.toFixed(1)}%</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;">
-                    <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; background: ${m.color || '#6c757d'};">${m.grade}</span>
-                </td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #ddd;"><strong>${m.points}</strong></td>
-            </tr>
-        `;
+        if (currentLevel === 'olevel') {
+            const caScore = m.ca_score || 0;
+            const examScore = m.exam_score || 0;
+            return `
+                <tr style="border-bottom: 1px solid #e0e0e0;">
+                    <td style="padding: 10px 8px;"><strong>${escapeHtml(m.subject)}</strong></td>
+                    <td style="padding: 10px 8px; text-align: center;">${caScore.toFixed(1)}</span></td>
+                    <td style="padding: 10px 8px; text-align: center;">${examScore.toFixed(1)}</span></td>
+                    <td style="padding: 10px 8px; text-align: center;">${percentage.toFixed(1)}%</span></td>
+                    <td style="padding: 10px 8px; text-align: center;"><span class="grade-badge" style="background: ${m.color};">${m.grade}</span></span></td>
+                    <td style="padding: 10px 8px; text-align: center;"><strong>${m.points}</strong></span></td>
+                </tr>
+            `;
+        } else {
+            const finalScore = m.marks_obtained || 0;
+            const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
+            return `
+                <tr style="border-bottom: 1px solid #e0e0e0;">
+                    <td style="padding: 10px 8px;">
+                        <strong>${escapeHtml(m.subject)}</strong>
+                        ${isSubsidiary ? '<span class="badge bg-secondary ms-2" style="font-size: 10px;">Sub</span>' : ''}
+                    </span></td>
+                    <td style="padding: 10px 8px; text-align: center;">${finalScore}</span></td>
+                    <td style="padding: 10px 8px; text-align: center;">${m.max_marks}</span></td>
+                    <td style="padding: 10px 8px; text-align: center;">${percentage.toFixed(1)}%</span></td>
+                    <td style="padding: 10px 8px; text-align: center;"><span class="grade-badge" style="background: ${m.color};">${m.grade}</span></span></td>
+                    <td style="padding: 10px 8px; text-align: center;"><strong>${m.points}</strong></span></td>
+                </tr>
+            `;
+        }
     }).join('');
     
     const avgPercentage = marks.length > 0 ? (totalPercentage / marks.length).toFixed(1) : 0;
     const division = calculateGradeDivision(avgPercentage, totalPoints);
-    const levelName = 'UACE REPORT CARD';
+    const levelName = currentLevel === 'olevel' ? 'UCE REPORT CARD' : 'UACE REPORT CARD';
     
     let universityEligibility = null;
+    let promotionStatus = null;
+    
     if (currentLevel === 'alevel') {
         universityEligibility = checkUniversityEligibility(totalPoints, marks);
+    } else if (exam === 'Term 3') {
+        promotionStatus = checkOlevelPromotion(avgPercentage, student.class);
     }
     
-    const tableHeaders = `
-        <tr style="background: #01605a; color: white;">
-            <th style="padding: 10px; border: 1px solid #01605a;">Subject</th>
-            <th style="padding: 10px; border: 1px solid #01605a;">Marks</th>
-            <th style="padding: 10px; border: 1px solid #01605a;">Max</th>
-            <th style="padding: 10px; border: 1px solid #01605a;">%</th>
-            <th style="padding: 10px; border: 1px solid #01605a;">Grade</th>
-            <th style="padding: 10px; border: 1px solid #01605a;">Points</th>
-        </tr>
-    `;
+    const tableHeaders = currentLevel === 'olevel' 
+        ? `<tr style="background: #01605a; color: white;">
+            <th style="padding: 10px;">Subject</th>
+            <th style="padding: 10px;">CA</th>
+            <th style="padding: 10px;">Exam</th>
+            <th style="padding: 10px;">%</th>
+            <th style="padding: 10px;">Grade</th>
+            <th style="padding: 10px;">Points</th>
+            </tr>`
+        : `<tr style="background: #01605a; color: white;">
+            <th style="padding: 10px;">Subject</th>
+            <th style="padding: 10px;">Marks</th>
+            <th style="padding: 10px;">Max</th>
+            <th style="padding: 10px;">%</th>
+            <th style="padding: 10px;">Grade</th>
+            <th style="padding: 10px;">Points</th>
+            </tr>`;
     
+    // Fee display section
     let feeDisplay = '';
     if (feeStatus && feeStatus.status !== 'NO_FEE') {
-        const balanceColor = feeStatus.balance > 0 ? '#dc3545' : '#28a745';
         feeDisplay = `
-            <div style="background: ${feeStatus.statusColor}20; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid ${feeStatus.statusColor};">
-                <table style="width: 100%; border: none; font-size: 12px;">
+            <div style="background: ${feeStatus.statusColor}20; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid ${feeStatus.statusColor};">
+                <table style="width: 100%; border: none; font-size: 13px;">
                     <tr style="background: #01605a10;">
-                        <td colspan="3" style="padding: 6px; text-align: center; font-weight: bold;">💰 FEE STATEMENT FOR ${exam} ${year}</td>
+                        <td colspan="3" style="padding: 8px; text-align: center; font-weight: bold;">💰 FEE STATEMENT FOR ${exam} ${year}</td>
                     </tr>
                     <tr>
-                        <td style="width: 45%; padding: 4px;"><strong>Term Fee:</strong></td>
-                        <td style="width: 55%; padding: 4px;" colspan="2">${formatCurrency(feeStatus.termFee)}</td>
+                        <td style="width: 45%; padding: 6px;"><strong>Term Fee:</strong></td>
+                        <td style="width: 55%; padding: 6px;" colspan="2">${formatCurrency(feeStatus.termFee)}</span></td>
                     </tr>
                     ${feeStatus.previousYearsDebt > 0 ? `
                     <tr style="background: #fff3cd;">
-                        <td style="padding: 4px;"><strong>⚠️ Previous Years Debt:</strong></td>
-                        <td style="padding: 4px;" colspan="2" style="color: #dc3545;">${formatCurrency(feeStatus.previousYearsDebt)}</td>
+                        <td style="padding: 6px;"><strong>⚠️ Previous Years Debt:</strong></td>
+                        <td style="padding: 6px;" colspan="2" class="text-danger">${formatCurrency(feeStatus.previousYearsDebt)}</span></td>
                     </tr>` : ''}
                     ${feeStatus.previousYearsCredit > 0 ? `
                     <tr style="background: #d4edda;">
-                        <td style="padding: 4px;"><strong>✅ Previous Years Credit:</strong></td>
-                        <td style="padding: 4px;" colspan="2" style="color: #28a745;">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</td>
+                        <td style="padding: 6px;"><strong>✅ Previous Years Credit:</strong></td>
+                        <td style="padding: 6px;" colspan="2" class="text-success">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</span></td>
                     </tr>` : ''}
                     ${feeStatus.previousTermsDebt > 0 ? `
                     <tr style="background: #fff3cd;">
-                        <td style="padding: 4px;"><strong>⚠️ Previous Terms Debt:</strong></td>
-                        <td style="padding: 4px;" colspan="2" style="color: #dc3545;">${formatCurrency(feeStatus.previousTermsDebt)}</td>
+                        <td style="padding: 6px;"><strong>⚠️ Previous Terms Debt (${year}):</strong></td>
+                        <td style="padding: 6px;" colspan="2" class="text-danger">${formatCurrency(feeStatus.previousTermsDebt)}</span></td>
                     </tr>` : ''}
                     ${feeStatus.previousTermsCredit > 0 ? `
                     <tr style="background: #d4edda;">
-                        <td style="padding: 4px;"><strong>✅ Previous Terms Credit:</strong></td>
-                        <td style="padding: 4px;" colspan="2" style="color: #28a745;">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</td>
+                        <td style="padding: 6px;"><strong>✅ Previous Terms Credit (${year}):</strong></td>
+                        <td style="padding: 6px;" colspan="2" class="text-success">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</span></td>
                     </tr>` : ''}
                     <tr style="border-top: 1px solid #ddd;">
-                        <td style="padding: 4px;"><strong>Total Expected:</strong></td>
-                        <td style="padding: 4px;" colspan="2">${formatCurrency(feeStatus.expected)}</td>
+                        <td style="padding: 6px;"><strong>Total Expected:</strong></td>
+                        <td style="padding: 6px;" colspan="2">${formatCurrency(feeStatus.expected)}</span></td>
                     </tr>
                     <tr>
-                        <td style="padding: 4px;"><strong>Paid This Term:</strong></td>
-                        <td style="padding: 4px;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</td>
+                        <td style="padding: 6px;"><strong>Paid This Term:</strong></td>
+                        <td style="padding: 6px;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</span></td>
                     </tr>
                     <tr style="border-top: 1px solid #ddd; background: ${feeStatus.balance > 0 ? '#f8d7da' : '#d4edda'}">
-                        <td style="padding: 6px;"><strong>💰 Current Balance:</strong></td>
-                        <td style="padding: 6px;" colspan="2">
-                            <strong style="color: ${balanceColor};">
+                        <td style="padding: 8px;"><strong>💰 Current Balance:</strong></td>
+                        <td style="padding: 8px;" colspan="2">
+                            <strong class="${feeStatus.balance > 0 ? 'text-danger' : 'text-success'}">
                                 ${formatCurrency(Math.abs(feeStatus.balance))} ${feeStatus.balance > 0 ? '(Due)' : '(Credit - Carries Forward)'}
                             </strong>
-                        </td>
+                        </span></td>
                     </tr>
                     <tr>
-                        <td colspan="3" style="text-align: center; padding-top: 8px;">
-                            <span style="background: ${feeStatus.statusColor}; color: white; padding: 3px 12px; border-radius: 20px; font-size: 11px;">
+                        <td colspan="3" style="text-align: center; padding-top: 10px;">
+                            <span style="background: ${feeStatus.statusColor}; color: white; padding: 5px 15px; border-radius: 20px; font-size: 12px;">
                                 ${feeStatus.statusBadge}
                             </span>
-                        </td>
+                        </span></td>
                     </tr>
                 </table>
             </div>
         `;
     } else if (feeStatus && feeStatus.status === 'NO_FEE') {
         feeDisplay = `
-            <div style="background: #ffc10720; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
+            <div style="background: #ffc10720; padding: 12px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
                 <div style="text-align: center;">
-                    <strong>⚠️ No fee structure found for this student.</strong>
+                    <strong>⚠️ No fee structure found for this student.</strong><br>
+                    <small>Please add fee structure in Settings → Fee Structure tab.</small>
                 </div>
             </div>
         `;
     }
     
     return `
-        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; padding: 20px;">
-            ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.08; z-index: 0; width: 40%; max-width: 300px;">` : ''}
+        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1);">
+            ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.12; z-index: 0; width: 50%; max-width: 350px;">` : ''}
             
-            <div style="position: relative; z-index: 1;">
-                <div style="text-align: center; margin-bottom: 15px; border-bottom: 3px solid #01605a; padding-bottom: 12px;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
-                        ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="width: 50px; height: 50px; object-fit: contain;">` : ''}
+            <div style="position: relative; z-index: 1; padding: 25px;">
+                <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px solid #01605a; padding-bottom: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+                        ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="width: 60px; height: 60px; object-fit: contain;">` : ''}
                         <div>
-                            <h1 style="color: #01605a; margin: 0; font-size: 20px;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
-                            <p style="margin: 3px 0 0; font-style: italic; font-size: 11px;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
+                            <h1 style="color: #01605a; margin: 0; font-size: 22px;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
+                            <p style="margin: 5px 0 0; font-style: italic;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
                         </div>
                     </div>
+                    <p style="margin: 10px 0 0; font-size: 10px;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
                 </div>
                 
-                <div style="text-align: center; margin-bottom: 12px;">
-                    <h2 style="color: #ff862d; margin: 0; font-size: 17px;">${levelName}</h2>
-                    <p style="font-size: 12px;"><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <h2 style="color: #ff862d; margin: 0; font-size: 18px;">${levelName}</h2>
+                    <p><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
                 </div>
                 
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #e0e0e0;">
-                    <table style="width: 100%; border: none; font-size: 12px;">
-                        <tr>
-                            <td style="width: 50%; padding: 3px;"><strong>Student:</strong> ${escapeHtml(student.name)}</td>
-                            <td style="padding: 3px;"><strong>Admission No:</strong> ${student.admission_no || '-'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 3px;"><strong>Class:</strong> ${student.class}</td>
-                            <td style="padding: 3px;"><strong>Stream:</strong> ${student.stream || '-'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 3px;"><strong>Type:</strong> ${student.student_type || 'Day'}</td>
-                            <td style="padding: 3px;"><strong>Combination:</strong> ${student.combination || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td colspan="2" style="padding: 3px;"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</td>
-                        </tr>
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 20px;">
+                    <table style="width: 100%; border: none;">
+                        <tr><td style="width: 50%;"><strong>Student:</strong> ${escapeHtml(student.name)}</span><td><strong>Admission No:</strong> ${student.admission_no || '-'}</span></tr>
+                        <tr><td><strong>Class:</strong> ${student.class}</span><td><strong>Stream:</strong> ${student.stream || '-'}</span></tr>
+                        <tr><td><strong>Type:</strong> ${student.student_type || 'Day'}</span><td><strong>Combination:</strong> ${student.combination || 'N/A'}</span></tr>
+                        <tr><td colspan="2"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</span></tr>
                     </table>
                 </div>
                 
                 ${feeDisplay}
                 
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px;">
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                     <thead>${tableHeaders}</thead>
                     <tbody>${subjectsHtml}</tbody>
                     <tfoot>
                         <tr style="background: #f0f0f0;">
-                            <td colspan="5" style="padding: 8px; text-align: right; border: 1px solid #ddd;"><strong>TOTAL POINTS:</strong></td>
-                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;"><strong>${totalPoints} pts</strong></td>
+                            <td colspan="5" style="padding: 10px; text-align: right;"><strong>TOTAL / AVERAGE:</strong></td>
+                            <td style="padding: 10px; text-align: center;"><strong>${currentLevel === 'alevel' ? totalPoints + ' pts' : avgPercentage + '%'}</strong></td>
                         </tr>
                     </tfoot>
                 </table>
                 
-                <div style="background: linear-gradient(135deg, #01605a, #ff862d); padding: 12px; border-radius: 8px; margin-bottom: 15px; color: white;">
+                <div style="background: linear-gradient(135deg, #01605a, #ff862d); padding: 15px; border-radius: 10px; margin-bottom: 20px; color: white;">
                     <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: bold;">${totalPoints}</div>
-                            <div style="font-size: 10px;">POINTS</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 0 15px; border-radius: 30px;">${division.division}</div>
-                            <div style="font-size: 10px;">DIVISION</div>
-                        </div>
+                        <div style="text-align: center;"><div style="font-size: 22px; font-weight: bold;">${currentLevel === 'alevel' ? totalPoints : avgPercentage}%</div><div style="font-size: 11px;">${currentLevel === 'alevel' ? 'POINTS' : 'AVERAGE'}</div></div>
+                        <div style="text-align: center;"><div style="font-size: 22px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 0 15px; border-radius: 30px;">${division.division}</div><div style="font-size: 11px;">DIVISION</div></div>
                     </div>
                 </div>
                 
-                ${universityEligibility ? `
-                    <div style="text-align: center; margin-bottom: 12px; padding: 6px; border-radius: 6px; background: ${universityEligibility.eligible ? '#d4edda' : '#f8d7da'}; color: ${universityEligibility.eligible ? '#155724' : '#721c24'}; font-size: 12px;">
+                <div style="text-align: center; margin-bottom: 15px; padding: 8px; background: ${division.color}20; border-radius: 8px;">
+                    <strong>${division.name}:</strong> ${division.description}
+                </div>
+                
+                ${currentLevel === 'alevel' && universityEligibility ? `
+                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: ${universityEligibility.eligible ? '#d4edda' : '#f8d7da'}; color: ${universityEligibility.eligible ? '#155724' : '#721c24'};">
                         <strong>🏛️ UNIVERSITY ELIGIBILITY: ${universityEligibility.eligible ? '✅ ELIGIBLE' : '❌ NOT ELIGIBLE'}</strong>
-                        ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
+                        ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets the minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
                     </div>
                 ` : ''}
                 
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 12px; border-left: 4px solid #ff862d; font-size: 12px;">
+                ${currentLevel === 'olevel' && promotionStatus ? `
+                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: ${promotionStatus.promoted ? '#d4edda' : '#f8d7da'}; color: ${promotionStatus.promoted ? '#155724' : '#721c24'};">
+                        <strong>🎓 PROMOTION STATUS: ${promotionStatus.promoted ? '✅ PROMOTED' : '❌ NOT PROMOTED'}</strong>
+                        <br><small>${promotionStatus.remarks} | Next Class: ${promotionStatus.next_class}</small>
+                    </div>
+                ` : ''}
+                
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ff862d;">
                     <strong>📝 REMARKS:</strong>
-                    <p style="margin: 5px 0 0;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
+                    <p style="margin: 8px 0 0;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
                 </div>
                 
-                <div style="display: flex; justify-content: space-between; margin-top: 15px; font-size: 11px;">
-                    <div style="text-align: center; flex: 1;">
-                        <div style="width: 80%; border-bottom: 1px solid #000; margin: 0 auto 4px; height: 20px;"></div>
-                        ${escapeHtml(classTeacher)}<br><small>Class Teacher</small>
-                    </div>
-                    <div style="text-align: center; flex: 1;">
-                        <div style="width: 80%; border-bottom: 1px solid #000; margin: 0 auto 4px; height: 20px;"></div>
-                        ${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}<br><small>Head Teacher</small>
-                    </div>
-                    <div style="text-align: center; flex: 1;">
-                        <div style="width: 80%; border-bottom: 1px solid #000; margin: 0 auto 4px; height: 20px;"></div>
-                        Parent's Signature
-                    </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>${escapeHtml(classTeacher)}<br><small>Class Teacher</small></div>
+                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}</div>
+                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>Parent's Signature</div>
                 </div>
                 
-                <div style="text-align: center; font-size: 8px; margin-top: 10px; color: #999;">System-generated report</div>
+                <div style="text-align: center; font-size: 9px; margin-top: 15px; color: #999;">System-generated report</div>
             </div>
         </div>
         ${!isForPrint ? '<div class="text-center mt-3"><button class="btn btn-success" onclick="printReportCard()"><i class="fas fa-print"></i> Print Report</button></div>' : ''}
     `;
-}
-
-// ============================================
-// GENERATE A-LEVEL BULK REPORT CARD (NO PRINT BUTTON)
-// ============================================
-
-function generateAlevelBulkReportCard(student, marks, exam, year, feeStatus, classTeacher) {
-    return generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, true);
 }
 
 // ============================================
@@ -14093,8 +14337,10 @@ window.printReportCard = function() {
         return;
     }
     
+    // Try to open print window
     const printWindow = window.open('', '_blank');
     
+    // Check if popup was blocked
     if (!printWindow) {
         Swal.fire({
             title: 'Popup Blocked!',
@@ -14129,6 +14375,7 @@ window.printReportCard = function() {
         `);
         printWindow.document.close();
         
+        // Small delay to ensure content is loaded
         setTimeout(function() {
             printWindow.print();
             printWindow.onafterprint = function() {
@@ -14138,6 +14385,7 @@ window.printReportCard = function() {
         
     } catch (error) {
         console.error('Print error:', error);
+
         Swal.fire('Print Error', 'Could not print the report. Please try again.', 'error');
     }
 };
@@ -14183,14 +14431,7 @@ window.generateSingleReport = async function() {
             return;
         }
         
-        let reportHtml;
-        if (currentLevel === 'olevel') {
-            const olevelMarks = await loadOlevelMarksForReport(studentId, exam, year);
-            reportHtml = generateOlevelReportHTML(student, olevelMarks, exam, year, classTeacher, schoolInfo, feeStatus);
-        } else {
-            reportHtml = generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, false);
-        }
-        
+        const reportHtml = generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher);
         document.getElementById('reportPreview').innerHTML = reportHtml;
         document.getElementById('reportPreview').style.display = 'block';
         Swal.close();
@@ -14204,9 +14445,557 @@ window.generateSingleReport = async function() {
 };
 
 // ============================================
-// GENERATE O-LEVEL SINGLE REPORT
+// GENERATE BULK REPORTS
 // ============================================
 
+window.generateBulkReports = async function() {
+    const className = document.getElementById('bulkClass').value;
+    const stream = document.getElementById('bulkStream').value;
+    const exam = document.getElementById('bulkExam').value;
+    const year = document.getElementById('bulkYear').value;
+    
+    if (!className) {
+        Swal.fire('Error', 'Please select a class', 'error');
+        return;
+    }
+    if (!exam) {
+        Swal.fire('Error', 'Please select a term/exam', 'error');
+        return;
+    }
+    if (!year) {
+        Swal.fire('Error', 'Please enter a year', 'error');
+        return;
+    }
+    
+    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        await loadGradingRulesForReport();
+        await loadUniversityEntryRequirements();
+        await loadFeeStructureForReport();
+        await loadAllPaymentsForReport();
+        await loadSchoolInfoForReport();
+        
+        let query = sb.from('students').select('*').eq('class', className);
+        if (stream) query = query.eq('stream', stream);
+        
+        const { data: students, error: studentError } = await query;
+        if (studentError) throw studentError;
+        
+        if (!students || students.length === 0) {
+            Swal.fire('No Students', 'No students found', 'info');
+            return;
+        }
+        
+        const allReports = [];
+        for (const student of students) {
+            const marks = await loadMarksForReport(student.id, exam, year);
+            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
+            const classTeacher = getClassTeacher(student);
+            if (marks.length > 0) {
+                allReports.push({ student, marks, feeStatus, classTeacher });
+            }
+        }
+        
+        if (allReports.length === 0) {
+            Swal.fire('No Data', 'No marks found', 'info');
+            return;
+        }
+        
+        const printWindow = window.open('', '_blank');
+        let allReportsHtml = '';
+        
+        for (let i = 0; i < allReports.length; i++) {
+            const { student, marks, feeStatus, classTeacher } = allReports[i];
+            allReportsHtml += generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher, true);
+            if (i < allReports.length - 1) {
+                allReportsHtml += '<div style="page-break-before: always;"></div>';
+            }
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Bulk Reports - ${className}</title>
+                <style>
+                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
+                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; font-size: 12px; }
+                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #ddd; padding: 8px; }
+                </style>
+            </head>
+            <body>
+                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+                    <button onclick="window.print()">🖨️ Print All</button>
+                    <button onclick="window.close()">❌ Close</button>
+                </div>
+                ${allReportsHtml}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        Swal.close();
+        
+    } catch (error) {
+        Swal.close();
+        Swal.fire('Error', error.message, 'error');
+    }
+};
+
+// Add this new function - for O-Level only
+window.generateBulkOlevelReports = async function() {
+    const className = document.getElementById('bulkClass').value;
+    const stream = document.getElementById('bulkStream').value;
+    const exam = document.getElementById('bulkExam').value;
+    const year = document.getElementById('bulkYear').value;
+    
+    if (!className) {
+        Swal.fire('Error', 'Please select a class', 'error');
+        return;
+    }
+    if (!exam) {
+        Swal.fire('Error', 'Please select a term/exam', 'error');
+        return;
+    }
+    if (!year) {
+        Swal.fire('Error', 'Please enter a year', 'error');
+        return;
+    }
+    
+    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        await loadSchoolInfoForReport();
+        await loadFeeStructureForReport();
+        await loadAllPaymentsForReport();
+        
+        let query = sb.from('students').select('*').eq('class', className);
+        if (stream && stream !== '') query = query.eq('stream', stream);
+        
+        const { data: students, error: studentError } = await query;
+        if (studentError) throw studentError;
+        
+        if (!students || students.length === 0) {
+            Swal.fire('No Students', 'No students found', 'info');
+            return;
+        }
+        
+        const allReports = [];
+        for (const student of students) {
+            // Use O-Level marks loader
+            const marks = await loadOlevelMarksForReport(student.id, exam, year);
+            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
+            const classTeacher = getClassTeacher(student);
+            if (marks.length > 0) {
+                allReports.push({ student, marks, feeStatus, classTeacher });
+            }
+        }
+        
+        if (allReports.length === 0) {
+            Swal.fire('No Data', 'No marks found for these students', 'info');
+            return;
+        }
+        
+        const printWindow = window.open('', '_blank');
+        let allReportsHtml = '';
+        
+        for (let i = 0; i < allReports.length; i++) {
+            const { student, marks, feeStatus, classTeacher } = allReports[i];
+            // Use O-Level report generator
+            allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus);
+            if (i < allReports.length - 1) {
+                allReportsHtml += '<div style="page-break-before: always;"></div>';
+            }
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Bulk O-Level Reports - ${className}</title>
+                <style>
+                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
+                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; }
+                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #000; padding: 8px; }
+                    .report-container { margin: 0 auto; border: 1px solid #000; }
+                </style>
+            </head>
+            <body>
+                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+                    <button onclick="window.print()">🖨️ Print All</button>
+                    <button onclick="window.close()">❌ Close</button>
+                </div>
+                ${allReportsHtml}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        Swal.close();
+        
+    } catch (error) {
+        Swal.close();
+        Swal.fire('Error', error.message, 'error');
+    }
+};
+
+// ============================================
+// RENDER REPORTS PAGE
+// ============================================
+
+async function renderReports() {
+    await loadSchoolInfoForReport();
+    await loadGradingRulesForReport();
+    await loadUniversityEntryRequirements();
+    await loadFeeStructureForReport();
+    await loadAllPaymentsForReport();
+    await loadStudentsForReport();
+    await loadAcademicTermsForReports();
+    
+    const classOptions = currentLevel === 'olevel' 
+        ? ['S.1', 'S.2', 'S.3', 'S.4']
+        : ['S.5', 'S.6'];
+    
+    const currentYear = new Date().getFullYear();
+    
+    return `
+        <div class="card shadow-sm mb-3">
+            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
+                <h5 class="mb-0"><i class="fas fa-file-alt"></i> Student Report Card</h5>
+                <small>Complete Academic & Financial Report | Fee Calculation: Past Debts → Current Term → Forward Credit</small>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Select Student</label>
+                        <select id="reportStudent" class="form-select">
+                            <option value="">-- Select Student --</option>
+                            ${reportsStudentsList.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.admission_no}) - ${s.class}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Term/Exam</label>
+                        <select id="reportExam" class="form-select">
+                            <option value="">-- Select Term --</option>
+                            <option value="Term 1">📘 Term 1</option>
+                            <option value="Term 2">📙 Term 2</option>
+                            <option value="Term 3">📗 Term 3</option>
+                            <option value="Mid-Term">📝 Mid-Term</option>
+                            <option value="Mock">🎯 Mock</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Year</label>
+                        <input type="text" id="reportYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
+                    </div>
+                    <div class="col-md-2">
+    <label class="form-label fw-bold">&nbsp;</label>
+    <button class="btn btn-primary w-100" onclick="${currentLevel === 'olevel' ? 'generateOlevelReport()' : 'generateSingleReport()'}">
+        <i class="fas fa-file-alt"></i> Generate
+    </button>
+</div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Bulk Class</label>
+                        <select id="bulkClass" class="form-select">
+                            <option value="">-- Select Class --</option>
+                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Stream</label>
+                        <select id="bulkStream" class="form-select">
+                            <option value="">-- All Streams --</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                            <option value="Arts">Arts</option>
+                            <option value="Sciences">Sciences</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Term/Exam</label>
+                        <select id="bulkExam" class="form-select">
+                            <option value="">-- Select Term --</option>
+                            <option value="Term 1">📘 Term 1</option>
+                            <option value="Term 2">📙 Term 2</option>
+                            <option value="Term 3">📗 Term 3</option>
+                            <option value="Mid-Term">📝 Mid-Term</option>
+                            <option value="Mock">🎯 Mock</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Year</label>
+                        <input type="text" id="bulkYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                       <button class="btn btn-info w-100" onclick="${currentLevel === 'olevel' ? 'generateBulkOlevelReports()' : 'generateBulkReports'}">
+    <i class="fas fa-print"></i> Print Bulk
+</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="reportPreview" style="display: none;"></div>
+    `;
+}
+// ============================================
+// NEW O-LEVEL REPORT FUNCTIONS (Image Format)
+// A-Level functions remain UNCHANGED
+// ============================================
+
+// Helper: Get descriptor for O-Level
+function getOlevelDescriptor(avg) {
+    if (avg >= 0.9 && avg <= 1.4) return 'BASIC';
+    if (avg >= 1.5 && avg <= 2.4) return 'MODERATE';
+    if (avg >= 2.5 && avg <= 3.0) return 'OUTSTANDING';
+    return 'BASIC';
+}
+
+// Load O-Level marks with A1, A2 format
+async function loadOlevelMarksForReport(studentId, exam, year) {
+    try {
+        const { data, error } = await sb
+            .from('marks')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam', exam)
+            .eq('year', year)
+            .eq('level', 'olevel');
+        
+        if (error) throw error;
+        
+        return (data || []).map(m => {
+            const u1 = m.unit1 || 0;
+            const u2 = m.unit2 || 0;
+            const u3 = m.unit3 || 0;
+            const exam80 = m.exam_80 || 0;
+            const unitAvg = (u1 + u2 + u3) / 3;
+            const total20 = (unitAvg / 3) * 20;
+            let total100 = total20 + exam80;
+            total100 = Math.min(100, Math.max(0, total100));
+            const gradeInfo = getOlevelGradeDescriptor(total100);
+            
+            let unitDescriptor = 'Basic';
+            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
+            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
+            
+            return {
+                subject: m.subject,
+                u1, u2, u3,
+                avgUnit: unitAvg.toFixed(1),
+                identifier: Math.round(unitAvg),
+                unitDescriptor: unitDescriptor,
+                total20: total20.toFixed(1),
+                exam80: exam80,
+                total100: total100.toFixed(1),
+                grade: gradeInfo.grade,
+                descriptor: gradeInfo.descriptor,
+                teacher_initials: m.teacher_initials || ''
+            };
+        });
+    } catch (error) {
+        console.error('Error loading O-Level marks:', error);
+        return [];
+    }
+}
+// Generate O-Level report card HTML (Image Format)
+function generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus) {
+    let totalSum = 0;
+    for (const m of marks) totalSum += parseFloat(m.total100);
+    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
+    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
+    const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    const subjectsHtml = marks.map(m => `
+        <tr>
+            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</span>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</span>
+        </tr>
+    `).join('');
+    
+    // Fee Status Display
+    let feeDisplay = '';
+    if (feeStatus) {
+        const balanceAmount = Math.abs(feeStatus.balance || 0);
+        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
+        
+        feeDisplay = `
+            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
+                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
+                    <div><strong>Balance:</strong> ${balanceText}</div>
+                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Large watermark logo
+    const logoWatermark = schoolInfo.school_logo ? 
+        `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: 0; pointer-events: none;">
+            <img src="${schoolInfo.school_logo}" style="width: 700px; max-width: 70vw; height: auto;">
+        </div>` : '';
+    
+    return `
+        <div class="report-container" style="max-width: 1300px; margin: 0 auto; background: white; position: relative; font-family: 'Times New Roman', Arial, sans-serif; border: 2px solid #000;">
+            
+            <!-- Large Watermark Logo Background -->
+            ${logoWatermark}
+            
+            <!-- CLEAN SIMPLE HEADER - ONE LINE, NO EXTRA BORDERS -->
+            <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    ${schoolInfo.school_logo ? 
+                        `<img src="${schoolInfo.school_logo}" style="height: 70px; width: 70px; object-fit: contain;">` : 
+                        `<span style="font-size: 35px;">🏫</span>`
+                    }
+                    <div>
+                        <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">${escapeHtml(schoolInfo.school_name || 'KIDIKI SECONDARY SCHOOL')}</h1>
+                        <p style="margin: 3px 0 0; font-size: 11px;">${escapeHtml(schoolInfo.school_address || 'P.O BOX 2815, KAMULI')} | Tel: ${escapeHtml(schoolInfo.school_phone || '0758 918361')}</p>
+                    </div>
+                </div>
+                <h2 style="margin: 10px 0 0; font-size: 18px; text-decoration: underline;">${exam} ASSESSMENT REPORT</h2>
+                <p style="margin: 3px 0 0; font-size: 12px;">Year ${year} | ${currentDate}</p>
+            </div>
+            
+            <!-- Student Info - Clean horizontal layout -->
+            <div style="margin: 15px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div><strong>Student:</strong> ${escapeHtml(student.name)}</div>
+                    <div><strong>Admission No:</strong> ${student.admission_no || '-'}</div>
+                    <div><strong>Class:</strong> ${student.class}</div>
+                    <div><strong>Stream:</strong> ${student.stream || '-'}</div>
+                    <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
+                </div>
+            </div>
+            
+            <!-- Fee Statement -->
+            ${feeDisplay}
+            
+            <!-- Main Results Table -->
+            <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">SUBJECT</th>
+                            <th colspan="3" style="border: 1px solid #000; padding: 8px;">UNIT SCORES</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">AVR</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">ID</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Descriptor</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Exam/80</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Total/100</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Grade</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Comment</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Initials</th>
+                        </tr>
+                        <tr>
+                            <th style="border: 1px solid #000; padding: 6px;">U1</th>
+                            <th style="border: 1px solid #000; padding: 6px;">U2</th>
+                            <th style="border: 1px solid #000; padding: 6px;">U3</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${subjectsHtml}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Overall Achievement - Clean -->
+            <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
+                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
+                    <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
+                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
+                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
+                </div>
+            </div>
+            
+            <!-- Grading Scale - Compact -->
+            <div style="margin: 0 20px 15px 20px;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+                    <thead>
+                        <tr><th colspan="4" style="border: 1px solid #000; padding: 6px; text-align: center;">GRADING SCALE</th></tr>
+                        <tr style="background: #f5f5f5;">
+                            <th style="border: 1px solid #000; padding: 5px;">Score</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Grade</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Descriptor</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Interpretation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Comments Section - Simple -->
+            <div style="margin: 0 20px 15px 20px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <div style="flex: 1;">
+                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
+                        <strong>CLASS TEACHER'S COMMENT</strong>
+                    </div>
+                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
+                        <div style="text-align: right;">Signature: _________________</div>
+                        <div style="margin-top: 5px;">Name: ${escapeHtml(classTeacher)}</div>
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
+                        <strong>HEAD TEACHER'S COMMENT</strong>
+                    </div>
+                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
+                        <div style="text-align: right;">Signature: _________________</div>
+                        <div style="margin-top: 5px;">Name: ${escapeHtml(schoolInfo.principal_name || 'HEAD TEACHER')}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style="margin: 0 20px 20px 20px; padding: 10px; border: 1px solid #000; text-align: center; font-size: 11px; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <span>📅 Term ended: ${currentDate}</span>
+                    <span>🔹 Next Term Begins: _______________</span>
+                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-3 no-print" style="margin-bottom: 30px;">
+            <button class="btn btn-primary" onclick="window.printReportCard()" style="padding: 10px 30px; font-size: 16px;">
+                <i class="fas fa-print"></i> Print Report
+            </button>
+        </div>
+    `;
+}
+// NEW O-Level generate function
 window.generateOlevelReport = async function() {
     const studentId = document.getElementById('reportStudent').value;
     const exam = document.getElementById('reportExam').value;
@@ -14251,544 +15040,123 @@ window.generateOlevelReport = async function() {
 };
 
 // ============================================
-// GENERATE O-LEVEL BULK REPORTS
-// ============================================
-
-window.generateBulkOlevelReports = async function() {
-    const className = document.getElementById('bulkClass').value;
-    const stream = document.getElementById('bulkStream').value;
-    const exam = document.getElementById('bulkExam').value;
-    const year = document.getElementById('bulkYear').value;
-    
-    if (!className) {
-        Swal.fire('Error', 'Please select a class', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadSchoolInfoForReport();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        
-        let query = sb.from('students').select('*').eq('class', className);
-        if (stream && stream !== '') query = query.eq('stream', stream);
-        
-        const { data: students, error: studentError } = await query;
-        if (studentError) throw studentError;
-        
-        if (!students || students.length === 0) {
-            Swal.fire('No Students', 'No students found', 'info');
-            return;
-        }
-        
-        const allReports = [];
-        for (const student of students) {
-            const marks = await loadOlevelMarksForReport(student.id, exam, year);
-            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
-            const classTeacher = getClassTeacher(student);
-            if (marks.length > 0) {
-                allReports.push({ student, marks, feeStatus, classTeacher });
-            }
-        }
-        
-        if (allReports.length === 0) {
-            Swal.fire('No Data', 'No marks found for these students', 'info');
-            return;
-        }
-        
-        const printWindow = window.open('', '_blank');
-        let allReportsHtml = '';
-        
-        for (let i = 0; i < allReports.length; i++) {
-            const { student, marks, feeStatus, classTeacher } = allReports[i];
-            allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus);
-            if (i < allReports.length - 1) {
-                allReportsHtml += '<div style="page-break-after: always;"></div>';
-            }
-        }
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Bulk O-Level Reports - ${className}</title>
-                <style>
-                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
-                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; }
-                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #000; padding: 8px; }
-                    .report-container { margin: 0 auto; border: 1px solid #000; }
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
-                    <button onclick="window.print()">🖨️ Print All</button>
-                    <button onclick="window.close()">❌ Close</button>
-                </div>
-                ${allReportsHtml}
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        Swal.close();
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
-};
-
-// ============================================
-// GENERATE A-LEVEL BULK REPORTS
-// ============================================
-
-window.generateBulkReports = async function() {
-    console.log('🔄 A-Level Bulk Reports Started');
-    
-    const className = document.getElementById('bulkClass')?.value;
-    const stream = document.getElementById('bulkStream')?.value;
-    const exam = document.getElementById('bulkExam')?.value;
-    const year = document.getElementById('bulkYear')?.value;
-    
-    if (!className) {
-        Swal.fire('Error', 'Please select a class', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ 
-        title: 'Generating A-Level Reports...', 
-        text: 'Loading student data...',
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
-    });
-    
-    try {
-        await loadSchoolInfoForReport();
-        await loadGradingRulesForReport();
-        await loadUniversityEntryRequirements();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        await loadStudentsForReport();
-        
-        let query = sb.from('students').select('*').eq('class', className);
-        if (stream && stream !== '') {
-            query = query.eq('stream', stream);
-        }
-        
-        const { data: students, error: studentError } = await query;
-        if (studentError) throw studentError;
-        
-        if (!students || students.length === 0) {
-            Swal.fire({
-                title: 'No Students Found',
-                text: `No A-Level students found in ${className}${stream ? ' - ' + stream : ''}`,
-                icon: 'info'
-            });
-            return;
-        }
-        
-        Swal.update({ text: `Processing ${students.length} A-Level students...` });
-        
-        const allReports = [];
-        let skippedCount = 0;
-        
-        for (const student of students) {
-            const marks = await loadAlevelMarksForReport(student.id, exam, year);
-            
-            if (marks.length === 0) {
-                skippedCount++;
-                continue;
-            }
-            
-            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
-            const classTeacher = getAlevelClassTeacher(student);
-            
-            allReports.push({ student, marks, feeStatus, classTeacher });
-        }
-        
-        if (allReports.length === 0) {
-            Swal.fire({
-                title: 'No Data Found',
-                html: `
-                    <div class="text-start">
-                        <p>No marks found for A-Level students in ${className}${stream ? ' - ' + stream : ''}</p>
-                        <p class="text-muted">Skipped ${skippedCount} students without marks.</p>
-                        <hr>
-                        <p><strong>Tip:</strong> Make sure you have entered marks for these students in the Marks module.</p>
-                    </div>
-                `,
-                icon: 'info'
-            });
-            return;
-        }
-        
-        Swal.update({ text: `Generating ${allReports.length} A-Level report cards...` });
-        
-        const printWindow = window.open('', '_blank');
-        
-        if (!printWindow) {
-            Swal.fire({
-                title: 'Popup Blocked!',
-                html: 'Please allow popups for this website to print reports.',
-                icon: 'warning'
-            });
-            return;
-        }
-        
-        let allReportsHtml = '';
-        for (let i = 0; i < allReports.length; i++) {
-            const { student, marks, feeStatus, classTeacher } = allReports[i];
-            allReportsHtml += generateAlevelBulkReportCard(
-                student, marks, exam, year, feeStatus, classTeacher
-            );
-            if (i < allReports.length - 1) {
-                allReportsHtml += '<div style="page-break-after: always;"></div>';
-            }
-        }
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>A-Level Bulk Reports - ${className}</title>
-                <style>
-                    @media print {
-                        body { margin: 0; padding: 0; background: white; }
-                        .no-print { display: none !important; }
-                        .report-container { 
-                            page-break-after: always; 
-                            border: none !important;
-                            box-shadow: none !important;
-                            margin: 0 !important;
-                            padding: 20px !important;
-                            border-radius: 0 !important;
-                        }
-                        .report-container:last-child { page-break-after: avoid; }
-                    }
-                    @media screen {
-                        body { 
-                            font-family: 'Times New Roman', Arial, sans-serif;
-                            padding: 15px;
-                            font-size: 12px;
-                            background: #f0f0f0;
-                        }
-                        .report-container {
-                            max-width: 950px;
-                            margin: 0 auto 20px auto;
-                            padding: 20px;
-                            background: white;
-                            border-radius: 8px;
-                            border: 1px solid #ddd;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        }
-                    }
-                    .grade-badge {
-                        display: inline-block;
-                        padding: 4px 12px;
-                        border-radius: 20px;
-                        color: white;
-                        font-weight: bold;
-                    }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                    }
-                    th, td {
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                    }
-                    .no-print {
-                        text-align: center;
-                        margin-bottom: 20px;
-                        background: white;
-                        padding: 15px;
-                        border-radius: 8px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    }
-                    .no-print button {
-                        padding: 10px 30px;
-                        border: none;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        margin: 0 10px;
-                        font-size: 14px;
-                        font-weight: bold;
-                    }
-                    .btn-print {
-                        background: #01605a;
-                        color: white;
-                    }
-                    .btn-print:hover {
-                        background: #014a45;
-                    }
-                    .btn-close {
-                        background: #dc3545;
-                        color: white;
-                    }
-                    .btn-close:hover {
-                        background: #c82333;
-                    }
-                    .print-info {
-                        margin-top: 8px;
-                        color: #666;
-                        font-size: 12px;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="no-print">
-                    <button class="btn-print" onclick="window.print()">🖨️ Print All Reports</button>
-                    <button class="btn-close" onclick="window.close()">❌ Close Window</button>
-                    <div class="print-info">
-                        <strong>${allReports.length}</strong> A-Level reports generated for <strong>${className}</strong> ${stream ? '- ' + stream : ''} | ${exam} ${year}
-                        ${skippedCount > 0 ? `| ⚠️ ${skippedCount} students skipped (no marks)` : ''}
-                    </div>
-                </div>
-                ${allReportsHtml}
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        Swal.close();
-        
-        setTimeout(() => {
-            printWindow.print();
-        }, 1500);
-        
-    } catch (error) {
-        Swal.close();
-        console.error('A-Level Bulk Report Error:', error);
-        Swal.fire({
-            title: 'Error Generating A-Level Reports',
-            text: error.message || 'An unexpected error occurred',
-            icon: 'error'
-        });
-    }
-};
-
-// ============================================
-// RENDER REPORTS PAGE
-// ============================================
-
-async function renderReports() {
-    await loadSchoolInfoForReport();
-    await loadGradingRulesForReport();
-    await loadUniversityEntryRequirements();
-    await loadFeeStructureForReport();
-    await loadAllPaymentsForReport();
-    await loadStudentsForReport();
-    await loadAcademicTermsForReports();
-    
-    const classOptions = currentLevel === 'olevel' 
-        ? ['S.1', 'S.2', 'S.3', 'S.4']
-        : ['S.5', 'S.6'];
-    
-    const currentYear = new Date().getFullYear();
-    
-    const generateButton = currentLevel === 'olevel' 
-        ? `onclick="generateOlevelReport()"`
-        : `onclick="generateSingleReport()"`;
-    
-    const bulkButton = currentLevel === 'olevel'
-        ? `onclick="generateBulkOlevelReports()"`
-        : `onclick="generateBulkReports()"`;
-    
-    return `
-        <div class="card shadow-sm mb-3">
-            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-file-alt"></i> Student Report Card</h5>
-                <small>Complete Academic & Financial Report | Fee Calculation: Past Debts → Current Term → Forward Credit</small>
-            </div>
-            <div class="card-body">
-                <div class="row mb-4">
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Select Student</label>
-                        <select id="reportStudent" class="form-select">
-                            <option value="">-- Select Student --</option>
-                            ${reportsStudentsList.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.admission_no}) - ${s.class}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Term/Exam</label>
-                        <select id="reportExam" class="form-select">
-                            <option value="">-- Select Term --</option>
-                            <option value="Term 1">📘 Term 1</option>
-                            <option value="Term 2">📙 Term 2</option>
-                            <option value="Term 3">📗 Term 3</option>
-                            <option value="Mid-Term">📝 Mid-Term</option>
-                            <option value="Mock">🎯 Mock</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Year</label>
-                        <input type="text" id="reportYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">&nbsp;</label>
-                        <button class="btn btn-primary w-100" ${generateButton}>
-                            <i class="fas fa-file-alt"></i> Generate
-                        </button>
-                    </div>
-                </div>
-                
-                <hr>
-                
-                <div class="row">
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Bulk Class</label>
-                        <select id="bulkClass" class="form-select">
-                            <option value="">-- Select Class --</option>
-                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Stream</label>
-                        <select id="bulkStream" class="form-select">
-                            <option value="">-- All Streams --</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                            <option value="Arts">Arts</option>
-                            <option value="Sciences">Sciences</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">Term/Exam</label>
-                        <select id="bulkExam" class="form-select">
-                            <option value="">-- Select Term --</option>
-                            <option value="Term 1">📘 Term 1</option>
-                            <option value="Term 2">📙 Term 2</option>
-                            <option value="Term 3">📗 Term 3</option>
-                            <option value="Mid-Term">📝 Mid-Term</option>
-                            <option value="Mock">🎯 Mock</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">Year</label>
-                        <input type="text" id="bulkYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">&nbsp;</label>
-                        <button class="btn btn-info w-100" ${bulkButton}>
-                            <i class="fas fa-print"></i> Print Bulk
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="reportPreview" style="display: none;"></div>
-    `;
-}
-
-// ============================================
 // INITIALIZATION
 // ============================================
 
-console.log('✅ Reports Module Loaded - Clean Version');
+console.log('✅ Reports Module Loaded - Final Masterpiece');
 console.log('✅ Fee Calculation: Past Debts → Current Term → Forward Credit');
 console.log('✅ Class Teacher from School Settings');
-console.log('✅ O-Level and A-Level report formats preserved');
 
 // ============================================
-// PROMOTION MODULE - WITH A-LEVEL STREAM SELECTION
-// O-Level to A-Level: Prompts for Arts or Sciences
+// PROMOTION MODULE - NO STATISTICS CARDS
+// Clean and simple - Just the table
 // ============================================
 
 // Global variables
 let promotionStudentsList = [];
 let promotionClasses = [];
-let promotionGradingRules = [];
-let promotionUniversityEntry = {};
 
 // ============================================
-// LOAD GRADING RULES FOR POINTS
+// LOAD STUDENTS FOR PROMOTION - FILTER BY LEVEL
 // ============================================
 
-async function loadPromotionGradingRules() {
+async function loadPromotionStudents() {
     try {
-        if (currentLevel === 'olevel') {
-            const { data, error } = await sb
-                .from('olevel_grades')
-                .select('*')
-                .order('points', { ascending: true });
-            
-            if (error) throw error;
-            promotionGradingRules = data || [];
-        } else {
-            const { data, error } = await sb
-                .from('alevel_principal_grades')
-                .select('*')
-                .order('points', { ascending: false });
-            
-            if (error) throw error;
-            promotionGradingRules = data || [];
-            
-            const { data: uniData, error: uniError } = await sb
-                .from('alevel_university_entry')
-                .select('*')
-                .limit(1)
-                .maybeSingle();
-            
-            if (!uniError && uniData) {
-                promotionUniversityEntry = uniData;
-            }
+        let classList = currentLevel === 'olevel' 
+            ? ['S.1', 'S.2', 'S.3', 'S.4']
+            : ['S.5', 'S.6'];
+        
+        const { data, error } = await sb
+            .from('students')
+            .select('*')
+            .in('class', classList)
+            .order('class', { ascending: true })
+            .order('name', { ascending: true });
+        
+        if (error) throw error;
+        
+        let filteredData = data || [];
+        if (currentLevel) {
+            filteredData = filteredData.filter(s => s.level === currentLevel);
         }
-        return true;
+        
+        promotionStudentsList = filteredData;
+        promotionClasses = [...new Set(promotionStudentsList.map(s => s.class))].sort();
+        
+        return promotionStudentsList;
     } catch (error) {
-        console.error('Error loading grading rules:', error);
-        return false;
+        console.error('Error loading students:', error);
+        return [];
     }
 }
 
 // ============================================
-// RENDER PROMOTION PAGE
+// GET NEXT CLASS
+// ============================================
+
+function getNextClass(currentClass) {
+    if (currentLevel === 'olevel') {
+        const classMap = {
+            'S.1': 'S.2',
+            'S.2': 'S.3',
+            'S.3': 'S.4',
+            'S.4': 'S.5'
+        };
+        return classMap[currentClass] || currentClass;
+    } else {
+        const classMap = {
+            'S.5': 'S.6',
+            'S.6': 'Completed'
+        };
+        return classMap[currentClass] || currentClass;
+    }
+}
+
+// ============================================
+// CHECK IF STUDENT IS IN FINAL CLASS
+// ============================================
+
+function isFinalClass(studentClass) {
+    if (currentLevel === 'olevel') {
+        return studentClass === 'S.4';
+    } else {
+        return studentClass === 'S.6';
+    }
+}
+
+// ============================================
+// RENDER PROMOTION PAGE - NO CARDS
 // ============================================
 
 async function renderPromotion() {
-    await loadPromotionGradingRules();
-    await loadPromotionData();
+    await loadPromotionStudents();
+    
+    const levelName = currentLevel === 'olevel' ? 'O-Level' : 'A-Level';
     
     return `
         <div class="card shadow-sm mb-3">
             <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-arrow-up"></i> Student Promotion / Demotion</h5>
+                <h5 class="mb-0"><i class="fas fa-arrow-up"></i> Student Promotion - ${levelName}</h5>
+                <small>New Curriculum: All students are promoted to the next class</small>
             </div>
             <div class="card-body">
-                <div class="row">
+                <div class="row g-3">
                     <div class="col-md-12">
                         <button class="btn btn-primary" onclick="showPromotionModal()">
                             <i class="fas fa-arrow-up"></i> Bulk Promote
                         </button>
-                        <button class="btn btn-warning ms-2" onclick="showDemotionModal()">
-                            <i class="fas fa-arrow-down"></i> Bulk Demote
+                        <button class="btn btn-success ms-2" onclick="printPromotionList()">
+                            <i class="fas fa-print"></i> Print Promotion List
                         </button>
-                        <button class="btn btn-info ms-2" onclick="refreshPromotionTable()">
+                        <button class="btn btn-secondary ms-2" onclick="refreshPromotionTable()">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
+                        <span class="ms-3 text-muted">
+                            <i class="fas fa-info-circle"></i> 
+                            ${currentLevel === 'olevel' ? 
+                                'Students from S.4 will be promoted to S.5 (A-Level)' : 
+                                'Students from S.6 will be marked as Completed'}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -14800,19 +15168,19 @@ async function renderPromotion() {
                     <table class="table table-bordered mb-0">
                         <thead class="table-primary sticky-top">
                             <tr>
+                                <th width="30"><input type="checkbox" id="selectAllPromotion"></th>
                                 <th>Student Name</th>
                                 <th>Admission No</th>
                                 <th>Current Class</th>
                                 <th>Stream</th>
-                                <th>Term 3 Results</th>
-                                <th>Status</th>
-                                <th>Recommendation</th>
-                                <th width="150">Actions</th>
+                                <th>Next Class</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="promotionTableBody">
-                            <tr><td colspan="8" class="text-center py-4">Loading students... </span>络</tbody>
-                    </div>
+                            <!-- Will be populated automatically -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -14820,416 +15188,116 @@ async function renderPromotion() {
 }
 
 // ============================================
-// LOAD PROMOTION DATA
-// ============================================
-
-async function loadPromotionData() {
-    try {
-        let classList = currentLevel === 'olevel' 
-            ? ['S.1', 'S.2', 'S.3', 'S.4']
-            : ['S.5', 'S.6'];
-        
-        const { data: students, error: studentError } = await sb
-            .from('students')
-            .select('*')
-            .in('class', classList)
-            .order('class', { ascending: true })
-            .order('name', { ascending: true });
-        
-        if (studentError) throw studentError;
-        promotionStudentsList = students || [];
-        
-        promotionClasses = [...new Set(promotionStudentsList.map(s => s.class))].sort();
-        
-        return promotionStudentsList;
-    } catch (error) {
-        console.error('Error loading promotion data:', error);
-        return [];
-    }
-}
-
-// ============================================
-// CALCULATE STUDENT TERM 3 RESULTS
-// ============================================
-
-async function calculateTerm3Results(studentId, year) {
-    try {
-        const { data: marks, error } = await sb
-            .from('marks')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('exam', 'Term 3')
-            .eq('year', year);
-        
-        if (error) throw error;
-        
-        if (!marks || marks.length === 0) {
-            return { 
-                hasMarks: false, 
-                average: 0, 
-                totalPoints: 0, 
-                subjectCount: 0,
-                grade: 'N/A',
-                performance: 'No Marks'
-            };
-        }
-        
-        let totalPercentage = 0;
-        let totalPoints = 0;
-        
-        for (const m of marks) {
-            let percentage;
-            if (currentLevel === 'olevel') {
-                const caScore = m.ca_score || 0;
-                const examScore = m.exam_score || 0;
-                percentage = (caScore * 0.2) + (examScore * 0.8);
-            } else {
-                percentage = (m.marks_obtained / m.max_marks) * 100;
-            }
-            totalPercentage += percentage;
-            
-            let points = 0;
-            for (const rule of promotionGradingRules) {
-                if (percentage >= rule.min_percentage && percentage <= rule.max_percentage) {
-                    points = rule.points;
-                    break;
-                }
-            }
-            totalPoints += points;
-        }
-        
-        const average = marks.length > 0 ? totalPercentage / marks.length : 0;
-        
-        let performance = '';
-        let grade = '';
-        
-        if (currentLevel === 'olevel') {
-            if (average >= 80) { grade = 'A'; performance = 'Excellent'; }
-            else if (average >= 70) { grade = 'B'; performance = 'Very Good'; }
-            else if (average >= 60) { grade = 'C'; performance = 'Good'; }
-            else if (average >= 50) { grade = 'D'; performance = 'Satisfactory'; }
-            else if (average >= 40) { grade = 'E'; performance = 'Poor'; }
-            else { grade = 'F'; performance = 'Very Poor'; }
-        } else {
-            if (totalPoints >= 18) { grade = 'A'; performance = 'Excellent'; }
-            else if (totalPoints >= 15) { grade = 'B'; performance = 'Very Good'; }
-            else if (totalPoints >= 12) { grade = 'C'; performance = 'Good'; }
-            else if (totalPoints >= 9) { grade = 'D'; performance = 'Satisfactory'; }
-            else if (totalPoints >= 6) { grade = 'E'; performance = 'Poor'; }
-            else { grade = 'F'; performance = 'Very Poor'; }
-        }
-        
-        return {
-            hasMarks: true,
-            average: average,
-            totalPoints: totalPoints,
-            subjectCount: marks.length,
-            grade: grade,
-            performance: performance
-        };
-    } catch (error) {
-        console.error('Error calculating results:', error);
-        return { hasMarks: false, average: 0, totalPoints: 0, subjectCount: 0, grade: 'N/A', performance: 'Error' };
-    }
-}
-
-// ============================================
-// GET RECOMMENDATION (Promote/Demote/Repeat)
-// ============================================
-
-function getRecommendation(studentClass, results, currentYear) {
-    if (!results.hasMarks) {
-        return {
-            action: 'PENDING',
-            nextClass: studentClass,
-            reason: 'No Term 3 marks found',
-            color: '#6c757d',
-            canPromote: false,
-            canDemote: false
-        };
-    }
-    
-    if (currentLevel === 'olevel') {
-        const average = results.average;
-        
-        if (average >= 50) {
-            let nextClass = '';
-            if (studentClass === 'S.1') nextClass = 'S.2';
-            else if (studentClass === 'S.2') nextClass = 'S.3';
-            else if (studentClass === 'S.3') nextClass = 'S.4';
-            else if (studentClass === 'S.4') nextClass = 'S.5';
-            else nextClass = studentClass;
-            
-            return {
-                action: 'PROMOTE',
-                nextClass: nextClass,
-                reason: `Average ${average.toFixed(1)}% - Meets promotion criteria`,
-                color: '#28a745',
-                canPromote: true,
-                canDemote: false
-            };
-        } else if (average >= 40) {
-            return {
-                action: 'REPEAT',
-                nextClass: studentClass,
-                reason: `Average ${average.toFixed(1)}% - Below promotion threshold. Needs to repeat.`,
-                color: '#ffc107',
-                canPromote: false,
-                canDemote: true
-            };
-        } else {
-            let prevClass = '';
-            if (studentClass === 'S.2') prevClass = 'S.1';
-            else if (studentClass === 'S.3') prevClass = 'S.2';
-            else if (studentClass === 'S.4') prevClass = 'S.3';
-            else prevClass = studentClass;
-            
-            return {
-                action: 'DEMOTE',
-                nextClass: prevClass,
-                reason: `Average ${average.toFixed(1)}% - Below minimum requirements. Demoted.`,
-                color: '#dc3545',
-                canPromote: false,
-                canDemote: true
-            };
-        }
-    } else {
-        const totalPoints = results.totalPoints;
-        const minPromotionPoints = promotionUniversityEntry.minimum_points || 12;
-        
-        if (totalPoints >= minPromotionPoints) {
-            let nextClass = '';
-            if (studentClass === 'S.5') nextClass = 'S.6';
-            else if (studentClass === 'S.6') nextClass = 'Completed';
-            else nextClass = studentClass;
-            
-            return {
-                action: 'PROMOTE',
-                nextClass: nextClass,
-                reason: `${totalPoints} points - Meets promotion criteria (≥${minPromotionPoints} points)`,
-                color: '#28a745',
-                canPromote: true,
-                canDemote: false
-            };
-        } else if (totalPoints >= minPromotionPoints - 3) {
-            return {
-                action: 'REPEAT',
-                nextClass: studentClass,
-                reason: `${totalPoints} points - Below promotion threshold. Needs to repeat.`,
-                color: '#ffc107',
-                canPromote: false,
-                canDemote: true
-            };
-        } else {
-            let prevClass = '';
-            if (studentClass === 'S.6') prevClass = 'S.5';
-            else prevClass = studentClass;
-            
-            return {
-                action: 'DEMOTE',
-                nextClass: prevClass,
-                reason: `${totalPoints} points - Significantly below requirements. Demoted.`,
-                color: '#dc3545',
-                canPromote: false,
-                canDemote: true
-            };
-        }
-    }
-}
-
-// ============================================
-// LOAD PROMOTION TABLE
+// LOAD PROMOTION TABLE - AUTOMATICALLY
 // ============================================
 
 async function loadPromotionTable() {
     const tbody = document.getElementById('promotionTableBody');
     if (!tbody) return;
     
-    await loadPromotionData();
-    await loadPromotionGradingRules();
-    const year = new Date().getFullYear().toString();
+    if (promotionStudentsList.length === 0) {
+        await loadPromotionStudents();
+    }
     
     if (promotionStudentsList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4">No students found. </span>络</tbody>';
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4">No ${currentLevel} students found.</td></tr>`;
         return;
     }
     
     let html = '';
-    
     for (const student of promotionStudentsList) {
-        const results = await calculateTerm3Results(student.id, year);
-        const recommendation = getRecommendation(student.class, results, year);
+        const nextClass = getNextClass(student.class);
+        const isFinal = isFinalClass(student.class);
+        const isCompleted = nextClass === 'Completed';
         
-        let statusClass = '';
-        let statusIcon = '';
-        
-        if (recommendation.action === 'PROMOTE') {
-            statusClass = 'bg-success';
-            statusIcon = '✅';
-        } else if (recommendation.action === 'DEMOTE') {
-            statusClass = 'bg-danger';
-            statusIcon = '⬇️';
-        } else if (recommendation.action === 'REPEAT') {
-            statusClass = 'bg-warning text-dark';
-            statusIcon = '🔄';
+        let statusBadge = '';
+        let statusColor = '';
+        if (isCompleted) {
+            statusBadge = '🎓 Completed';
+            statusColor = 'bg-success';
+        } else if (isFinal) {
+            statusBadge = currentLevel === 'olevel' ? '➡️ To A-Level' : '➡️ To Complete';
+            statusColor = 'bg-info';
         } else {
-            statusClass = 'bg-secondary';
-            statusIcon = '❓';
-        }
-        
-        let resultDisplay = '';
-        if (currentLevel === 'olevel') {
-            resultDisplay = `<strong>${results.average.toFixed(1)}%</strong><br><small>Grade: ${results.grade}</small>`;
-        } else {
-            resultDisplay = `<strong>${results.totalPoints} pts</strong><br><small>Grade: ${results.grade}</small>`;
+            statusBadge = '⬆️ To Promote';
+            statusColor = 'bg-warning';
         }
         
         html += `
             <tr>
-                <td><strong>${escapeHtml(student.name)}</strong></span></td>
-                <td>${student.admission_no || '-'}</span></td>
-                <td>${student.class}</span></td>
-                <td>${student.stream || '-'}</span></td>
-                <td class="text-center">${resultDisplay}</span></td>
-                <td class="text-center">
-                    <span class="badge ${statusClass}" style="padding: 5px 10px;">
-                        ${statusIcon} ${recommendation.action}
+                <td class="text-center"><input type="checkbox" class="promotionCheck" data-id="${student.id}"></td>
+                <td><strong>${escapeHtml(student.name)}</strong></td>
+                <td>${student.admission_no || '-'}</td>
+                <td><span class="badge bg-primary">${student.class}</span></td>
+                <td>${student.stream || '-'}</td>
+                <td>
+                    <span class="badge ${isCompleted ? 'bg-success' : isFinal ? 'bg-info' : 'bg-warning'}">
+                        ${nextClass}
                     </span>
-                </span></td>
+                    <br><small class="text-muted">${statusBadge}</small>
+                </td>
                 <td class="text-center">
-                    <strong>${recommendation.nextClass}</strong><br>
-                    <small class="text-muted">${recommendation.reason}</small>
-                </span></td>
-                <td class="text-center">
-                    ${recommendation.canPromote ? 
-                        `<button class="btn btn-sm btn-success me-1" onclick="promoteStudent('${student.id}')" title="Promote">
-                            <i class="fas fa-arrow-up"></i>
-                        </button>` : ''}
-                    ${recommendation.canDemote ? 
-                        `<button class="btn btn-sm btn-warning me-1" onclick="demoteStudent('${student.id}')" title="Demote/Repeat">
-                            <i class="fas fa-arrow-down"></i>
-                        </button>` : ''}
-                    <button class="btn btn-sm btn-info" onclick="viewStudentDetails('${student.id}')" title="View Details">
-                        <i class="fas fa-eye"></i>
+                    <button class="btn btn-sm btn-success" onclick="promoteSingleStudent('${student.id}')">
+                        <i class="fas fa-arrow-up"></i> Promote
                     </button>
-                </span></td>
+                </td>
             </tr>
         `;
     }
-    
     tbody.innerHTML = html;
+    
+    const selectAll = document.getElementById('selectAllPromotion');
+    if (selectAll) {
+        selectAll.onclick = function() {
+            document.querySelectorAll('.promotionCheck').forEach(cb => cb.checked = this.checked);
+        };
+    }
 }
 
 // ============================================
-// PROMOTE SINGLE STUDENT (WITH STREAM SELECTION FOR S.4 TO S.5)
+// PROMOTE SINGLE STUDENT
 // ============================================
 
-// ============================================
-// PROMOTE SINGLE STUDENT (CLASS WITHOUT STREAM)
-// ============================================
-
-window.promoteStudent = async function(studentId) {
+window.promoteSingleStudent = async function(studentId) {
     const student = promotionStudentsList.find(s => s.id === studentId);
     if (!student) return;
     
-    const year = new Date().getFullYear().toString();
-    const results = await calculateTerm3Results(studentId, year);
-    const recommendation = getRecommendation(student.class, results, year);
+    const nextClass = getNextClass(student.class);
     
-    if (!recommendation.canPromote) {
-        Swal.fire('Cannot Promote', recommendation.reason, 'warning');
-        return;
-    }
-    
-    let selectedStream = null;
-    let selectedCombination = null;
-    let finalClass = recommendation.nextClass;
-    
-    // For O-Level to A-Level promotion (S.4 to S.5)
-    if (student.class === 'S.4' && recommendation.nextClass === 'S.5') {
-        const selectionResult = await Swal.fire({
-            title: 'Promote to A-Level - Select Stream & Enter Combination',
+    // For O-Level S.4 to A-Level
+    if (currentLevel === 'olevel' && student.class === 'S.4') {
+        const result = await showAlevelPromotionModal(student);
+        if (!result) return;
+        
+        const { stream, combination } = result;
+        
+        const confirmResult = await Swal.fire({
+            title: 'Confirm Promotion to A-Level',
             html: `
                 <div class="text-start">
                     <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
-                    <p><strong>From Class:</strong> ${student.class}</p>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Select Stream *</label>
-                        <select id="streamSelect" class="form-select">
-                            <option value="">-- Select Stream --</option>
-                            <option value="Arts">Arts</option>
-                            <option value="Sciences">Sciences</option>
-                            <option value="Business">Business</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Combination (Type Manually) *</label>
-                        <input type="text" id="combinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
-                        <small class="text-muted">Enter combination code (e.g., PCM for Physics, Chemistry, Math)</small>
-                    </div>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> 
-                        <strong>Common Combinations:</strong><br>
-                        Arts: HEG, HEM, PEM, ICT<br>
-                        Sciences: PCM, PCB, BCM, PEM<br>
-                        Business: BAM, HEB
-                    </div>
+                    <p><strong>From:</strong> ${student.class} (O-Level)</p>
+                    <p><strong>To:</strong> S.5 (A-Level)</p>
+                    <p><strong>Stream:</strong> ${stream}</p>
+                    <p><strong>Combination:</strong> ${combination}</p>
                 </div>
             `,
-            width: '500px',
+            icon: 'question',
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-arrow-up"></i> Promote',
-            cancelButtonText: 'Cancel',
-            preConfirm: () => {
-                const stream = document.getElementById('streamSelect').value;
-                const combination = document.getElementById('combinationInput').value.trim().toUpperCase();
-                if (!stream) {
-                    Swal.showValidationMessage('Please select a stream');
-                    return false;
-                }
-                if (!combination) {
-                    Swal.showValidationMessage('Please enter a combination');
-                    return false;
-                }
-                return { stream, combination };
-            }
+            confirmButtonText: 'Yes, Promote to A-Level',
+            cancelButtonText: 'Cancel'
         });
         
-        if (!selectionResult.value) return;
-        selectedStream = selectionResult.value.stream;
-        selectedCombination = selectionResult.value.combination;
+        if (!confirmResult.isConfirmed) return;
         
-        // IMPORTANT: Class stays as "S.5" (without stream)
-        finalClass = 'S.5';
-    }
-    
-    const confirmResult = await Swal.fire({
-        title: 'Confirm Promotion',
-        html: `
-            <div class="text-start">
-                <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
-                <p><strong>From Class:</strong> ${student.class}</p>
-                <p><strong>To Class:</strong> ${finalClass}</p>
-                ${selectedStream ? `<p><strong>Stream:</strong> ${selectedStream}</p>` : ''}
-                ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
-                <p><strong>Average:</strong> ${results.average.toFixed(1)}%</p>
-            </div>
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Promote',
-        cancelButtonText: 'Cancel'
-    });
-    
-    if (confirmResult.isConfirmed) {
         Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         
         try {
-            // Update student: class = "S.5", stream = selectedStream, combination = entered
             const updateData = { 
-                class: finalClass,
-                stream: selectedStream || student.stream,
-                combination: selectedCombination || student.combination,
+                class: 'S.5',
+                stream: stream,
+                combination: combination,
+                level: 'alevel',
                 updated_at: new Date().toISOString()
             };
             
@@ -15240,35 +15308,117 @@ window.promoteStudent = async function(studentId) {
             
             if (error) throw error;
             
-            Swal.fire('Success!', `${student.name} promoted to ${finalClass} (${selectedStream} - ${selectedCombination})`, 'success');
+            Swal.fire('Success!', `${student.name} promoted to S.5 (${stream} - ${combination})`, 'success');
+            await loadPromotionStudents();
             await loadPromotionTable();
             
         } catch (error) {
             Swal.fire('Error', error.message, 'error');
         }
+        return;
+    }
+    
+    // For A-Level S.6 to Completed
+    if (currentLevel === 'alevel' && student.class === 'S.6') {
+        const confirmResult = await Swal.fire({
+            title: 'Mark Student as Completed?',
+            html: `
+                <div class="text-start">
+                    <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
+                    <p><strong>From:</strong> ${student.class}</p>
+                    <p><strong>Status:</strong> 🎓 Completed S.6</p>
+                    <p class="text-success">This student has completed A-Level education.</p>
+                </div>
+            `,
+            icon: 'success',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Mark as Completed',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (!confirmResult.isConfirmed) return;
+        
+        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        try {
+            const { error } = await sb
+                .from('students')
+                .update({ 
+                    class: 'Completed',
+                    status: 'Completed',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', studentId);
+            
+            if (error) throw error;
+            
+            Swal.fire('🎓 Success!', `${student.name} has been marked as Completed.`, 'success');
+            await loadPromotionStudents();
+            await loadPromotionTable();
+            
+        } catch (error) {
+            Swal.fire('Error', error.message, 'error');
+        }
+        return;
+    }
+    
+    // Regular promotion
+    const confirmResult = await Swal.fire({
+        title: 'Confirm Promotion',
+        html: `
+            <div class="text-start">
+                <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
+                <p><strong>From:</strong> ${student.class}</p>
+                <p><strong>To:</strong> ${nextClass}</p>
+            </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Promote',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (!confirmResult.isConfirmed) return;
+    
+    Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const { error } = await sb
+            .from('students')
+            .update({ 
+                class: nextClass,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', studentId);
+        
+        if (error) throw error;
+        
+        Swal.fire('Success!', `${student.name} promoted to ${nextClass}`, 'success');
+        await loadPromotionStudents();
+        await loadPromotionTable();
+        
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
     }
 };
 
 // ============================================
-// EXECUTE BULK PROMOTION (CLASS WITHOUT STREAM)
+// SHOW A-LEVEL PROMOTION MODAL (For S.4 to S.5)
 // ============================================
 
-async function executeBulkPromotion(fromClass) {
-    let selectedStream = null;
-    let selectedCombination = null;
-    
-    if (fromClass === 'S.4') {
-        const selectionResult = await Swal.fire({
-            title: 'Bulk Promote S.4 to A-Level',
+async function showAlevelPromotionModal(student) {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: `Promote ${escapeHtml(student.name)} to A-Level`,
             html: `
                 <div class="text-start">
                     <div class="alert alert-info mb-3">
-                        <i class="fas fa-info-circle"></i>
-                        Students promoted from S.4 will be placed in the selected stream with the entered combination.
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>${escapeHtml(student.name)}</strong> is completing O-Level and will join A-Level.
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Select Stream *</label>
-                        <select id="bulkStreamSelect" class="form-select">
+                        <select id="promoteStreamSelect" class="form-select">
                             <option value="">-- Select Stream --</option>
                             <option value="Arts">Arts</option>
                             <option value="Sciences">Sciences</option>
@@ -15276,12 +15426,12 @@ async function executeBulkPromotion(fromClass) {
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Combination (Type Manually) *</label>
-                        <input type="text" id="bulkCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
-                        <small class="text-muted">All promoted students will get this combination</small>
+                        <label class="form-label fw-bold">Combination *</label>
+                        <input type="text" id="promoteCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
+                        <small class="text-muted">Enter combination code</small>
                     </div>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> 
+                    <div class="alert alert-warning">
+                        <i class="fas fa-graduation-cap"></i> 
                         <strong>Common Combinations:</strong><br>
                         Arts: HEG, HEM, PEM, ICT<br>
                         Sciences: PCM, PCB, BCM, PEM<br>
@@ -15291,201 +15441,35 @@ async function executeBulkPromotion(fromClass) {
             `,
             width: '500px',
             showCancelButton: true,
-            confirmButtonText: 'Continue Promotion',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: 'Promote to A-Level',
             preConfirm: () => {
-                const stream = document.getElementById('bulkStreamSelect').value;
-                const combination = document.getElementById('bulkCombinationInput').value.trim().toUpperCase();
+                const stream = document.getElementById('promoteStreamSelect').value;
+                const combo = document.getElementById('promoteCombinationInput').value.trim().toUpperCase();
                 if (!stream) {
                     Swal.showValidationMessage('Please select a stream');
                     return false;
                 }
-                if (!combination) {
+                if (!combo) {
                     Swal.showValidationMessage('Please enter a combination');
                     return false;
                 }
-                return { stream, combination };
+                return { stream, combination: combo };
             }
-        });
-        
-        if (!selectionResult.value) return;
-        selectedStream = selectionResult.value.stream;
-        selectedCombination = selectionResult.value.combination;
-    }
-    
-    Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        const students = promotionStudentsList.filter(s => s.class === fromClass);
-        const year = new Date().getFullYear().toString();
-        
-        let promoted = 0;
-        let notEligible = [];
-        let promotedList = [];
-        
-        for (const student of students) {
-            const results = await calculateTerm3Results(student.id, year);
-            const recommendation = getRecommendation(student.class, results, year);
-            
-            if (recommendation.canPromote && recommendation.action === 'PROMOTE') {
-                let finalClass = recommendation.nextClass;
-                const updateData = { class: finalClass };
-                
-                // For S.4 to S.5 promotion
-                if (fromClass === 'S.4' && finalClass === 'S.5' && selectedStream) {
-                    updateData.class = 'S.5';
-                    updateData.stream = selectedStream;
-                    updateData.combination = selectedCombination;
-                }
-                
-                const { error } = await sb
-                    .from('students')
-                    .update(updateData)
-                    .eq('id', student.id);
-                
-                if (!error) {
-                    promoted++;
-                    promotedList.push({ 
-                        name: student.name, 
-                        newClass: updateData.class,
-                        stream: updateData.stream,
-                        combination: updateData.combination 
-                    });
-                }
+        }).then((result) => {
+            if (result.isConfirmed && result.value) {
+                resolve(result.value);
             } else {
-                notEligible.push({ name: student.name, reason: recommendation.reason });
+                resolve(null);
             }
-        }
-        
-        let message = `<div class="text-start">
-            <p><strong>Class:</strong> ${fromClass}</p>
-            ${selectedStream ? `<p><strong>A-Level Stream:</strong> ${selectedStream}</p>` : ''}
-            ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
-            <p><strong>Promoted:</strong> ${promoted} out of ${students.length} students</p>`;
-        
-        if (promotedList.length > 0) {
-            message += `<hr><strong>Promoted Students:</strong><ul>`;
-            promotedList.slice(0, 10).forEach(s => {
-                message += `<li>${escapeHtml(s.name)} → ${s.newClass} (${s.stream} - ${s.combination})</li>`;
-            });
-            if (promotedList.length > 10) message += `<li>... and ${promotedList.length - 10} more</li>`;
-            message += `</ul>`;
-        }
-        
-        if (notEligible.length > 0) {
-            message += `<hr class="text-danger"><strong class="text-danger">Not Eligible (${notEligible.length}):</strong><ul>`;
-            notEligible.slice(0, 5).forEach(s => {
-                message += `<li>${escapeHtml(s.name)} - ${s.reason}</li>`;
-            });
-            if (notEligible.length > 5) message += `<li>... and ${notEligible.length - 5} more</li>`;
-            message += `</ul>`;
-        }
-        
-        message += `</div>`;
-        
-        Swal.fire({
-            title: 'Promotion Complete',
-            html: message,
-            icon: 'success'
         });
-        
-        await loadPromotionTable();
-        
-    } catch (error) {
-        Swal.fire('Error', error.message, 'error');
-    }
-}
-// ============================================
-// DEMOTE STUDENT
-// ============================================
-
-window.demoteStudent = async function(studentId) {
-    const student = promotionStudentsList.find(s => s.id === studentId);
-    if (!student) return;
-    
-    const year = new Date().getFullYear().toString();
-    const results = await calculateTerm3Results(studentId, year);
-    
-    let demotionOptions = '';
-    
-    if (currentLevel === 'olevel') {
-        if (student.class === 'S.2') demotionOptions = '<option value="S.1">S.1</option>';
-        else if (student.class === 'S.3') demotionOptions = '<option value="S.2">S.2</option>';
-        else if (student.class === 'S.4') demotionOptions = '<option value="S.3">S.3</option>';
-        else demotionOptions = `<option value="${student.class}">${student.class} (Repeat)</option>`;
-    } else {
-        if (student.class === 'S.6') demotionOptions = '<option value="S.5">S.5</option>';
-        else demotionOptions = `<option value="${student.class}">${student.class} (Repeat)</option>`;
-    }
-    
-    demotionOptions += `<option value="${student.class}">${student.class} (Repeat - Stay in same class)</option>`;
-    
-    const result = await Swal.fire({
-        title: 'Demote / Repeat Student',
-        html: `
-            <div class="text-start">
-                <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
-                <p><strong>Current Class:</strong> ${student.class}</p>
-                <p><strong>${currentLevel === 'olevel' ? 'Average' : 'Total Points'}:</strong> ${currentLevel === 'olevel' ? results.average.toFixed(1) + '%' : results.totalPoints + ' points'}</p>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Select New Class *</label>
-                    <select id="demoteToClass" class="form-select">
-                        ${demotionOptions}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Reason</label>
-                    <textarea id="demoteReason" class="form-control" rows="2" placeholder="Reason for demotion/repeat..."></textarea>
-                </div>
-            </div>
-        `,
-        width: '500px',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-arrow-down"></i> Confirm',
-        cancelButtonText: 'Cancel',
-        preConfirm: () => {
-            const newClass = document.getElementById('demoteToClass').value;
-            const reason = document.getElementById('demoteReason').value;
-            if (!newClass) {
-                Swal.showValidationMessage('Please select a class');
-                return false;
-            }
-            return { newClass, reason };
-        }
     });
-    
-    if (result.value) {
-        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        try {
-            const { error } = await sb
-                .from('students')
-                .update({ 
-                    class: result.value.newClass,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', studentId);
-            
-            if (error) throw error;
-            
-            await loadPromotionTable();
-            
-        } catch (error) {
-            Swal.fire('Error', error.message, 'error');
-        }
-    }
-};
+}
 
 // ============================================
-// BULK PROMOTE MODAL
-// ============================================
-
-// ============================================
-// BULK PROMOTE MODAL - COMPLETELY FIXED
+// SHOW PROMOTION MODAL (Bulk)
 // ============================================
 
 window.showPromotionModal = function() {
-    // Get unique classes with student counts
     const classMap = {};
     for (const student of promotionStudentsList) {
         if (!classMap[student.class]) {
@@ -15496,53 +15480,64 @@ window.showPromotionModal = function() {
     
     const uniqueClasses = Object.keys(classMap).sort();
     
-    let classOptions = '<option value="">-- Select Class --</option>';
-    for (const c of uniqueClasses) {
-        classOptions += `<option value="${c}">${c} (${classMap[c]} students)</option>`;
+    if (uniqueClasses.length === 0) {
+        Swal.fire('No Students', `No ${currentLevel} students found to promote.`, 'info');
+        return;
     }
     
-    // Create a unique ID for this modal instance
-    const modalId = 'promoteModal_' + Date.now();
+    let classOptions = '<option value="">-- Select Class --</option>';
+    for (const c of uniqueClasses) {
+        const next = getNextClass(c);
+        const isFinal = isFinalClass(c);
+        const label = isFinal ? 
+            (currentLevel === 'olevel' ? '➡️ To A-Level' : '🎓 To Complete') : 
+            '⬆️ To Promote';
+        classOptions += `<option value="${c}">${c} → ${next} (${classMap[c]} students) ${label}</option>`;
+    }
     
     Swal.fire({
-        title: '<i class="fas fa-arrow-up"></i> Bulk Promote Students',
+        title: `<i class="fas fa-arrow-up"></i> Bulk Promote ${currentLevel} Students`,
         html: `
             <div class="text-start">
                 <div class="alert alert-info mb-3">
                     <i class="fas fa-info-circle"></i> 
-                    ${currentLevel === 'olevel' 
-                        ? 'Promotion based on <strong>Term 3 average ≥ 50%</strong>' 
-                        : `Promotion based on <strong>Term 3 total points ≥ ${promotionUniversityEntry.minimum_points || 12} points</strong>`}
+                    <strong>${currentLevel} Students:</strong> All students will be promoted to the next class.
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">From Class *</label>
-                    <select id="promoteFromSelect" class="form-select">
+                    <select id="bulkPromoteClass" class="form-select">
                         ${classOptions}
                     </select>
                 </div>
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> 
-                    Only students meeting the promotion criteria will be promoted.
+                <div id="alevelPromotionOptions" style="display: none;">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-graduation-cap"></i> 
+                        <strong>S.4 → S.5 Promotion:</strong> Students will need to select a stream and combination.
+                    </div>
+                </div>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> 
+                    <strong>Note:</strong> Students in ${currentLevel === 'olevel' ? 'S.4' : 'S.6'} will be ${currentLevel === 'olevel' ? 'promoted to A-Level' : 'marked as Completed'}.
                 </div>
             </div>
         `,
         width: '500px',
         showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-arrow-up"></i> Promote Eligible',
-        cancelButtonText: 'Cancel',
+        confirmButtonText: '<i class="fas fa-arrow-up"></i> Promote All',
         didOpen: () => {
-            // Ensure the select element exists
-            const selectEl = document.getElementById('promoteFromSelect');
-            if (selectEl) {
-                console.log('Select element found');
-            } else {
-                console.log('Select element not found');
-            }
+            const classSelect = document.getElementById('bulkPromoteClass');
+            const alevelOptions = document.getElementById('alevelPromotionOptions');
+            
+            classSelect.onchange = function() {
+                if (this.value === 'S.4') {
+                    alevelOptions.style.display = 'block';
+                } else {
+                    alevelOptions.style.display = 'none';
+                }
+            };
         },
         preConfirm: () => {
-            const fromClass = document.getElementById('promoteFromSelect')?.value;
-            console.log('Selected class:', fromClass);
-            
+            const fromClass = document.getElementById('bulkPromoteClass').value;
             if (!fromClass) {
                 Swal.showValidationMessage('Please select a class!');
                 return false;
@@ -15555,29 +15550,190 @@ window.showPromotionModal = function() {
         }
     });
 };
-// ============================================
-// EXECUTE BULK PROMOTION (WITH STREAM SELECTION FOR S.4)
-// ============================================
 
 // ============================================
-// EXECUTE BULK PROMOTION - WITH DEBUGGING
+// EXECUTE BULK PROMOTION
 // ============================================
 
 async function executeBulkPromotion(fromClass) {
-    console.log('Bulk promoting from class:', fromClass);
+    const students = promotionStudentsList.filter(s => s.class === fromClass);
     
-    // For S.4 to S.5 promotion, ask for stream and combination
-    let selectedStream = null;
-    let selectedCombination = null;
+    if (students.length === 0) {
+        Swal.fire('No Students', `No ${currentLevel} students found in ${fromClass}`, 'info');
+        return;
+    }
     
-    if (fromClass === 'S.4') {
-        const selectionResult = await Swal.fire({
-            title: 'Promote S.4 Students to A-Level',
+    // For S.4 to S.5 (O-Level to A-Level transition)
+    if (currentLevel === 'olevel' && fromClass === 'S.4') {
+        const result = await showBulkAlevelPromotionModal(students.length);
+        if (!result) return;
+        
+        const { stream, combination } = result;
+        
+        const confirmResult = await Swal.fire({
+            title: `Promote ${students.length} Students to A-Level?`,
             html: `
                 <div class="text-start">
-                    <div class="alert alert-info mb-3">
-                        <i class="fas fa-info-circle"></i>
-                        Students promoted from ${fromClass} will be placed in the selected stream with the entered combination.
+                    <p><strong>From:</strong> ${fromClass} (O-Level)</p>
+                    <p><strong>To:</strong> S.5 (A-Level)</p>
+                    <p><strong>Stream:</strong> ${stream}</p>
+                    <p><strong>Combination:</strong> ${combination}</p>
+                    <p><strong>Students:</strong> ${students.length}</p>
+                    <p class="text-warning">⚠️ This action cannot be undone!</p>
+                </div>
+            `,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Promote All',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (!confirmResult.isConfirmed) return;
+        
+        Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        let promoted = 0;
+        let errors = 0;
+        const promotedList = [];
+        
+        for (const student of students) {
+            const { error } = await sb
+                .from('students')
+                .update({ 
+                    class: 'S.5',
+                    stream: stream,
+                    combination: combination,
+                    level: 'alevel',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', student.id);
+            
+            if (!error) {
+                promoted++;
+                promotedList.push({ name: student.name });
+            } else {
+                errors++;
+            }
+        }
+        
+        showPromotionResult(promoted, errors, promotedList, `S.5 (${stream} - ${combination})`);
+        await loadPromotionStudents();
+        await loadPromotionTable();
+        return;
+    }
+    
+    // For A-Level S.6 to Completed
+    if (currentLevel === 'alevel' && fromClass === 'S.6') {
+        const confirmResult = await Swal.fire({
+            title: `Mark ${students.length} Students as Completed?`,
+            html: `
+                <div class="text-start">
+                    <p><strong>From:</strong> ${fromClass}</p>
+                    <p><strong>Status:</strong> 🎓 Completed A-Level</p>
+                    <p><strong>Students:</strong> ${students.length}</p>
+                    <p class="text-warning">⚠️ This action cannot be undone!</p>
+                </div>
+            `,
+            icon: 'success',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Mark as Completed',
+            cancelButtonText: 'Cancel'
+        });
+        
+        if (!confirmResult.isConfirmed) return;
+        
+        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        let promoted = 0;
+        let errors = 0;
+        const promotedList = [];
+        
+        for (const student of students) {
+            const { error } = await sb
+                .from('students')
+                .update({ 
+                    class: 'Completed',
+                    status: 'Completed',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', student.id);
+            
+            if (!error) {
+                promoted++;
+                promotedList.push({ name: student.name });
+            } else {
+                errors++;
+            }
+        }
+        
+        showPromotionResult(promoted, errors, promotedList, '🎓 Completed');
+        await loadPromotionStudents();
+        await loadPromotionTable();
+        return;
+    }
+    
+    // Regular promotion
+    const nextClass = getNextClass(fromClass);
+    
+    const confirmResult = await Swal.fire({
+        title: `Promote ${students.length} Students?`,
+        html: `
+            <div class="text-start">
+                <p><strong>From Class:</strong> ${fromClass}</p>
+                <p><strong>To Class:</strong> ${nextClass}</p>
+                <p><strong>Students:</strong> ${students.length}</p>
+                <p class="text-warning">⚠️ This action cannot be undone!</p>
+            </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Promote All',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (!confirmResult.isConfirmed) return;
+    
+    Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    let promoted = 0;
+    let errors = 0;
+    const promotedList = [];
+    
+    for (const student of students) {
+        const { error } = await sb
+            .from('students')
+            .update({ 
+                class: nextClass,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', student.id);
+        
+        if (!error) {
+            promoted++;
+            promotedList.push({ name: student.name });
+        } else {
+            errors++;
+        }
+    }
+    
+    showPromotionResult(promoted, errors, promotedList, nextClass);
+    await loadPromotionStudents();
+    await loadPromotionTable();
+}
+
+// ============================================
+// SHOW BULK A-LEVEL PROMOTION MODAL
+// ============================================
+
+async function showBulkAlevelPromotionModal(studentCount) {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: 'Promote Students to A-Level',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>${studentCount}</strong> students will be promoted from S.4 to S.5 (A-Level).
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Select Stream *</label>
@@ -15589,12 +15745,12 @@ async function executeBulkPromotion(fromClass) {
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Combination (Type Manually) *</label>
+                        <label class="form-label fw-bold">Combination *</label>
                         <input type="text" id="bulkCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
-                        <small class="text-muted">All promoted students will get this combination</small>
+                        <small class="text-muted">All students will get this combination</small>
                     </div>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> 
+                    <div class="alert alert-warning">
+                        <i class="fas fa-graduation-cap"></i> 
                         <strong>Common Combinations:</strong><br>
                         Arts: HEG, HEM, PEM, ICT<br>
                         Sciences: PCM, PCB, BCM, PEM<br>
@@ -15604,318 +15760,209 @@ async function executeBulkPromotion(fromClass) {
             `,
             width: '500px',
             showCancelButton: true,
-            confirmButtonText: 'Continue Promotion',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: 'Promote All',
             preConfirm: () => {
-                const stream = document.getElementById('bulkStreamSelect')?.value;
-                const combination = document.getElementById('bulkCombinationInput')?.value.trim().toUpperCase();
-                
+                const stream = document.getElementById('bulkStreamSelect').value;
+                const combo = document.getElementById('bulkCombinationInput').value.trim().toUpperCase();
                 if (!stream) {
                     Swal.showValidationMessage('Please select a stream');
                     return false;
                 }
-                if (!combination) {
+                if (!combo) {
                     Swal.showValidationMessage('Please enter a combination');
                     return false;
                 }
-                return { stream, combination };
+                return { stream, combination: combo };
             }
-        });
-        
-        if (!selectionResult.value) return;
-        selectedStream = selectionResult.value.stream;
-        selectedCombination = selectionResult.value.combination;
-        
-        console.log('Selected stream:', selectedStream);
-        console.log('Selected combination:', selectedCombination);
-    }
-    
-    Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        const students = promotionStudentsList.filter(s => s.class === fromClass);
-        const year = new Date().getFullYear().toString();
-        
-        console.log(`Found ${students.length} students in class ${fromClass}`);
-        
-        let promoted = 0;
-        let notEligible = [];
-        let promotedList = [];
-        
-        for (const student of students) {
-            const results = await calculateTerm3Results(student.id, year);
-            const recommendation = getRecommendation(student.class, results, year);
-            
-            console.log(`Student: ${student.name}, Average: ${results.average.toFixed(1)}%, Action: ${recommendation.action}`);
-            
-            if (recommendation.canPromote && recommendation.action === 'PROMOTE') {
-                let finalClass = recommendation.nextClass;
-                const updateData = { 
-                    class: finalClass,
-                    updated_at: new Date().toISOString()
-                };
-                
-                // For S.4 to S.5 promotion
-                if (fromClass === 'S.4' && finalClass === 'S.5') {
-                    updateData.class = 'S.5';
-                    updateData.stream = selectedStream;
-                    updateData.combination = selectedCombination;
-                    finalClass = `S.5 (${selectedStream})`;
-                }
-                
-                const { error } = await sb
-                    .from('students')
-                    .update(updateData)
-                    .eq('id', student.id);
-                
-                if (!error) {
-                    promoted++;
-                    promotedList.push({ 
-                        name: student.name, 
-                        nextClass: finalClass,
-                        stream: updateData.stream,
-                        combination: updateData.combination 
-                    });
-                    console.log(`✅ Promoted: ${student.name}`);
-                } else {
-                    console.log(`❌ Error promoting ${student.name}:`, error);
-                }
+        }).then((result) => {
+            if (result.isConfirmed && result.value) {
+                resolve(result.value);
             } else {
-                notEligible.push({ name: student.name, reason: recommendation.reason });
-                console.log(`❌ Not eligible: ${student.name} - ${recommendation.reason}`);
+                resolve(null);
             }
-        }
-        
-        let message = `<div class="text-start">
-            <p><strong>Class:</strong> ${fromClass}</p>
-            ${selectedStream ? `<p><strong>A-Level Stream:</strong> ${selectedStream}</p>` : ''}
-            ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
-            <p><strong>Promoted:</strong> ${promoted} out of ${students.length} students</p>`;
-        
-        if (promotedList.length > 0) {
-            message += `<hr><strong>✅ Promoted Students:</strong><ul>`;
-            promotedList.slice(0, 10).forEach(s => {
-                message += `<li>${escapeHtml(s.name)} → ${s.nextClass} ${s.stream ? '(' + s.stream + ')' : ''} ${s.combination ? '[' + s.combination + ']' : ''}</li>`;
-            });
-            if (promotedList.length > 10) message += `<li>... and ${promotedList.length - 10} more</li>`;
-            message += `</ul>`;
-        }
-        
-        if (notEligible.length > 0) {
-            message += `<hr class="text-danger"><strong class="text-danger">❌ Not Eligible (${notEligible.length}):</strong><ul>`;
-            notEligible.slice(0, 5).forEach(s => {
-                message += `<li>${escapeHtml(s.name)} - ${s.reason}</li>`;
-            });
-            if (notEligible.length > 5) message += `<li>... and ${notEligible.length - 5} more</li>`;
-            message += `</ul>`;
-        }
-        
-        message += `</div>`;
-        
-        Swal.fire({
-            title: 'Promotion Complete',
-            html: message,
-            icon: 'success',
-            width: '600px'
         });
-        
-        await loadPromotionTable();
-        
-    } catch (error) {
-        console.error('Bulk promotion error:', error);
-        Swal.fire('Error', error.message, 'error');
-    }
-}
-// ============================================
-// BULK DEMOTE MODAL
-// ============================================
-
-window.showDemotionModal = function() {
-    const uniqueClasses = [...new Set(promotionStudentsList.map(s => s.class))];
-    
-    let classOptions = '<option value="">-- Select Class --</option>';
-    for (const c of uniqueClasses) {
-        classOptions += `<option value="${c}">${c}</option>`;
-    }
-    
-    Swal.fire({
-        title: '<i class="fas fa-arrow-down"></i> Bulk Demote Students',
-        html: `
-            <div class="text-start">
-                <div class="alert alert-warning mb-3">
-                    <i class="fas fa-exclamation-triangle"></i> 
-                    This will demote students who performed very poorly.
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">From Class *</label>
-                    <select id="demoteFrom" class="form-select">
-                        ${classOptions}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Demote To Class</label>
-                    <select id="demoteToTarget" class="form-select">
-                        <option value="">-- Select Target Class --</option>
-                        ${currentLevel === 'olevel' ? 
-                            '<option value="S.1">S.1</option><option value="S.2">S.2</option><option value="S.3">S.3</option>' : 
-                            '<option value="S.5">S.5</option>'}
-                    </select>
-                </div>
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-circle"></i> 
-                    <strong>Warning:</strong> This action cannot be undone easily. Only demote students who truly need to repeat.
-                </div>
-            </div>
-        `,
-        width: '500px',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-arrow-down"></i> Demote Students',
-        cancelButtonText: 'Cancel',
-        preConfirm: () => {
-            const fromClass = document.getElementById('demoteFrom').value;
-            const toClass = document.getElementById('demoteToTarget').value;
-            if (!fromClass) {
-                Swal.showValidationMessage('Please select a class!');
-                return false;
-            }
-            return { fromClass, toClass };
-        }
-    }).then(async (result) => {
-        if (result.value) {
-            await executeBulkDemotion(result.value.fromClass, result.value.toClass);
-        }
     });
-};
-
-// ============================================
-// EXECUTE BULK DEMOTION
-// ============================================
-
-async function executeBulkDemotion(fromClass, toClass) {
-    Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        const students = promotionStudentsList.filter(s => s.class === fromClass);
-        const year = new Date().getFullYear().toString();
-        
-        let demoted = 0;
-        let demotedList = [];
-        
-        for (const student of students) {
-            const results = await calculateTerm3Results(student.id, year);
-            
-            let shouldDemote = false;
-            if (currentLevel === 'olevel') {
-                shouldDemote = results.hasMarks && results.average < 40;
-            } else {
-                shouldDemote = results.hasMarks && results.totalPoints < 9;
-            }
-            
-            if (shouldDemote) {
-                const targetClass = toClass || (currentLevel === 'olevel' ? 'S.1' : 'S.5');
-                const { error } = await sb
-                    .from('students')
-                    .update({ class: targetClass })
-                    .eq('id', student.id);
-                
-                if (!error) {
-                    demoted++;
-                    demotedList.push({ name: student.name, toClass: targetClass });
-                }
-            }
-        }
-        
-        let message = `<div class="text-start">
-            <p><strong>Class:</strong> ${fromClass}</p>
-            <p><strong>Demoted:</strong> ${demoted} out of ${students.length} students</p>`;
-        
-        if (demotedList.length > 0) {
-            message += `<hr><strong>Demoted Students:</strong><ul>`;
-            demotedList.slice(0, 10).forEach(s => {
-                message += `<li>${escapeHtml(s.name)} → ${s.toClass}</li>`;
-            });
-            if (demotedList.length > 10) message += `<li>... and ${demotedList.length - 10} more</li>`;
-            message += `</ul>`;
-        }
-        
-        message += `</div>`;
-        
-        Swal.fire({
-            title: 'Demotion Complete',
-            html: message,
-            icon: demoted > 0 ? 'warning' : 'info'
-        });
-        
-        await loadPromotionTable();
-        
-    } catch (error) {
-        Swal.fire('Error', error.message, 'error');
-    }
 }
 
 // ============================================
-// VIEW STUDENT DETAILS
+// SHOW PROMOTION RESULT
 // ============================================
 
-window.viewStudentDetails = async function(studentId) {
-    const student = promotionStudentsList.find(s => s.id === studentId);
-    if (!student) return;
+function showPromotionResult(promoted, errors, promotedList, toClass) {
+    let message = `<div class="text-start">
+        <p><strong>✅ Promoted:</strong> ${promoted} students</p>
+        ${errors > 0 ? `<p><strong>❌ Failed:</strong> ${errors} students</p>` : ''}
+        <hr>
+        <strong>Promoted Students:</strong>
+        <ul>`;
     
-    const year = new Date().getFullYear().toString();
-    const results = await calculateTerm3Results(studentId, year);
+    promotedList.slice(0, 15).forEach(s => {
+        message += `<li>${escapeHtml(s.name)} → ${toClass}</li>`;
+    });
     
-    let marksHtml = '';
-    if (results.hasMarks) {
-        marksHtml = `
-            <p><strong>Subjects Attempted:</strong> ${results.subjectCount}</p>
-            <p><strong>${currentLevel === 'olevel' ? 'Average Score:' : 'Total Points:'}</strong> 
-                ${currentLevel === 'olevel' ? results.average.toFixed(1) + '%' : results.totalPoints + ' points'}</p>
-            <p><strong>Overall Grade:</strong> ${results.grade}</p>
-            <p><strong>Performance:</strong> ${results.performance}</p>
-        `;
-    } else {
-        marksHtml = '<p class="text-danger">No Term 3 marks found for this student.</p>';
+    if (promotedList.length > 15) {
+        message += `<li>... and ${promotedList.length - 15} more</li>`;
     }
     
+    message += `</ul></div>`;
+    
     Swal.fire({
-        title: `<i class="fas fa-user-graduate"></i> ${escapeHtml(student.name)}`,
-        html: `
-            <div class="text-start">
-                <p><strong>Admission No:</strong> ${student.admission_no || '-'}</p>
-                <p><strong>Class:</strong> ${student.class}</p>
-                <p><strong>Stream:</strong> ${student.stream || '-'}</p>
-                <p><strong>Student Type:</strong> ${student.student_type || 'Day'}</p>
-                <hr>
-                <h6>Term 3 Results</h6>
-                ${marksHtml}
-            </div>
-        `,
-        width: '500px',
-        confirmButtonText: 'Close'
+        title: 'Promotion Complete!',
+        html: message,
+        icon: errors > 0 ? 'warning' : 'success'
     });
-};
+}
 
 // ============================================
 // REFRESH PROMOTION TABLE
 // ============================================
 
 window.refreshPromotionTable = async function() {
-    Swal.fire({ title: 'Refreshing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ 
+        title: `Refreshing ${currentLevel} students...`, 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    await loadPromotionStudents();
     await loadPromotionTable();
-    Swal.fire('Refreshed!', 'Promotion table updated.', 'success');
+    Swal.close();
+    Swal.fire('Refreshed!', `Promotion table updated for ${currentLevel}.`, 'success');
 };
 
 // ============================================
-// HELPER FUNCTION
+// PRINT PROMOTION LIST
 // ============================================
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+window.printPromotionList = async function() {
+    await loadPromotionStudents();
+    
+    if (promotionStudentsList.length === 0) {
+        Swal.fire('No Students', `No ${currentLevel} students found to print.`, 'info');
+        return;
+    }
+    
+    const printWindow = window.open('', '_blank');
+    const currentDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    const levelName = currentLevel === 'olevel' ? 'O-Level' : 'A-Level';
+    
+    let tableRows = '';
+    for (const student of promotionStudentsList) {
+        const nextClass = getNextClass(student.class);
+        tableRows += `
+            <tr>
+                <td>${escapeHtml(student.name)}</td>
+                <td>${student.admission_no || '-'}</td>
+                <td>${student.class}</td>
+                <td>${student.stream || '-'}</td>
+                <td><strong>${nextClass}</strong></td>
+            </tr>
+        `;
+    }
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Promotion List - ${levelName}</title>
+            <style>
+                @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
+                body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; font-size: 12px; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #01605a; padding-bottom: 15px; }
+                .school-name { font-size: 22px; font-weight: bold; color: #01605a; }
+                .report-title { font-size: 18px; font-weight: bold; margin: 10px 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th, td { border: 1px solid #ddd; padding: 8px; }
+                th { background: #01605a; color: white; }
+                .footer { margin-top: 30px; text-align: center; font-size: 10px; }
+                .signature { margin-top: 40px; display: flex; justify-content: space-between; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="school-name">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
+                <div class="report-title">📋 STUDENT PROMOTION LIST - ${levelName}</div>
+                <div>Generated: ${currentDate} | Total: ${promotionStudentsList.length} students</div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Admission No</th>
+                        <th>Current Class</th>
+                        <th>Stream</th>
+                        <th>Next Class</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+            <div class="signature">
+                <div>_________________<br>Class Teacher</div>
+                <div>_________________<br>Head Teacher</div>
+            </div>
+            <div class="footer">System-generated promotion list</div>
+            <div class="no-print" style="text-align:center;margin-top:20px;">
+                <button onclick="window.print()" style="padding:10px 20px;background:#01605a;color:white;border:none;border-radius:5px;">🖨️ Print</button>
+                <button onclick="window.close()" style="padding:10px 20px;background:#dc3545;color:white;border:none;border-radius:5px;margin-left:10px;">❌ Close</button>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+};
 
+// ============================================
+// AUTO-LOAD
+// ============================================
+
+(function() {
+    const originalLoadPage = window.loadPage;
+    
+    window.loadPage = async function(page) {
+        if (originalLoadPage) {
+            await originalLoadPage(page);
+        }
+        
+        if (page === 'promotion') {
+            setTimeout(async () => {
+                await loadPromotionTable();
+            }, 200);
+        }
+    };
+})();
+
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(async () => {
+        if (currentPage === 'promotion') {
+            await loadPromotionTable();
+        }
+    }, 500);
+});
+
+// Level switch handler
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.level-badge-item').forEach(el => {
+        el.addEventListener('click', function() {
+            const newLevel = this.dataset.level;
+            if (newLevel && newLevel !== currentLevel) {
+                setTimeout(async () => {
+                    if (currentPage === 'promotion') {
+                        await loadPromotionStudents();
+                        await loadPromotionTable();
+                    }
+                }, 400);
+            }
+        });
+    });
+});
+
+// ============================================
+// INITIALIZATION
+// ============================================
+
+console.log('✅ Promotion Module Loaded - No Stats Cards');
+console.log('✅ O-Level: S.1→S.2→S.3→S.4→S.5 (A-Level)');
+console.log('✅ A-Level: S.5→S.6→Completed');
+console.log('✅ Clean and simple - Just the table');
 // ==================== USER MANAGEMENT ====================
 // ============================================
 // USER MANAGEMENT MODULE - ADD BUTTON REMOVED
@@ -19295,14 +19342,48 @@ setTimeout(() => {
 console.log('✅ Cell-Level Save Fee Structure Ready - Fixed for your database!');
 
 // ============================================
-// ACADEMIC CALENDAR - COMPLETE FUNCTIONS
+// ACADEMIC CALENDAR - COMPLETE MODULE
 // ============================================
 
-// Global variables for academic data
+// ============================================
+// GLOBAL VARIABLES
+// ============================================
+
 let academicTerms = [];
 let academicHolidays = [];
 let academicExams = [];
 let academicEvents = [];
+let isLoading = false;
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    } catch (error) {
+        return dateString;
+    }
+}
+
+function getCurrentDate() {
+    const date = new Date();
+    return date.toISOString().split('T')[0];
+}
 
 // ============================================
 // UPDATE CURRENT STATUS (Dynamic)
@@ -19318,7 +19399,7 @@ async function updateAcademicStatus() {
             .from('academic_terms')
             .select('*')
             .order('year', { ascending: false })
-            .order('term_number', { ascending: true });
+            .order('term_name', { ascending: true });
         
         if (error) throw error;
         
@@ -19370,7 +19451,7 @@ async function updateAcademicStatus() {
         document.getElementById('weeksRemaining').innerText = weeksRemaining;
         
     } catch (error) {
-        console.error("Error updating academic status:", error);
+        console.error("❌ Error updating academic status:", error);
     }
 }
 
@@ -19379,17 +19460,25 @@ async function updateAcademicStatus() {
 // ============================================
 
 async function loadAcademicData() {
+    if (isLoading) return;
+    
     try {
+        isLoading = true;
+        console.log("🔄 Loading academic data...");
+        
         // Load Terms
         const { data: termsData, error: termsError } = await sb
             .from('academic_terms')
             .select('*')
             .order('year', { ascending: false })
-            .order('term_number', { ascending: true });
+            .order('term_name', { ascending: true });
         
-        if (!termsError && termsData) {
+        if (termsError) {
+            console.error("❌ Terms error:", termsError);
+        } else if (termsData) {
             academicTerms = termsData;
             renderTermsTable();
+            console.log(`✅ Loaded ${academicTerms.length} terms`);
         }
         
         // Load Holidays
@@ -19398,9 +19487,12 @@ async function loadAcademicData() {
             .select('*')
             .order('start_date', { ascending: true });
         
-        if (!holidaysError && holidaysData) {
+        if (holidaysError) {
+            console.error("❌ Holidays error:", holidaysError);
+        } else if (holidaysData) {
             academicHolidays = holidaysData;
             renderHolidaysTable();
+            console.log(`✅ Loaded ${academicHolidays.length} holidays`);
         }
         
         // Load Exams
@@ -19409,9 +19501,12 @@ async function loadAcademicData() {
             .select('*')
             .order('start_date', { ascending: true });
         
-        if (!examsError && examsData) {
+        if (examsError) {
+            console.error("❌ Exams error:", examsError);
+        } else if (examsData) {
             academicExams = examsData;
             renderExamsTable();
+            console.log(`✅ Loaded ${academicExams.length} exams`);
         }
         
         // Load Events
@@ -19420,16 +19515,21 @@ async function loadAcademicData() {
             .select('*')
             .order('event_date', { ascending: true });
         
-        if (!eventsError && eventsData) {
+        if (eventsError) {
+            console.error("❌ Events error:", eventsError);
+        } else if (eventsData) {
             academicEvents = eventsData;
             renderEventsTable();
+            console.log(`✅ Loaded ${academicEvents.length} events`);
         }
         
         // Update status display
         await updateAcademicStatus();
         
     } catch (error) {
-        console.error('Error loading academic data:', error);
+        console.error('❌ Error loading academic data:', error);
+    } finally {
+        isLoading = false;
     }
 }
 
@@ -19439,35 +19539,53 @@ async function loadAcademicData() {
 
 function renderTermsTable() {
     const tbody = document.getElementById('termsTableBody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.warn("⚠️ termsTableBody not found");
+        return;
+    }
     
     if (academicTerms.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No terms configured. Click "Add Term" to get started.</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center py-3 text-muted">
+                    <i class="fas fa-calendar-plus"></i> No terms configured. Click "Add Term" to get started.
+                </td>
+            </tr>
+        `;
         return;
     }
     
     let html = '';
+    const today = new Date();
+    
     for (const term of academicTerms) {
-        const today = new Date();
         const startDate = new Date(term.start_date);
         const endDate = new Date(term.end_date);
         let status = '';
         
-        if (today >= startDate && today <= endDate) status = '<span class="badge bg-success">Active</span>';
-        else if (today < startDate) status = '<span class="badge bg-warning">Upcoming</span>';
-        else status = '<span class="badge bg-secondary">Completed</span>';
+        if (today >= startDate && today <= endDate) {
+            status = '<span class="badge bg-success">✅ Active</span>';
+        } else if (today < startDate) {
+            status = '<span class="badge bg-warning">⏳ Upcoming</span>';
+        } else {
+            status = '<span class="badge bg-secondary">📅 Completed</span>';
+        }
         
         html += `
             <tr>
-                <td class="text-center">${term.year}</span></td>
-                <td class="text-center"><strong>${escapeHtml(term.term_name)}</strong></span></td>
-                <td class="text-center">${formatDate(term.start_date)}</span></td>
-                <td class="text-center">${formatDate(term.end_date)}</span></td>
-                <td class="text-center">${status}</span></td>
+                <td class="text-center"><strong>${term.year || '-'}</strong></td>
+                <td class="text-center"><strong>${escapeHtml(term.term_name)}</strong></td>
+                <td class="text-center">${formatDate(term.start_date)}</td>
+                <td class="text-center">${formatDate(term.end_date)}</td>
+                <td class="text-center">${status}</td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editTerm('${term.id}')"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteTerm('${term.id}')"><i class="fas fa-trash"></i></button>
-                </span></td>
+                    <button class="btn btn-sm btn-primary me-1" onclick="editTerm('${term.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteTerm('${term.id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
             </tr>
         `;
     }
@@ -19483,7 +19601,13 @@ function renderHolidaysTable() {
     if (!tbody) return;
     
     if (academicHolidays.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No holidays configured. Click "Add Holiday" to get started.</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-3 text-muted">
+                    <i class="fas fa-umbrella-beach"></i> No holidays configured. Click "Add Holiday" to get started.
+                </td>
+            </tr>
+        `;
         return;
     }
     
@@ -19495,14 +19619,18 @@ function renderHolidaysTable() {
         
         html += `
             <tr>
-                <td><strong>${escapeHtml(holiday.name)}</strong></span></td>
-                <td class="text-center">${formatDate(holiday.start_date)}</span></td>
-                <td class="text-center">${formatDate(holiday.end_date)}</span></td>
-                <td class="text-center">${days}</span></td>
+                <td><strong>${escapeHtml(holiday.name)}</strong></td>
+                <td class="text-center">${formatDate(holiday.start_date)}</td>
+                <td class="text-center">${formatDate(holiday.end_date)}</td>
+                <td class="text-center"><span class="badge bg-info">${days} days</span></td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editHoliday('${holiday.id}')"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteHoliday('${holiday.id}')"><i class="fas fa-trash"></i></button>
-                </span></td>
+                    <button class="btn btn-sm btn-primary me-1" onclick="editHoliday('${holiday.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteHoliday('${holiday.id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
             </tr>
         `;
     }
@@ -19518,7 +19646,13 @@ function renderExamsTable() {
     if (!tbody) return;
     
     if (academicExams.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No exams scheduled. Click "Add Exam" to get started.</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center py-3 text-muted">
+                    <i class="fas fa-file-alt"></i> No exams scheduled. Click "Add Exam" to get started.
+                </td>
+            </tr>
+        `;
         return;
     }
     
@@ -19526,15 +19660,19 @@ function renderExamsTable() {
     for (const exam of academicExams) {
         html += `
             <tr>
-                <td><strong>${escapeHtml(exam.name)}</strong></span></td>
-                <td class="text-center">${exam.term || '-'}</span></td>
-                <td class="text-center">${exam.year || '-'}</span></td>
-                <td class="text-center">${formatDate(exam.start_date)}</span></td>
-                <td class="text-center">${formatDate(exam.end_date)}</span></td>
+                <td><strong>${escapeHtml(exam.name)}</strong></td>
+                <td class="text-center"><span class="badge bg-primary">${exam.term || '-'}</span></td>
+                <td class="text-center">${exam.year || '-'}</td>
+                <td class="text-center">${formatDate(exam.start_date)}</td>
+                <td class="text-center">${formatDate(exam.end_date)}</td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editExam('${exam.id}')"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteExam('${exam.id}')"><i class="fas fa-trash"></i></button>
-                </span></td>
+                    <button class="btn btn-sm btn-primary me-1" onclick="editExam('${exam.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteExam('${exam.id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
             </tr>
         `;
     }
@@ -19550,7 +19688,13 @@ function renderEventsTable() {
     if (!tbody) return;
     
     if (academicEvents.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No events scheduled. Click "Add Event" to get started.</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-center py-3 text-muted">
+                    <i class="fas fa-calendar-day"></i> No events scheduled. Click "Add Event" to get started.
+                </td>
+            </tr>
+        `;
         return;
     }
     
@@ -19558,13 +19702,17 @@ function renderEventsTable() {
     for (const event of academicEvents) {
         html += `
             <tr>
-                <td><strong>${escapeHtml(event.name)}</strong></span></td>
-                <td class="text-center">${formatDate(event.event_date)}</span></td>
-                <td>${escapeHtml(event.description || '-')}</span></td>
+                <td><strong>${escapeHtml(event.name)}</strong></td>
+                <td class="text-center"><span class="badge bg-info">${formatDate(event.event_date)}</span></td>
+                <td>${escapeHtml(event.description || '-')}</td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-primary me-1" onclick="editEvent('${event.id}')"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteEvent('${event.id}')"><i class="fas fa-trash"></i></button>
-                </span></td>
+                    <button class="btn btn-sm btn-primary me-1" onclick="editEvent('${event.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteEvent('${event.id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
             </tr>
         `;
     }
@@ -19572,82 +19720,188 @@ function renderEventsTable() {
 }
 
 // ============================================
-// FORMAT DATE HELPER
-// ============================================
-
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB');
-}
-
-// ============================================
 // TERM CRUD OPERATIONS
 // ============================================
 
 window.addNewTerm = async function() {
+    console.log("📝 Opening Add Term modal...");
+    
     const { value: result } = await Swal.fire({
-        title: 'Add New Term',
+        title: '<i class="fas fa-calendar-plus"></i> Add New Term',
         html: `
             <div class="text-start">
-                <label class="form-label">Year</label>
-                <input type="number" id="termYear" class="form-control mb-3" value="${new Date().getFullYear()}">
-                <label class="form-label">Term Name</label>
-                <input type="text" id="termName" class="form-control mb-3" placeholder="e.g., Term 1">
-                <label class="form-label">Start Date</label>
-                <input type="date" id="termStart" class="form-control mb-3">
-                <label class="form-label">End Date</label>
-                <input type="date" id="termEnd" class="form-control mb-3">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Year *</label>
+                    <input type="number" id="termYear" class="form-control" value="${new Date().getFullYear()}" min="2000" max="2100">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Term Name *</label>
+                    <input type="text" id="termName" class="form-control" placeholder="e.g., Term 1, Term 2, Term 3">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Start Date *</label>
+                    <input type="date" id="termStart" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 End Date *</label>
+                    <input type="date" id="termEnd" class="form-control">
+                </div>
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Note:</strong> The term will be automatically marked as Active, Upcoming, or Completed based on the current date.
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Add Term',
-        preConfirm: () => {
-            const year = document.getElementById('termYear').value;
-            const name = document.getElementById('termName').value;
-            const start = document.getElementById('termStart').value;
-            const end = document.getElementById('termEnd').value;
+        confirmButtonText: '<i class="fas fa-save"></i> Add Term',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+        didOpen: () => {
+            // Set default dates
+            const today = new Date();
+            const year = today.getFullYear();
             
-            if (!year || !name || !start || !end) {
-                Swal.showValidationMessage('Please fill all fields');
+            // Default start date: January 15
+            const startDate = new Date(year, 0, 15);
+            document.getElementById('termStart').value = startDate.toISOString().split('T')[0];
+            
+            // Default end date: April 15
+            const endDate = new Date(year, 3, 15);
+            document.getElementById('termEnd').value = endDate.toISOString().split('T')[0];
+            
+            // Focus on term name
+            document.getElementById('termName').focus();
+        },
+        preConfirm: () => {
+            console.log("🔍 Validating form...");
+            
+            const year = document.getElementById('termYear')?.value;
+            const name = document.getElementById('termName')?.value?.trim();
+            const start = document.getElementById('termStart')?.value;
+            const end = document.getElementById('termEnd')?.value;
+            
+            if (!year) {
+                Swal.showValidationMessage('⚠️ Please enter a year');
                 return false;
             }
-            return { year: parseInt(year), term_name: name, start_date: start, end_date: end };
+            if (!name) {
+                Swal.showValidationMessage('⚠️ Please enter a term name');
+                return false;
+            }
+            if (!start) {
+                Swal.showValidationMessage('⚠️ Please select a start date');
+                return false;
+            }
+            if (!end) {
+                Swal.showValidationMessage('⚠️ Please select an end date');
+                return false;
+            }
+            
+            const startDate = new Date(start);
+            const endDate = new Date(end);
+            
+            if (endDate < startDate) {
+                Swal.showValidationMessage('⚠️ End date must be after start date');
+                return false;
+            }
+            
+            return { 
+                year: parseInt(year), 
+                term_name: name, 
+                start_date: start, 
+                end_date: end 
+            };
         }
     });
     
-    if (result) {
-        Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const { error } = await sb.from('academic_terms').insert([result]);
+    if (!result) {
+        console.log("❌ User cancelled");
+        return;
+    }
+    
+    try {
+        console.log("💾 Saving term:", result);
+        
+        Swal.fire({ 
+            title: 'Adding...', 
+            allowOutsideClick: false, 
+            didOpen: () => Swal.showLoading() 
+        });
+        
+        const { data, error } = await sb
+            .from('academic_terms')
+            .insert([{
+                term_name: result.term_name,
+                year: result.year.toString(),
+                start_date: result.start_date,
+                end_date: result.end_date,
+                created_at: new Date().toISOString()
+            }])
+            .select();
+        
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Term added successfully', 'success');
-            await loadAcademicData();
+        
+        if (error) {
+            console.error("❌ Insert error:", error);
+            Swal.fire('Error', error.message, 'error');
+            return;
         }
+        
+        console.log("✅ Term added successfully:", data);
+        
+        Swal.fire({
+            title: '✅ Success!',
+            text: `Term "${result.term_name}" added successfully!`,
+            icon: 'success',
+            timer: 2000,
+            showConfirmButton: false
+        });
+        
+        await loadAcademicData();
+        
+    } catch (error) {
+        console.error("❌ Exception:", error);
+        Swal.fire('Error', error.message, 'error');
     }
 };
 
+// ============================================
+// EDIT TERM
+// ============================================
+
 window.editTerm = async function(id) {
     const term = academicTerms.find(t => t.id === id);
-    if (!term) return;
+    if (!term) {
+        Swal.fire('Error', 'Term not found', 'error');
+        return;
+    }
     
     const { value: result } = await Swal.fire({
-        title: 'Edit Term',
+        title: '<i class="fas fa-edit"></i> Edit Term',
         html: `
             <div class="text-start">
-                <label class="form-label">Year</label>
-                <input type="number" id="termYear" class="form-control mb-3" value="${term.year}">
-                <label class="form-label">Term Name</label>
-                <input type="text" id="termName" class="form-control mb-3" value="${escapeHtml(term.term_name)}">
-                <label class="form-label">Start Date</label>
-                <input type="date" id="termStart" class="form-control mb-3" value="${term.start_date}">
-                <label class="form-label">End Date</label>
-                <input type="date" id="termEnd" class="form-control mb-3" value="${term.end_date}">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Year</label>
+                    <input type="number" id="termYear" class="form-control" value="${term.year}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Term Name</label>
+                    <input type="text" id="termName" class="form-control" value="${escapeHtml(term.term_name)}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Start Date</label>
+                    <input type="date" id="termStart" class="form-control" value="${term.start_date}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 End Date</label>
+                    <input type="date" id="termEnd" class="form-control" value="${term.end_date}">
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Save Changes',
+        confirmButtonText: '<i class="fas fa-save"></i> Save Changes',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => ({
             year: parseInt(document.getElementById('termYear').value),
             term_name: document.getElementById('termName').value,
@@ -19658,33 +19912,65 @@ window.editTerm = async function(id) {
     
     if (result) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const { error } = await sb.from('academic_terms').update(result).eq('id', id);
+        
+        const { error } = await sb
+            .from('academic_terms')
+            .update({
+                ...result,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+        
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Term updated', 'success');
+        
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Term updated successfully', 'success');
             await loadAcademicData();
         }
     }
 };
 
+// ============================================
+// DELETE TERM
+// ============================================
+
 window.deleteTerm = async function(id) {
+    const term = academicTerms.find(t => t.id === id);
+    if (!term) {
+        Swal.fire('Error', 'Term not found', 'error');
+        return;
+    }
+    
     const result = await Swal.fire({
         title: 'Delete Term?',
-        text: 'This action cannot be undone!',
+        html: `
+            <p>Are you sure you want to delete:</p>
+            <p><strong>${escapeHtml(term.term_name)} (${term.year})</strong></p>
+            <p class="text-danger mt-2">⚠️ This action cannot be undone!</p>
+        `,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Delete'
+        confirmButtonText: 'Yes, Delete',
+        cancelButtonText: 'Cancel'
     });
     
     if (result.isConfirmed) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const { error } = await sb.from('academic_terms').delete().eq('id', id);
+        
+        const { error } = await sb
+            .from('academic_terms')
+            .delete()
+            .eq('id', id);
+        
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Deleted!', 'Term removed', 'success');
+        
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Deleted!', 'Term removed successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19696,27 +19982,45 @@ window.deleteTerm = async function(id) {
 
 window.addNewHoliday = async function() {
     const { value: result } = await Swal.fire({
-        title: 'Add Holiday',
+        title: '<i class="fas fa-umbrella-beach"></i> Add Holiday',
         html: `
             <div class="text-start">
-                <label class="form-label">Holiday Name</label>
-                <input type="text" id="holidayName" class="form-control mb-3" placeholder="e.g., Easter Break">
-                <label class="form-label">Start Date</label>
-                <input type="date" id="holidayStart" class="form-control mb-3">
-                <label class="form-label">End Date</label>
-                <input type="date" id="holidayEnd" class="form-control mb-3">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Holiday Name *</label>
+                    <input type="text" id="holidayName" class="form-control" placeholder="e.g., Easter Break">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Start Date *</label>
+                    <input type="date" id="holidayStart" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 End Date *</label>
+                    <input type="date" id="holidayEnd" class="form-control">
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Add Holiday',
+        confirmButtonText: '<i class="fas fa-save"></i> Add Holiday',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => {
-            const name = document.getElementById('holidayName').value;
+            const name = document.getElementById('holidayName').value.trim();
             const start = document.getElementById('holidayStart').value;
             const end = document.getElementById('holidayEnd').value;
-            if (!name || !start || !end) {
-                Swal.showValidationMessage('Please fill all fields');
+            
+            if (!name) {
+                Swal.showValidationMessage('Please enter a holiday name');
                 return false;
             }
+            if (!start) {
+                Swal.showValidationMessage('Please select a start date');
+                return false;
+            }
+            if (!end) {
+                Swal.showValidationMessage('Please select an end date');
+                return false;
+            }
+            
             return { name, start_date: start, end_date: end };
         }
     });
@@ -19725,9 +20029,10 @@ window.addNewHoliday = async function() {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_holidays').insert([result]);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Holiday added', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Holiday added successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19738,19 +20043,27 @@ window.editHoliday = async function(id) {
     if (!holiday) return;
     
     const { value: result } = await Swal.fire({
-        title: 'Edit Holiday',
+        title: '<i class="fas fa-edit"></i> Edit Holiday',
         html: `
             <div class="text-start">
-                <label class="form-label">Holiday Name</label>
-                <input type="text" id="holidayName" class="form-control mb-3" value="${escapeHtml(holiday.name)}">
-                <label class="form-label">Start Date</label>
-                <input type="date" id="holidayStart" class="form-control mb-3" value="${holiday.start_date}">
-                <label class="form-label">End Date</label>
-                <input type="date" id="holidayEnd" class="form-control mb-3" value="${holiday.end_date}">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Holiday Name</label>
+                    <input type="text" id="holidayName" class="form-control" value="${escapeHtml(holiday.name)}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Start Date</label>
+                    <input type="date" id="holidayStart" class="form-control" value="${holiday.start_date}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 End Date</label>
+                    <input type="date" id="holidayEnd" class="form-control" value="${holiday.end_date}">
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Save Changes',
+        confirmButtonText: '<i class="fas fa-save"></i> Save Changes',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => ({
             name: document.getElementById('holidayName').value,
             start_date: document.getElementById('holidayStart').value,
@@ -19762,9 +20075,10 @@ window.editHoliday = async function(id) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_holidays').update(result).eq('id', id);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Holiday updated', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Holiday updated successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19773,6 +20087,7 @@ window.editHoliday = async function(id) {
 window.deleteHoliday = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Holiday?',
+        text: 'This action cannot be undone!',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
@@ -19783,9 +20098,10 @@ window.deleteHoliday = async function(id) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_holidays').delete().eq('id', id);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Deleted!', 'Holiday removed', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Deleted!', 'Holiday removed successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19797,27 +20113,39 @@ window.deleteHoliday = async function(id) {
 
 window.addNewExam = async function() {
     const { value: result } = await Swal.fire({
-        title: 'Add Exam',
+        title: '<i class="fas fa-file-alt"></i> Add Exam',
         html: `
             <div class="text-start">
-                <label class="form-label">Exam Name</label>
-                <input type="text" id="examName" class="form-control mb-3" placeholder="e.g., End of Term Exams">
-                <label class="form-label">Term</label>
-                <select id="examTerm" class="form-select mb-3">
-                    <option value="Term 1">Term 1</option>
-                    <option value="Term 2">Term 2</option>
-                    <option value="Term 3">Term 3</option>
-                </select>
-                <label class="form-label">Year</label>
-                <input type="number" id="examYear" class="form-control mb-3" value="${new Date().getFullYear()}">
-                <label class="form-label">Start Date</label>
-                <input type="date" id="examStart" class="form-control mb-3">
-                <label class="form-label">End Date</label>
-                <input type="date" id="examEnd" class="form-control mb-3">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Exam Name *</label>
+                    <input type="text" id="examName" class="form-control" placeholder="e.g., End of Term Exams">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Term *</label>
+                    <select id="examTerm" class="form-select">
+                        <option value="Term 1">Term 1</option>
+                        <option value="Term 2">Term 2</option>
+                        <option value="Term 3">Term 3</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Year *</label>
+                    <input type="number" id="examYear" class="form-control" value="${new Date().getFullYear()}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Start Date *</label>
+                    <input type="date" id="examStart" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 End Date *</label>
+                    <input type="date" id="examEnd" class="form-control">
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Add Exam',
+        confirmButtonText: '<i class="fas fa-save"></i> Add Exam',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => ({
             name: document.getElementById('examName').value,
             term: document.getElementById('examTerm').value,
@@ -19831,9 +20159,10 @@ window.addNewExam = async function() {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_exams').insert([result]);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Exam added', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Exam added successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19844,27 +20173,39 @@ window.editExam = async function(id) {
     if (!exam) return;
     
     const { value: result } = await Swal.fire({
-        title: 'Edit Exam',
+        title: '<i class="fas fa-edit"></i> Edit Exam',
         html: `
             <div class="text-start">
-                <label class="form-label">Exam Name</label>
-                <input type="text" id="examName" class="form-control mb-3" value="${escapeHtml(exam.name)}">
-                <label class="form-label">Term</label>
-                <select id="examTerm" class="form-select mb-3">
-                    <option value="Term 1" ${exam.term === 'Term 1' ? 'selected' : ''}>Term 1</option>
-                    <option value="Term 2" ${exam.term === 'Term 2' ? 'selected' : ''}>Term 2</option>
-                    <option value="Term 3" ${exam.term === 'Term 3' ? 'selected' : ''}>Term 3</option>
-                </select>
-                <label class="form-label">Year</label>
-                <input type="number" id="examYear" class="form-control mb-3" value="${exam.year}">
-                <label class="form-label">Start Date</label>
-                <input type="date" id="examStart" class="form-control mb-3" value="${exam.start_date}">
-                <label class="form-label">End Date</label>
-                <input type="date" id="examEnd" class="form-control mb-3" value="${exam.end_date}">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Exam Name</label>
+                    <input type="text" id="examName" class="form-control" value="${escapeHtml(exam.name)}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Term</label>
+                    <select id="examTerm" class="form-select">
+                        <option value="Term 1" ${exam.term === 'Term 1' ? 'selected' : ''}>Term 1</option>
+                        <option value="Term 2" ${exam.term === 'Term 2' ? 'selected' : ''}>Term 2</option>
+                        <option value="Term 3" ${exam.term === 'Term 3' ? 'selected' : ''}>Term 3</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Year</label>
+                    <input type="number" id="examYear" class="form-control" value="${exam.year}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Start Date</label>
+                    <input type="date" id="examStart" class="form-control" value="${exam.start_date}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 End Date</label>
+                    <input type="date" id="examEnd" class="form-control" value="${exam.end_date}">
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Save Changes',
+        confirmButtonText: '<i class="fas fa-save"></i> Save Changes',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => ({
             name: document.getElementById('examName').value,
             term: document.getElementById('examTerm').value,
@@ -19878,9 +20219,10 @@ window.editExam = async function(id) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_exams').update(result).eq('id', id);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Exam updated', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Exam updated successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19889,6 +20231,7 @@ window.editExam = async function(id) {
 window.deleteExam = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Exam?',
+        text: 'This action cannot be undone!',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
@@ -19899,9 +20242,10 @@ window.deleteExam = async function(id) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_exams').delete().eq('id', id);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Deleted!', 'Exam removed', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Deleted!', 'Exam removed successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19913,19 +20257,27 @@ window.deleteExam = async function(id) {
 
 window.addNewEvent = async function() {
     const { value: result } = await Swal.fire({
-        title: 'Add Event',
+        title: '<i class="fas fa-calendar-day"></i> Add Event',
         html: `
             <div class="text-start">
-                <label class="form-label">Event Name</label>
-                <input type="text" id="eventName" class="form-control mb-3" placeholder="e.g., Sports Day">
-                <label class="form-label">Event Date</label>
-                <input type="date" id="eventDate" class="form-control mb-3">
-                <label class="form-label">Description</label>
-                <textarea id="eventDesc" class="form-control" rows="2" placeholder="Event details..."></textarea>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Event Name *</label>
+                    <input type="text" id="eventName" class="form-control" placeholder="e.g., Sports Day">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Event Date *</label>
+                    <input type="date" id="eventDate" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Description</label>
+                    <textarea id="eventDesc" class="form-control" rows="2" placeholder="Event details..."></textarea>
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Add Event',
+        confirmButtonText: '<i class="fas fa-save"></i> Add Event',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => ({
             name: document.getElementById('eventName').value,
             event_date: document.getElementById('eventDate').value,
@@ -19937,9 +20289,10 @@ window.addNewEvent = async function() {
         Swal.fire({ title: 'Adding...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_events').insert([result]);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Event added', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Event added successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19950,19 +20303,27 @@ window.editEvent = async function(id) {
     if (!event) return;
     
     const { value: result } = await Swal.fire({
-        title: 'Edit Event',
+        title: '<i class="fas fa-edit"></i> Edit Event',
         html: `
             <div class="text-start">
-                <label class="form-label">Event Name</label>
-                <input type="text" id="eventName" class="form-control mb-3" value="${escapeHtml(event.name)}">
-                <label class="form-label">Event Date</label>
-                <input type="date" id="eventDate" class="form-control mb-3" value="${event.event_date}">
-                <label class="form-label">Description</label>
-                <textarea id="eventDesc" class="form-control" rows="2">${escapeHtml(event.description || '')}</textarea>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Event Name</label>
+                    <input type="text" id="eventName" class="form-control" value="${escapeHtml(event.name)}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Event Date</label>
+                    <input type="date" id="eventDate" class="form-control" value="${event.event_date}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📝 Description</label>
+                    <textarea id="eventDesc" class="form-control" rows="2">${escapeHtml(event.description || '')}</textarea>
+                </div>
             </div>
         `,
+        width: '500px',
         showCancelButton: true,
-        confirmButtonText: 'Save Changes',
+        confirmButtonText: '<i class="fas fa-save"></i> Save Changes',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
         preConfirm: () => ({
             name: document.getElementById('eventName').value,
             event_date: document.getElementById('eventDate').value,
@@ -19974,9 +20335,10 @@ window.editEvent = async function(id) {
         Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_events').update(result).eq('id', id);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Success!', 'Event updated', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Success!', 'Event updated successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -19985,6 +20347,7 @@ window.editEvent = async function(id) {
 window.deleteEvent = async function(id) {
     const result = await Swal.fire({
         title: 'Delete Event?',
+        text: 'This action cannot be undone!',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
@@ -19995,9 +20358,10 @@ window.deleteEvent = async function(id) {
         Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const { error } = await sb.from('academic_events').delete().eq('id', id);
         Swal.close();
-        if (error) Swal.fire('Error', error.message, 'error');
-        else {
-            Swal.fire('Deleted!', 'Event removed', 'success');
+        if (error) {
+            Swal.fire('Error', error.message, 'error');
+        } else {
+            Swal.fire('Deleted!', 'Event removed successfully', 'success');
             await loadAcademicData();
         }
     }
@@ -20008,10 +20372,22 @@ window.deleteEvent = async function(id) {
 // ============================================
 
 window.refreshAcademicData = async function() {
-    Swal.fire({ title: 'Refreshing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ 
+        title: 'Refreshing...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
     await loadAcademicData();
+    
     Swal.close();
-    Swal.fire('Refreshed!', 'Academic calendar updated.', 'success');
+    Swal.fire({
+        title: '✅ Refreshed!',
+        text: 'Academic calendar updated successfully.',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+    });
 };
 
 // ============================================
@@ -20024,21 +20400,23 @@ if (typeof showTab === 'function') {
     window.showTab = function(tabName) {
         originalShowTab(tabName);
         if (tabName === 'academic') {
+            console.log("📅 Switching to academic tab...");
             loadAcademicData();
         }
     };
 }
 
 // Load on page load
-setTimeout(() => {
-    if (document.getElementById('termsTableBody')) {
-        loadAcademicData();
-    }
-}, 500);
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        if (document.getElementById('termsTableBody')) {
+            console.log("📅 Initializing academic calendar...");
+            loadAcademicData();
+        }
+    }, 500);
+});
 
 console.log('✅ Academic Calendar Module Loaded - Complete');
-
-
 
 // ============================================
 // HOUSES MANAGEMENT - FINAL MASTERPIECE
