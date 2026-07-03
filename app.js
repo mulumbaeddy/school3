@@ -4965,8 +4965,7 @@ function escapeHtml(text) {
 }
 // ============================================
 // MARKS MODULE - WITH DYNAMIC SUBJECTS FROM DATABASE
-// Fixed: A-Level subjects loading from database
-// Fixed: Keep original styling
+// U1, U2, U3 each out of 20 with validation
 // ============================================
 
 // ============================================
@@ -4994,17 +4993,16 @@ let batchState = {
     marksMap: {}
 };
 
-// Constants (Keep original styling)
+// Constants
 const STREAM_OPTIONS = {
     olevel: ['A', 'B', 'C', 'D'],
     alevel: ['Arts', 'Sciences', 'Business']
 };
 
-// Exam options
 const EXAM_OPTIONS = ['Term 1', 'Term 2', 'Term 3', 'Mid-Term', 'Mock'];
 
 // ============================================
-// HELPER FUNCTIONS (Keep original)
+// HELPER FUNCTIONS
 // ============================================
 
 function escapeHtml(text) {
@@ -5019,18 +5017,52 @@ function getCurrentYear() {
 }
 
 // ============================================
-// LOAD SUBJECTS FROM DATABASE (FIXED FOR A-LEVEL)
+// VALIDATION FUNCTION - Prevents values > max
 // ============================================
 
+function validateUnitInput(input, maxValue) {
+    let value = parseFloat(input.value);
+    
+    // If value is greater than max, reset to max
+    if (value > maxValue) {
+        input.value = maxValue;
+        // Show a quick visual feedback
+        input.style.backgroundColor = '#f8d7da';
+        setTimeout(() => {
+            input.style.backgroundColor = '';
+        }, 800);
+        
+        // Show a toast notification (only once)
+        if (!input.dataset.notified) {
+            input.dataset.notified = 'true';
+            Swal.fire({
+                icon: 'warning',
+                title: 'Invalid Value',
+                text: `Maximum value is ${maxValue}`,
+                timer: 1500,
+                showConfirmButton: false
+            });
+            setTimeout(() => {
+                input.dataset.notified = '';
+            }, 2000);
+        }
+    }
+    
+    // If value is negative, reset to 0
+    if (value < 0) {
+        input.value = 0;
+    }
+}
+
 // ============================================
-// LOAD SUBJECTS FROM DATABASE - INCLUDES ALL CATEGORIES
+// LOAD SUBJECTS FROM DATABASE
 // ============================================
 
 async function loadSubjectsFromDB() {
     try {
         console.log("🔄 Loading subjects from database...");
         
-        // 1. LOAD O-LEVEL SUBJECTS from subjects table
+        // 1. LOAD O-LEVEL SUBJECTS
         const { data: olevelData, error: olevelError } = await sb
             .from('subjects')
             .select('name, category')
@@ -5040,14 +5072,12 @@ async function loadSubjectsFromDB() {
         if (!olevelError && olevelData && olevelData.length > 0) {
             dbOlevelSubjects = olevelData.map(s => s.name);
             console.log(`✅ O-Level: ${dbOlevelSubjects.length} subjects`);
-            console.log(`   Categories: ${[...new Set(olevelData.map(s => s.category))].join(', ')}`);
         } else {
             dbOlevelSubjects = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology'];
             console.warn("No O-Level subjects found, using defaults");
         }
         
-        // 2. LOAD A-LEVEL PRINCIPAL SUBJECTS - NOW INCLUDES ALL CATEGORIES!
-        // Get ALL A-Level subjects regardless of category (Humanities, Sciences, Principal, etc.)
+        // 2. LOAD A-LEVEL PRINCIPAL SUBJECTS
         const { data: alevelData, error: alevelError } = await sb
             .from('subjects')
             .select('name, category')
@@ -5055,20 +5085,14 @@ async function loadSubjectsFromDB() {
             .order('name', { ascending: true });
         
         if (!alevelError && alevelData && alevelData.length > 0) {
-            // Get all A-Level subjects - NO CATEGORY FILTER!
             dbAlevelPrincipalSubjects = alevelData.map(s => s.name);
-            
-            // Log categories found
-            const categories = [...new Set(alevelData.map(s => s.category))];
-            console.log(`✅ A-Level Subjects: ${dbAlevelPrincipalSubjects.length} subjects from ALL categories`);
-            console.log(`   Categories found: ${categories.join(', ')}`);
-            console.log(`   Subjects: ${dbAlevelPrincipalSubjects.join(', ')}`);
+            console.log(`✅ A-Level Principal: ${dbAlevelPrincipalSubjects.length} subjects`);
         } else {
             dbAlevelPrincipalSubjects = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Economics', 'History', 'Geography'];
             console.warn("No A-Level subjects found, using defaults");
         }
         
-        // 3. LOAD A-LEVEL SUBSIDIARY SUBJECTS from subsidiary_subjects table
+        // 3. LOAD A-LEVEL SUBSIDIARY SUBJECTS
         const { data: subsidiaryData, error: subsidiaryError } = await sb
             .from('subsidiary_subjects')
             .select('subject_name')
@@ -5077,7 +5101,6 @@ async function loadSubjectsFromDB() {
         if (!subsidiaryError && subsidiaryData && subsidiaryData.length > 0) {
             dbAlevelSubsidiarySubjects = subsidiaryData.map(s => s.subject_name);
             console.log(`✅ A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
-            console.log(`   Subjects: ${dbAlevelSubsidiarySubjects.join(', ')}`);
         } else {
             dbAlevelSubsidiarySubjects = ['General Paper', 'ICT', 'Subsidiary Mathematics'];
             console.warn("No subsidiary subjects found, using defaults");
@@ -5085,7 +5108,7 @@ async function loadSubjectsFromDB() {
         
         console.log(`📚 FINAL SUMMARY:`);
         console.log(`   O-Level: ${dbOlevelSubjects.length} subjects`);
-        console.log(`   A-Level (ALL categories): ${dbAlevelPrincipalSubjects.length} subjects`);
+        console.log(`   A-Level Principal: ${dbAlevelPrincipalSubjects.length} subjects`);
         console.log(`   A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
         
         return true;
@@ -5100,29 +5123,22 @@ async function loadSubjectsFromDB() {
 }
 
 // ============================================
-// GET STUDENT SUBJECTS (A-Level - returns all subjects)
+// GET STUDENT SUBJECTS
 // ============================================
 
 function getStudentSubjects(student) {
     if (currentLevel === 'olevel') {
         return dbOlevelSubjects;
     }
-    
-    // For A-Level: Return all principal subjects from database
-    // The teacher will select which subjects the student takes
     return [...dbAlevelPrincipalSubjects];
 }
-
-// ============================================
-// GET ALL A-LEVEL SUBJECTS (for batch entry)
-// ============================================
 
 function getAllAlevelSubjects() {
     return [...dbAlevelPrincipalSubjects, ...dbAlevelSubsidiarySubjects];
 }
 
 // ============================================
-// LOAD GRADING RULES FROM SETTINGS (Keep original)
+// LOAD GRADING RULES FROM SETTINGS
 // ============================================
 
 async function loadGradingRules() {
@@ -5157,7 +5173,7 @@ async function loadGradingRules() {
 }
 
 // ============================================
-// CALCULATE GRADE FROM SETTINGS (Keep original)
+// CALCULATE GRADE FROM SETTINGS
 // ============================================
 
 function calculateGrade(percentage, isSubsidiary = false) {
@@ -5182,7 +5198,7 @@ function calculateGrade(percentage, isSubsidiary = false) {
         }
     }
     
-    // Fallback grading (Keep original)
+    // Fallback grading
     if (currentLevel === 'olevel') {
         if (percentage >= 90) return { grade: 'A', points: 1, color: '#2ecc71', remark: 'Excellent' };
         if (percentage >= 80) return { grade: 'B', points: 2, color: '#3498db', remark: 'Very Good' };
@@ -5210,7 +5226,21 @@ function calculateGrade(percentage, isSubsidiary = false) {
 }
 
 // ============================================
-// LOAD ALL MARKS DATA (Keep original)
+// O-LEVEL GRADE DESCRIPTOR (U1, U2, U3 out of 20)
+// ============================================
+
+function getOlevelGradeDescriptor(total100) {
+    total100 = Math.min(100, Math.max(0, total100));
+    
+    if (total100 >= 85) return { grade: 'A', descriptor: 'Exceptional', color: '#2ecc71' };
+    if (total100 >= 70) return { grade: 'B', descriptor: 'Outstanding', color: '#3498db' };
+    if (total100 >= 60) return { grade: 'C', descriptor: 'Satisfactory', color: '#f39c12' };
+    if (total100 >= 40) return { grade: 'D', descriptor: 'Basic', color: '#e67e22' };
+    return { grade: 'E', descriptor: 'Elementary', color: '#e74c3c' };
+}
+
+// ============================================
+// LOAD ALL MARKS DATA
 // ============================================
 
 async function loadAllMarks() {
@@ -5236,31 +5266,26 @@ async function loadAllMarks() {
 }
 
 // ============================================
-// GET CLASS OPTIONS (Keep original)
+// GET CLASS AND STREAM OPTIONS
 // ============================================
 
 function getClassOptions() {
     return currentLevel === 'olevel' ? ['S.1', 'S.2', 'S.3', 'S.4'] : ['S.5', 'S.6'];
 }
 
-// ============================================
-// GET STREAM OPTIONS (Keep original)
-// ============================================
-
 function getStreamOptions() {
     return STREAM_OPTIONS[currentLevel];
 }
 
 // ============================================
-// RENDER MARKS PAGE (Keep original styling)
+// RENDER MARKS PAGE
 // ============================================
 
 async function renderMarks() {
-    // Load subjects from database first
     await loadSubjectsFromDB();
     await loadGradingRules();
     
-    const levelName = currentLevel === 'olevel' ? 'O-Level (U1 + U2 + U3 + Exam/80)' : 'A-Level';
+    const levelName = currentLevel === 'olevel' ? 'O-Level (U1+U2+U3 out of 20 + Exam/80)' : 'A-Level';
     const classOptions = getClassOptions();
     const streamOptionsList = getStreamOptions();
     const isOlevel = currentLevel === 'olevel';
@@ -5420,13 +5445,15 @@ async function renderMarks() {
                         <tbody id="marksTableBody">
                             <tr><td colspan="${isOlevel ? 14 : 14}" class="text-center py-4">
                                 <i class="fas fa-spinner fa-spin"></i> Loading marks...
-                            络</tbody>
+                            </tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
         </div>
     `;
 }
+
 // ============================================
 // CLOSE BATCH MARKS TABLE
 // ============================================
@@ -5437,7 +5464,6 @@ window.closeBatchMarks = function() {
         container.style.display = 'none';
     }
     
-    // Optional: Clear batch state
     batchState = {
         class: '',
         stream: '',
@@ -5451,8 +5477,9 @@ window.closeBatchMarks = function() {
     
     console.log("Batch marks table closed");
 };
+
 // ============================================
-// REFRESH SUBJECTS (Manual refresh button)
+// REFRESH SUBJECTS
 // ============================================
 
 window.refreshSubjectsForMarks = async function() {
@@ -5474,17 +5501,15 @@ window.refreshSubjectsForMarks = async function() {
         timer: 2000
     });
     
-    // Reload the page to update dropdowns
     await loadPage('marks');
 };
 
 // ============================================
-// RENDER TABLE HEADER (Keep original)
+// RENDER TABLE HEADER
 // ============================================
 
 function renderTableHeader() {
     if (currentLevel === 'olevel') {
-        // O-LEVEL: 15 columns to match loadMarksTable
         return `
             <tr>
                 <th width="30"><input type="checkbox" id="selectAllMarks"></th>
@@ -5505,7 +5530,6 @@ function renderTableHeader() {
             </tr>
         `;
     } else {
-        // A-LEVEL: Count your A-Level columns and adjust
         return `
             <tr>
                 <th width="30"><input type="checkbox" id="selectAllMarks"></th>
@@ -5526,8 +5550,9 @@ function renderTableHeader() {
         `;
     }
 }
+
 // ============================================
-// LOAD MARKS TABLE (Keep original)
+// LOAD MARKS TABLE
 // ============================================
 
 async function loadMarksTable() {
@@ -5543,7 +5568,6 @@ async function loadMarksTable() {
     console.log('2. Total marks in allMarksList:', allMarksList.length);
     console.log('3. Current level:', currentLevel);
     
-    // Filter marks by current level
     const filteredMarks = allMarksList.filter(m => m.level === currentLevel);
     console.log('4. Marks filtered by level:', filteredMarks.length);
     
@@ -5553,7 +5577,6 @@ async function loadMarksTable() {
         return;
     }
     
-    // Log first mark to see structure
     console.log('6. First mark sample:', filteredMarks[0]);
     
     let html = '';
@@ -5577,9 +5600,9 @@ async function loadMarksTable() {
             const exam80 = mark.exam_80 || 0;
             const initials = mark.teacher_initials || '';
             
-            // Calculate
+            // ✅ NEW CALCULATION: each unit is out of 20
             const unitAvg = (u1 + u2 + u3) / 3;
-            const total20 = (unitAvg / 3) * 20;
+            const total20 = unitAvg;
             let total100 = total20 + exam80;
             total100 = Math.min(100, Math.max(0, total100));
             
@@ -5656,8 +5679,9 @@ async function loadMarksTable() {
         };
     }
 }
+
 // ============================================
-// LOAD BATCH MARKS - FIXED FOR A-LEVEL
+// LOAD BATCH MARKS
 // ============================================
 
 window.loadBatchMarks = async function() {
@@ -5682,7 +5706,6 @@ window.loadBatchMarks = async function() {
     Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
-        // Load students
         let query = sb.from('students').select('*').eq('class', className);
         if (stream) query = query.eq('stream', stream);
         
@@ -5697,7 +5720,6 @@ window.loadBatchMarks = async function() {
             return;
         }
         
-        // Load existing marks for these students
         const studentIds = batchState.students.map(s => s.id);
         const { data: existingMarks, error: marksError } = await sb
             .from('marks')
@@ -5708,7 +5730,6 @@ window.loadBatchMarks = async function() {
         
         if (marksError) throw marksError;
         
-        // Build marks map for quick lookup
         batchState.marksMap = {};
         for (const mark of existingMarks || []) {
             const key = `${mark.student_id}_${mark.subject}`;
@@ -5716,26 +5737,17 @@ window.loadBatchMarks = async function() {
         }
         
         if (currentLevel === 'olevel') {
-            // O-Level: Single subject
             batchState.subjects = [{ name: subject, category: 'Core' }];
             document.getElementById('selectedSubjectDisplay').innerText = subject;
             document.getElementById('selectedClassDisplay').innerText = `${className}${stream ? ' - ' + stream : ''}`;
             renderOlevelBatchTable();
         } else {
-            // A-Level: ALL subjects from database (both principal and subsidiary)
-            console.log("Loading A-Level subjects from database...");
-            console.log("Principal subjects:", dbAlevelPrincipalSubjects);
-            console.log("Subsidiary subjects:", dbAlevelSubsidiarySubjects);
-            
-            // Combine all subjects
             const allSubjects = [];
             
-            // Add principal subjects
             for (const sub of dbAlevelPrincipalSubjects) {
                 allSubjects.push({ name: sub, category: 'Principal' });
             }
             
-            // Add subsidiary subjects
             for (const sub of dbAlevelSubsidiarySubjects) {
                 allSubjects.push({ name: sub, category: 'Subsidiary' });
             }
@@ -5755,12 +5767,7 @@ window.loadBatchMarks = async function() {
 };
 
 // ============================================
-// RENDER O-LEVEL BATCH TABLE (Keep original)
-// ============================================
-
-// ============================================
-// RENDER O-LEVEL BATCH TABLE - NEW UGANDA FORMAT
-// U1, U2, U3 (each out of 3), Exam (out of 80), Teacher Initials
+// RENDER O-LEVEL BATCH TABLE - U1, U2, U3 out of 20 WITH VALIDATION
 // ============================================
 
 function renderOlevelBatchTable() {
@@ -5796,73 +5803,68 @@ function renderOlevelBatchTable() {
         const exam80 = existingMark?.exam_80 || 0;
         const initials = existingMark?.teacher_initials || '';
         
-        // CALCULATION
+        // ✅ NEW CALCULATION: each unit is out of 20
         const unitAvg = (u1 + u2 + u3) / 3;
-        const total20 = (unitAvg / 3) * 20;
+        const total20 = unitAvg;
         let total100 = total20 + exam80;
         total100 = Math.min(100, Math.max(0, total100));
         
-        // DEBUG - Check what's being passed
-        console.log(`Student: ${student.name}, Total100: ${total100}`);
-        
-        // GET GRADE USING THE FUNCTION
         const gradeInfo = getOlevelGradeDescriptor(total100);
-        
-        // DEBUG - Check what the function returns
-        console.log(`GradeInfo:`, gradeInfo);
         
         html += `
             <tr>
-                <td class="text-center">${i + 1}</span>
+                <td class="text-center">${i + 1}</td>
                 <td style="vertical-align: middle;">
                     <strong>${escapeHtml(student.name)}</strong><br>
                     <small class="text-muted">${student.admission_no || '-'}</small>
-                </span>
-                <td class="text-center">${student.stream || '-'}</span>
+                </td>
+                <td class="text-center">${student.stream || '-'}</td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u1-input" 
                            data-student="${student.id}" value="${u1}" 
-                           min="0" max="3" step="0.1" style="width:70px;">
-                </span>
+                           min="0" max="20" step="0.5" style="width:70px;"
+                           oninput="validateUnitInput(this, 20)">
+                </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u2-input" 
                            data-student="${student.id}" value="${u2}" 
-                           min="0" max="3" step="0.1" style="width:70px;">
-                </span>
+                           min="0" max="20" step="0.5" style="width:70px;"
+                           oninput="validateUnitInput(this, 20)">
+                </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u3-input" 
                            data-student="${student.id}" value="${u3}" 
-                           min="0" max="3" step="0.1" style="width:70px;">
-                </span>
+                           min="0" max="20" step="0.5" style="width:70px;"
+                           oninput="validateUnitInput(this, 20)">
+                </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm exam-input" 
                            data-student="${student.id}" value="${exam80}" 
                            min="0" max="80" step="1" style="width:80px;">
-                </span>
+                </td>
                 <td class="text-center">
                     <input type="text" class="form-control form-control-sm initials-input" 
                            data-student="${student.id}" value="${escapeHtml(initials)}" 
                            maxlength="5" style="width:70px; text-transform:uppercase;">
-                </span>
+                </td>
                 <td class="text-center total20-cell" data-student="${student.id}">
                     <strong>${total20.toFixed(1)}</strong>
-                </span>
+                </td>
                 <td class="text-center total100-cell" data-student="${student.id}">
                     <strong>${total100.toFixed(1)}</strong>
-                </span>
+                </td>
                 <td class="text-center grade-cell" data-student="${student.id}">
                     <span class="badge" style="background: ${gradeInfo.color}; padding: 5px 10px;">${gradeInfo.grade}</span>
-                </span>
+                </td>
                 <td class="text-center descriptor-cell" data-student="${student.id}">
                     ${gradeInfo.descriptor}
-                </span>
+                </td>
             </tr>
         `;
     }
     
     bodyRow.innerHTML = html;
     
-    // Add event listeners
     document.querySelectorAll('.u1-input, .u2-input, .u3-input, .exam-input').forEach(input => {
         input.addEventListener('input', function() {
             const studentId = this.dataset.student;
@@ -5870,22 +5872,25 @@ function renderOlevelBatchTable() {
         });
     });
 }
-// Helper function to recalculate O-Level row
+
+// ============================================
+// RECALCULATE O-LEVEL ROW - U1, U2, U3 out of 20
+// ============================================
+
 function recalculateOlevelRow(studentId) {
     const u1 = parseFloat(document.querySelector(`.u1-input[data-student="${studentId}"]`).value) || 0;
     const u2 = parseFloat(document.querySelector(`.u2-input[data-student="${studentId}"]`).value) || 0;
     const u3 = parseFloat(document.querySelector(`.u3-input[data-student="${studentId}"]`).value) || 0;
     const exam80 = parseFloat(document.querySelector(`.exam-input[data-student="${studentId}"]`).value) || 0;
     
+    // ✅ NEW CALCULATION: each unit is out of 20
     const unitAvg = (u1 + u2 + u3) / 3;
-    const total20 = (unitAvg / 3) * 20;
+    const total20 = unitAvg;
     let total100 = total20 + exam80;
     total100 = Math.min(100, Math.max(0, total100));
     
-    // MUST USE THE SAME FUNCTION
     const gradeInfo = getOlevelGradeDescriptor(total100);
     
-    // Update cells
     const total20Cell = document.querySelector(`.total20-cell[data-student="${studentId}"]`);
     const total100Cell = document.querySelector(`.total100-cell[data-student="${studentId}"]`);
     const gradeCell = document.querySelector(`.grade-cell[data-student="${studentId}"]`);
@@ -5897,20 +5902,8 @@ function recalculateOlevelRow(studentId) {
     if (descriptorCell) descriptorCell.innerHTML = gradeInfo.descriptor;
 }
 
-// Helper function for O-Level grade
-function getOlevelGradeDescriptor(total100) {
-    // Ensure total is within valid range
-    total100 = Math.min(100, Math.max(0, total100));
-    
-    // CORRECT GRADE BOUNDARIES
-    if (total100 >= 85) return { grade: 'A', descriptor: 'Exceptional', color: '#2ecc71' };
-    if (total100 >= 70) return { grade: 'B', descriptor: 'Outstanding', color: '#3498db' };
-    if (total100 >= 60) return { grade: 'C', descriptor: 'Satisfactory', color: '#f39c12' };
-    if (total100 >= 40) return { grade: 'D', descriptor: 'Basic', color: '#e67e22' };
-    return { grade: 'E', descriptor: 'Elementary', color: '#e74c3c' };
-}
 // ============================================
-// RENDER A-LEVEL BATCH TABLE (Keep original styling)
+// RENDER A-LEVEL BATCH TABLE
 // ============================================
 
 function renderAlevelBatchTable() {
@@ -5939,11 +5932,11 @@ function renderAlevelBatchTable() {
         
         html += `
             <tr>
-                <td class="text-center">${i + 1}</span></td>
-                <td><strong>${escapeHtml(student.name)}</strong></span></td>
-                <td>${student.admission_no || '-'}</span></td>
-                <td>${student.stream || '-'}</span></td>
-                <td><span class="badge bg-info">${student.combination || 'N/A'}</span></span></td>
+                <td class="text-center">${i + 1}</td>
+                <td><strong>${escapeHtml(student.name)}</strong></td>
+                <td>${student.admission_no || '-'}</td>
+                <td>${student.stream || '-'}</td>
+                <td><span class="badge bg-info">${student.combination || 'N/A'}</span></td>
         `;
         
         for (const subject of batchState.subjects) {
@@ -5964,7 +5957,7 @@ function renderAlevelBatchTable() {
                            value="${markValue}" min="0" max="100" step="0.5" 
                            style="width:80px;text-align:center;transition:all 0.3s;">
                     ${markValue ? `<small class="grade-display" style="display:block;margin-top:4px;color:${gradeInfo.color}">${gradeInfo.grade} (${gradeInfo.points} pts)</small>` : ''}
-                </span>
+                </td>
             `;
         }
         
@@ -5972,17 +5965,16 @@ function renderAlevelBatchTable() {
         const overallGrade = calculateGrade(avgPoints, false);
         
         html += `
-            <td class="text-center total-points" data-student="${student.id}"><strong>${totalPoints}</strong></span></td>
-            <td class="text-center overall-grade" data-student="${student.id}"><span class="badge" style="background:${overallGrade.color};padding:8px 12px;">${overallGrade.grade}</span></span></td>
-            <td class="text-center"><strong>${totalPoints}</strong></span></td>
-            <td class="text-center"><button class="btn btn-sm btn-primary edit-batch-row" data-student="${student.id}"><i class="fas fa-edit"></i> Edit</button></span></td>
+            <td class="text-center total-points" data-student="${student.id}"><strong>${totalPoints}</strong></td>
+            <td class="text-center overall-grade" data-student="${student.id}"><span class="badge" style="background:${overallGrade.color};padding:8px 12px;">${overallGrade.grade}</span></td>
+            <td class="text-center"><strong>${totalPoints}</strong></td>
+            <td class="text-center"><button class="btn btn-sm btn-primary edit-batch-row" data-student="${student.id}"><i class="fas fa-edit"></i> Edit</button></td>
         </tr>
         `;
     }
     
     bodyRow.innerHTML = html;
     
-    // Add event listeners for real-time calculation
     document.querySelectorAll('.batch-mark-input').forEach(input => {
         input.addEventListener('input', function() { updateAlevelBatchTotals(); });
     });
@@ -5993,7 +5985,7 @@ function renderAlevelBatchTable() {
 }
 
 // ============================================
-// UPDATE A-LEVEL BATCH TOTALS (Keep original)
+// UPDATE A-LEVEL BATCH TOTALS
 // ============================================
 
 function updateAlevelBatchTotals() {
@@ -6042,7 +6034,7 @@ function updateAlevelBatchTotals() {
 }
 
 // ============================================
-// EDIT BATCH STUDENT (A-Level only) (Keep original)
+// EDIT BATCH STUDENT (A-Level only)
 // ============================================
 
 async function editBatchStudent(studentId) {
@@ -6116,7 +6108,7 @@ async function editBatchStudent(studentId) {
 }
 
 // ============================================
-// SAVE BATCH MARKS (Keep original)
+// SAVE BATCH MARKS
 // ============================================
 
 window.saveBatchMarks = async function() {
@@ -6131,60 +6123,60 @@ window.saveBatchMarks = async function() {
     
     for (const student of batchState.students) {
         if (currentLevel === 'olevel') {
-    // O-Level: Save with U1, U2, U3, Exam/80, Initials
-    const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]`);
-    const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]`);
-    const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]`);
-    const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]`);
-    const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]`);
-    
-    if (u1Input && u2Input && u3Input && examInput) {
-        const u1 = parseFloat(u1Input.value) || 0;
-        const u2 = parseFloat(u2Input.value) || 0;
-        const u3 = parseFloat(u3Input.value) || 0;
-        const exam80 = parseFloat(examInput.value) || 0;
-        const initials = initialsInput?.value || '';
-        
-        const unitAvg = (u1 + u2 + u3) / 3;
-        const total20 = (unitAvg / 3) * 20;
-        const total100 = total20 + exam80;
-        
-        const key = `${student.id}_${batchState.subject}`;
-        const existingMark = batchState.marksMap[key];
-        
-        const markData = {
-            student_id: student.id,
-            subject: batchState.subject,
-            subject_type: 'principal',
-            exam: batchState.exam,
-            year: batchState.year,
-            marks_obtained: total100,
-            max_marks: 100,
-            level: currentLevel,
-            unit1: u1,
-            unit2: u2,
-            unit3: u3,
-            exam_80: exam80,
-            teacher_initials: initials,
-            updated_at: new Date().toISOString()
-        };
-        
-        try {
-            let result;
-            if (existingMark?.id) {
-                result = await sb.from('marks').update(markData).eq('id', existingMark.id);
-            } else if (total100 > 0 || u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0) {
-                markData.created_at = new Date().toISOString();
-                result = await sb.from('marks').insert([markData]);
+            const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]`);
+            const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]`);
+            const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]`);
+            const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]`);
+            const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]`);
+            
+            if (u1Input && u2Input && u3Input && examInput) {
+                const u1 = parseFloat(u1Input.value) || 0;
+                const u2 = parseFloat(u2Input.value) || 0;
+                const u3 = parseFloat(u3Input.value) || 0;
+                const exam80 = parseFloat(examInput.value) || 0;
+                const initials = initialsInput?.value || '';
+                
+                // ✅ NEW CALCULATION: each unit is out of 20
+                const unitAvg = (u1 + u2 + u3) / 3;
+                const total20 = unitAvg;
+                const total100 = total20 + exam80;
+                
+                const key = `${student.id}_${batchState.subject}`;
+                const existingMark = batchState.marksMap[key];
+                
+                const markData = {
+                    student_id: student.id,
+                    subject: batchState.subject,
+                    subject_type: 'principal',
+                    exam: batchState.exam,
+                    year: batchState.year,
+                    marks_obtained: total100,
+                    max_marks: 100,
+                    level: currentLevel,
+                    unit1: u1,
+                    unit2: u2,
+                    unit3: u3,
+                    exam_80: exam80,
+                    teacher_initials: initials,
+                    updated_at: new Date().toISOString()
+                };
+                
+                try {
+                    let result;
+                    if (existingMark?.id) {
+                        result = await sb.from('marks').update(markData).eq('id', existingMark.id);
+                    } else if (total100 > 0 || u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0) {
+                        markData.created_at = new Date().toISOString();
+                        result = await sb.from('marks').insert([markData]);
+                    }
+                    if (result?.error) throw result.error;
+                    saved++;
+                } catch (error) {
+                    console.error('Save error:', error);
+                    errors++;
+                }
             }
-            if (result?.error) throw result.error;
-            saved++;
-        } catch (error) {
-            console.error('Save error:', error);
-            errors++;
-        }
-    }
-} else {
+        } else {
             // A-Level: Save all subjects
             for (const subject of batchState.subjects) {
                 const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]`);
@@ -6233,7 +6225,7 @@ window.saveBatchMarks = async function() {
 };
 
 // ============================================
-// EXPORT BATCH MARKS (Keep original)
+// EXPORT BATCH MARKS
 // ============================================
 
 window.exportBatchMarks = function() {
@@ -6278,18 +6270,23 @@ window.exportBatchMarks = function() {
 };
 
 // ============================================
-// ADD/EDIT/DELETE MARK FUNCTIONS (Keep original styling)
+// ADD SINGLE MARK MODAL
 // ============================================
 
 window.openAddMarkModal = async function() {
     await loadAllMarks();
     await loadSubjectsFromDB();
-    await loadStudentsForReport(); // Make sure students are loaded
     
     const isOlevel = currentLevel === 'olevel';
     
-    // Student options
-    const studentOptions = reportsStudentsList.map(s => 
+    // Load students for dropdown
+    const { data: studentsList } = await sb
+        .from('students')
+        .select('*')
+        .in('class', currentLevel === 'olevel' ? ['S.1', 'S.2', 'S.3', 'S.4'] : ['S.5', 'S.6'])
+        .order('name');
+    
+    const studentOptions = (studentsList || []).map(s => 
         `<option value="${s.id}">${escapeHtml(s.name)} (${s.admission_no || '-'}) - ${s.class} ${s.stream || ''}</option>`
     ).join('');
     
@@ -6309,7 +6306,7 @@ window.openAddMarkModal = async function() {
     
     if (isOlevel) {
         // ============================================
-        // O-LEVEL ADD MARK (NEW UGANDAN FORMAT)
+        // O-LEVEL ADD MARK - U1, U2, U3 out of 20 WITH VALIDATION
         // ============================================
         Swal.fire({
             title: '<i class="fas fa-plus-circle"></i> Add Single Mark - O-Level',
@@ -6357,20 +6354,26 @@ window.openAddMarkModal = async function() {
                     </div>
                     
                     <hr class="my-3">
-                    <h6 class="text-center fw-bold mb-3">📊 UNIT ASSESSMENTS (0-3 each)</h6>
+                    <h6 class="text-center fw-bold mb-3">📊 UNIT ASSESSMENTS (0-20 each)</h6>
                     
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label fw-bold">📘 Unit 1 (U1)</label>
-                            <input type="number" id="markU1" class="form-control" step="0.1" min="0" max="3" placeholder="0-3" value="0">
+                            <input type="number" id="markU1" class="form-control" 
+                                   step="0.5" min="0" max="20" placeholder="0-20" value="0"
+                                   oninput="validateUnitInput(this, 20)">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-bold">📗 Unit 2 (U2)</label>
-                            <input type="number" id="markU2" class="form-control" step="0.1" min="0" max="3" placeholder="0-3" value="0">
+                            <input type="number" id="markU2" class="form-control" 
+                                   step="0.5" min="0" max="20" placeholder="0-20" value="0"
+                                   oninput="validateUnitInput(this, 20)">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-bold">📙 Unit 3 (U3)</label>
-                            <input type="number" id="markU3" class="form-control" step="0.1" min="0" max="3" placeholder="0-3" value="0">
+                            <input type="number" id="markU3" class="form-control" 
+                                   step="0.5" min="0" max="20" placeholder="0-20" value="0"
+                                   oninput="validateUnitInput(this, 20)">
                         </div>
                     </div>
                     
@@ -6392,7 +6395,6 @@ window.openAddMarkModal = async function() {
             confirmButtonText: '<i class="fas fa-save"></i> Save Mark',
             cancelButtonText: 'Cancel',
             didOpen: () => {
-                // Add real-time preview
                 const previewInputs = ['markU1', 'markU2', 'markU3', 'markExam80'];
                 previewInputs.forEach(id => {
                     const input = document.getElementById(id);
@@ -6408,9 +6410,11 @@ window.openAddMarkModal = async function() {
                     const u3 = parseFloat(document.getElementById('markU3')?.value) || 0;
                     const exam80 = parseFloat(document.getElementById('markExam80')?.value) || 0;
                     
+                    // ✅ NEW CALCULATION: each unit is out of 20
                     const unitAvg = (u1 + u2 + u3) / 3;
-                    const total20 = (unitAvg / 3) * 20;
-                    const total100 = total20 + exam80;
+                    const total20 = unitAvg;
+                    let total100 = total20 + exam80;
+                    total100 = Math.min(100, Math.max(0, total100));
                     const gradeInfo = getOlevelGradeDescriptor(total100);
                     
                     const previewDiv = document.getElementById('markPreview');
@@ -6430,7 +6434,6 @@ window.openAddMarkModal = async function() {
                     }
                 }
                 
-                // Initial preview
                 setTimeout(updateOlevelMarkPreview, 100);
             },
             preConfirm: () => {
@@ -6461,9 +6464,9 @@ window.openAddMarkModal = async function() {
                     return false;
                 }
                 
-                // Calculate totals
+                // ✅ NEW CALCULATION
                 const unitAvg = (u1 + u2 + u3) / 3;
-                const total20 = (unitAvg / 3) * 20;
+                const total20 = unitAvg;
                 const total100 = total20 + exam80;
                 
                 return {
@@ -6489,7 +6492,6 @@ window.openAddMarkModal = async function() {
                 Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
                 try {
-                    // Check if mark already exists
                     const { data: existing } = await sb
                         .from('marks')
                         .select('id')
@@ -6502,7 +6504,6 @@ window.openAddMarkModal = async function() {
                     
                     let error;
                     if (existing) {
-                        // Update existing
                         const { error: updateError } = await sb
                             .from('marks')
                             .update({
@@ -6517,7 +6518,6 @@ window.openAddMarkModal = async function() {
                             .eq('id', existing.id);
                         error = updateError;
                     } else {
-                        // Insert new
                         const { error: insertError } = await sb
                             .from('marks')
                             .insert([result.value]);
@@ -6538,12 +6538,12 @@ window.openAddMarkModal = async function() {
         });
     } else {
         // ============================================
-        // A-LEVEL ADD MARK (KEEP UNCHANGED)
+        // A-LEVEL ADD MARK
         // ============================================
         Swal.fire({
             title: 'Add Single Mark - A-Level',
             html: `
-                <div class="mb-3"><label>Student *</label><select id="markStudent" class="form-select">${allStudentsList.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.class})</option>`).join('')}</select></div>
+                <div class="mb-3"><label>Student *</label><select id="markStudent" class="form-select">${studentOptions}</select></div>
                 <div class="mb-3"><label>Subject *</label><select id="markSubject" class="form-select">${subjectOptions}</select></div>
                 <div class="row"><div class="col-md-6 mb-3"><label>Exam</label><select id="markExam" class="form-select">${EXAM_OPTIONS.map(e => `<option value="${e}">${e}</option>`).join('')}</select></div>
                 <div class="col-md-6 mb-3"><label>Year</label><input type="text" id="markYear" class="form-control" value="${getCurrentYear()}"></div></div>
@@ -6582,17 +6582,20 @@ window.openAddMarkModal = async function() {
     }
 };
 
+// ============================================
+// EDIT MARK
+// ============================================
+
 window.editMark = async function(id) {
     const mark = allMarksList.find(m => m.id === id);
     if (!mark) return;
     
     await loadSubjectsFromDB();
-    await loadStudentsForReport();
+    await loadAllMarks();
     
     const student = allStudentsList.find(s => s.id === mark.student_id);
     const isOlevel = currentLevel === 'olevel';
     
-    // Prepare subject options
     let subjectOptions = '';
     if (isOlevel) {
         subjectOptions = dbOlevelSubjects.map(s => `<option value="${s}" ${s === mark.subject ? 'selected' : ''}>${s}</option>`).join('');
@@ -6609,7 +6612,7 @@ window.editMark = async function(id) {
     
     if (isOlevel) {
         // ============================================
-        // O-LEVEL EDIT MARK (Ugandan Format)
+        // O-LEVEL EDIT MARK - U1, U2, U3 out of 20 WITH VALIDATION
         // ============================================
         Swal.fire({
             title: '<i class="fas fa-edit"></i> Edit Mark - O-Level',
@@ -6654,20 +6657,26 @@ window.editMark = async function(id) {
                     </div>
                     
                     <hr class="my-3">
-                    <h6 class="text-center fw-bold mb-3">📊 UNIT ASSESSMENTS (0-3 each)</h6>
+                    <h6 class="text-center fw-bold mb-3">📊 UNIT ASSESSMENTS (0-20 each)</h6>
                     
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label fw-bold">📘 Unit 1 (U1)</label>
-                            <input type="number" id="editU1" class="form-control" step="0.1" min="0" max="3" value="${mark.unit1 || 0}">
+                            <input type="number" id="editU1" class="form-control" 
+                                   step="0.5" min="0" max="20" value="${mark.unit1 || 0}"
+                                   oninput="validateUnitInput(this, 20)">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-bold">📗 Unit 2 (U2)</label>
-                            <input type="number" id="editU2" class="form-control" step="0.1" min="0" max="3" value="${mark.unit2 || 0}">
+                            <input type="number" id="editU2" class="form-control" 
+                                   step="0.5" min="0" max="20" value="${mark.unit2 || 0}"
+                                   oninput="validateUnitInput(this, 20)">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-bold">📙 Unit 3 (U3)</label>
-                            <input type="number" id="editU3" class="form-control" step="0.1" min="0" max="3" value="${mark.unit3 || 0}">
+                            <input type="number" id="editU3" class="form-control" 
+                                   step="0.5" min="0" max="20" value="${mark.unit3 || 0}"
+                                   oninput="validateUnitInput(this, 20)">
                         </div>
                     </div>
                     
@@ -6698,7 +6707,6 @@ window.editMark = async function(id) {
             confirmButtonText: '<i class="fas fa-save"></i> Update Mark',
             cancelButtonText: 'Cancel',
             didOpen: () => {
-                // Add real-time preview
                 const inputs = ['editU1', 'editU2', 'editU3', 'editExam80'];
                 inputs.forEach(id => {
                     const input = document.getElementById(id);
@@ -6714,8 +6722,9 @@ window.editMark = async function(id) {
                     const u3 = parseFloat(document.getElementById('editU3')?.value) || 0;
                     const exam80 = parseFloat(document.getElementById('editExam80')?.value) || 0;
                     
+                    // ✅ NEW CALCULATION: each unit is out of 20
                     const unitAvg = (u1 + u2 + u3) / 3;
-                    const total20 = (unitAvg / 3) * 20;
+                    const total20 = unitAvg;
                     let total100 = total20 + exam80;
                     total100 = Math.min(100, Math.max(0, total100));
                     const gradeInfo = getOlevelGradeDescriptor(total100);
@@ -6728,7 +6737,6 @@ window.editMark = async function(id) {
                     document.getElementById('previewDescriptor').innerText = gradeInfo.descriptor;
                 }
                 
-                // Initial preview
                 setTimeout(updateEditPreview, 100);
             },
             preConfirm: () => {
@@ -6754,9 +6762,9 @@ window.editMark = async function(id) {
                     return false;
                 }
                 
-                // Calculate totals
+                // ✅ NEW CALCULATION
                 const unitAvg = (u1 + u2 + u3) / 3;
-                const total20 = (unitAvg / 3) * 20;
+                const total20 = unitAvg;
                 let total100 = total20 + exam80;
                 total100 = Math.min(100, Math.max(0, total100));
                 
@@ -6809,7 +6817,7 @@ window.editMark = async function(id) {
         
     } else {
         // ============================================
-        // A-LEVEL EDIT MARK (Keep Original)
+        // A-LEVEL EDIT MARK
         // ============================================
         Swal.fire({
             title: 'Edit Mark - A-Level',
@@ -6851,8 +6859,6 @@ window.editMark = async function(id) {
         });
     }
 };
-
-
 
 // ============================================
 // HELPER FUNCTIONS (Dual Password)
@@ -6938,11 +6944,14 @@ async function verifyAdminOrSuperAdminPassword(action = 'this action') {
     });
 }
 
+// ============================================
+// DELETE MARK
+// ============================================
+
 window.deleteMark = async function(id) {
     const mark = allMarksList.find(m => m.id === id);
     if (!mark) return;
 
-    // First confirmation
     const confirmDelete = await Swal.fire({
         title: 'Delete Mark?',
         html: `<p>Are you sure you want to delete this mark record?</p>
@@ -6959,14 +6968,12 @@ window.deleteMark = async function(id) {
     });
     if (!confirmDelete.isConfirmed) return;
 
-    // Ask for password (Admin or Super Admin)
     const authorized = await verifyAdminOrSuperAdminPassword('deleting this mark');
     if (!authorized) {
         Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
         return;
     }
 
-    // Final confirmation
     const finalConfirm = await Swal.fire({
         title: '🔴 Final Confirmation',
         html: `<p>Authorization successful. Are you absolutely sure you want to delete this mark?</p>`,
@@ -6981,20 +6988,19 @@ window.deleteMark = async function(id) {
     Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
-        // ACTUAL DELETE OPERATION - THIS WAS MISSING!
         const { error } = await sb.from('marks').delete().eq('id', id);
-        
         if (error) throw error;
-        
         Swal.fire('Deleted!', 'Mark record has been deleted.', 'success');
         await loadMarksTable();
     } catch (error) {
         Swal.fire('Error!', error.message, 'error');
     }
 };
+
 // ============================================
-// BULK DELETE MARKS (Keep original)
+// BULK DELETE MARKS
 // ============================================
+
 window.bulkDeleteMarks = async function() {
     const checkboxes = document.querySelectorAll('.markCheck:checked');
     const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
@@ -7004,7 +7010,6 @@ window.bulkDeleteMarks = async function() {
         return;
     }
 
-    // First confirmation
     const confirmDelete = await Swal.fire({
         title: `Delete ${ids.length} mark records?`,
         html: `<p>You are about to delete <strong>${ids.length}</strong> mark records.</p>
@@ -7018,14 +7023,12 @@ window.bulkDeleteMarks = async function() {
     });
     if (!confirmDelete.isConfirmed) return;
 
-    // Ask for password (Admin or Super Admin)
     const authorized = await verifyAdminOrSuperAdminPassword('deleting marks');
     if (!authorized) {
         Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
         return;
     }
 
-    // Final confirmation with typing "DELETE"
     const finalConfirm = await Swal.fire({
         title: '🔴 FINAL CONFIRMATION',
         html: `<p>Authorization successful. Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> mark records.</p>`,
@@ -7051,8 +7054,7 @@ window.bulkDeleteMarks = async function() {
     });
     
     try {
-        // FIXED: Single batch delete instead of loop
-        const { error, count } = await sb
+        const { error } = await sb
             .from('marks')
             .delete()
             .in('id', ids);
@@ -7074,7 +7076,7 @@ window.bulkDeleteMarks = async function() {
 };
 
 // ============================================
-// EXPORT ALL MARKS (Keep original)
+// EXPORT ALL MARKS
 // ============================================
 
 window.exportAllMarks = async function() {
@@ -7117,7 +7119,7 @@ window.exportAllMarks = async function() {
 };
 
 // ============================================
-// FILTER MARKS TABLE (Keep original)
+// FILTER MARKS TABLE
 // ============================================
 
 window.filterMarksTable = function() {
@@ -7136,7 +7138,7 @@ window.filterMarksTable = function() {
 };
 
 // ============================================
-// REFRESH MARKS TABLE (Keep original)
+// REFRESH MARKS TABLE
 // ============================================
 
 window.refreshMarksTable = async function() {
@@ -7150,15 +7152,15 @@ window.refreshMarksTable = async function() {
 // INITIALIZATION
 // ============================================
 
-// Pre-load subjects when module initializes
 (async function initMarksModule() {
     await loadSubjectsFromDB();
-    console.log('✅ MARKS MODULE LOADED - Using subjects from database');
+    console.log('✅ MARKS MODULE LOADED - U1, U2, U3 out of 20 with validation');
     console.log(`   O-Level: ${dbOlevelSubjects.length} subjects`);
     console.log(`   A-Level Principal: ${dbAlevelPrincipalSubjects.length} subjects`);
     console.log(`   A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
-    console.log('✅ Save All works for both O-Level and A-Level');
-    console.log('✅ A-Level grading uses grading tabs from settings');
+    console.log('✅ U1, U2, U3 validation: min 0, max 20, step 0.5');
+    console.log('✅ Calculation: Unit Avg = (U1+U2+U3)/3, Total/20 = Unit Avg');
+    console.log('✅ Total/100 = Total/20 + Exam/80');
 })();
 
 
@@ -13348,8 +13350,7 @@ window.bulkDeleteAttendanceRecords = async function() {
 console.log('✅ Attendance Module Loaded - Table Working Properly');
 // ============================================
 // SCHOOL MANAGEMENT SYSTEM - REPORTS MODULE
-// FINAL MASTERPIECE
-// Complete Fee Calculation | Class Teacher | Academic Terms
+// COMPLETE & PERFECTED - NO DUPLICATE BUTTONS
 // ============================================
 
 // ============================================
@@ -13391,8 +13392,16 @@ function getCurrentDate() {
     });
 }
 
+function getOlevelGradeDescriptor(score) {
+    if (score >= 85) return { grade: 'A', descriptor: 'Exceptional' };
+    if (score >= 70) return { grade: 'B', descriptor: 'Outstanding' };
+    if (score >= 60) return { grade: 'C', descriptor: 'Satisfactory' };
+    if (score >= 40) return { grade: 'D', descriptor: 'Basic' };
+    return { grade: 'E', descriptor: 'Elementary' };
+}
+
 // ============================================
-// LOAD SCHOOL SETTINGS (includes class teachers)
+// LOAD SCHOOL SETTINGS
 // ============================================
 
 async function loadSchoolInfoForReport() {
@@ -13426,6 +13435,7 @@ async function loadSchoolInfoForReport() {
             school_address: 'Kampala, Uganda',
             school_phone: '+256 XXX XXX XXX',
             school_email: 'info@school.ug',
+            school_logo: '',
             principal_name: 'Principal',
             director_name: 'Director',
             bursar_name: 'Bursar'
@@ -13516,40 +13526,26 @@ async function loadFeeStructureForReport() {
 // GET TOTAL FEE FOR A STUDENT
 // ============================================
 
-// ============================================
-// FIXED: GET TOTAL FEE FOR A STUDENT (Works for A-Level with streams)
-// ============================================
-
 async function getTotalFeeForStudent(student) {
     if (!student) return 0;
     
-    // Normalize student type
     let studentType = student.student_type || 'Day';
     studentType = studentType.charAt(0).toUpperCase() + studentType.slice(1).toLowerCase();
     
-    // Build possible class names to try
     let possibleClassNames = [student.class];
     
-    // For A-Level, also try with stream appended
     if (currentLevel === 'alevel') {
         let stream = student.stream || 'Arts';
         stream = stream.charAt(0).toUpperCase() + stream.slice(1).toLowerCase();
-        
-        // Try "S.5 Arts" format
         possibleClassNames.push(`${student.class} ${stream}`);
-        
-        // Also try the class name as stored in fee_structure (might be like "S.5 Arts" already)
         if (student.class.includes(' ')) {
             possibleClassNames.push(student.class);
         }
     }
     
-    // Remove duplicates
     possibleClassNames = [...new Set(possibleClassNames)];
     
-    // Try to find fees
     let studentFees = [];
-    let matchedClassName = '';
     
     for (const className of possibleClassNames) {
         studentFees = feeStructureData.filter(f => 
@@ -13557,30 +13553,17 @@ async function getTotalFeeForStudent(student) {
             f.student_type === studentType
         );
         
-        if (studentFees.length > 0) {
-            matchedClassName = className;
-            break;
-        }
+        if (studentFees.length > 0) break;
     }
     
-    // If still no fees, try without student type filter
     if (studentFees.length === 0) {
         for (const className of possibleClassNames) {
             studentFees = feeStructureData.filter(f => f.class_name === className);
-            if (studentFees.length > 0) {
-                matchedClassName = className;
-                break;
-            }
+            if (studentFees.length > 0) break;
         }
     }
     
     const total = studentFees.reduce((sum, fee) => sum + (fee.amount || 0), 0);
-    
-    if (total === 0) {
-        console.warn(`No fee found for student ${student.name}. Tried class names:`, possibleClassNames);
-        console.log('Available fee structure classes:', [...new Set(feeStructureData.map(f => f.class_name))]);
-    }
-    
     return total;
 }
 
@@ -13724,7 +13707,7 @@ function getGradeAndPointsFromSettings(percentage, subjectName = '') {
         if (percentage >= rule.min_percentage && percentage <= rule.max_percentage) {
             return {
                 grade: rule.grade,
-                points: rule.points,
+                points: rule.points || 0,
                 color: rule.color_code || '#2ecc71',
                 remark: rule.remark || ''
             };
@@ -13757,22 +13740,33 @@ async function loadMarksForReport(studentId, exam, year) {
         
         if (error) throw error;
         
+        if (!data || data.length === 0) {
+            return [];
+        }
+        
         return (data || []).map(m => {
             let percentage;
+            let subjectName = m.subject || '';
+            
             if (currentLevel === 'olevel') {
                 const caScore = m.ca_score || 0;
                 const examScore = m.exam_score || 0;
                 percentage = calculateOlevelFinalScore(caScore, examScore);
             } else {
-                percentage = (m.marks_obtained / m.max_marks) * 100;
+                const maxMarks = m.max_marks || 100;
+                const obtained = m.marks_obtained || 0;
+                percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
             }
-            const gradeInfo = getGradeAndPointsFromSettings(percentage, m.subject);
+            
+            const gradeInfo = getGradeAndPointsFromSettings(percentage, subjectName);
+            
             return {
                 ...m,
                 percentage: percentage,
                 grade: gradeInfo.grade,
-                points: gradeInfo.points,
-                color: gradeInfo.color
+                points: gradeInfo.points || 0,
+                color: gradeInfo.color || '#6c757d',
+                subject: subjectName
             };
         });
     } catch (error) {
@@ -13782,14 +13776,62 @@ async function loadMarksForReport(studentId, exam, year) {
 }
 
 // ============================================
-// CALCULATE STUDENT FEE STATUS (CORRECT LOGIC)
-// Priority: 1. Past debts -> 2. Current term -> 3. Forward excess
+// LOAD O-LEVEL MARKS (SPECIAL FORMAT)
 // ============================================
 
+async function loadOlevelMarksForReport(studentId, exam, year) {
+    try {
+        const { data, error } = await sb
+            .from('marks')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam', exam)
+            .eq('year', year)
+            .eq('level', 'olevel');
+        
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            return [];
+        }
+        
+        return (data || []).map(m => {
+            const u1 = m.unit1 || 0;
+            const u2 = m.unit2 || 0;
+            const u3 = m.unit3 || 0;
+            const exam80 = m.exam_80 || 0;
+            const unitAvg = (u1 + u2 + u3) / 3;
+            const total20 = (unitAvg / 3) * 20;
+            let total100 = total20 + exam80;
+            total100 = Math.min(100, Math.max(0, total100));
+            const gradeInfo = getOlevelGradeDescriptor(total100);
+            
+            let unitDescriptor = 'Basic';
+            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
+            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
+            
+            return {
+                subject: m.subject,
+                u1, u2, u3,
+                avgUnit: unitAvg.toFixed(1),
+                identifier: Math.round(unitAvg),
+                unitDescriptor: unitDescriptor,
+                total20: total20.toFixed(1),
+                exam80: exam80,
+                total100: total100.toFixed(1),
+                grade: gradeInfo.grade,
+                descriptor: gradeInfo.descriptor,
+                teacher_initials: m.teacher_initials || ''
+            };
+        });
+    } catch (error) {
+        console.error('Error loading O-Level marks:', error);
+        return [];
+    }
+}
+
 // ============================================
-// FIXED: CALCULATE STUDENT FEE STATUS WITH PROPER CARRY FORWARD
-// Priority: 1. Past debts (previous years) -> 2. Previous terms (same year) -> 3. Current term
-// Excess from any term carries forward to next term
+// CALCULATE STUDENT FEE STATUS (FIXED)
 // ============================================
 
 async function calculateStudentFeeStatusForReport(studentId, targetYear, targetTerm) {
@@ -13816,14 +13858,10 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
         };
     }
     
-    const termOrder = ['Term 1', 'Term 2', 'Term 3'];
     const currentTermIndex = termOrder.indexOf(targetTerm);
     
-    // ============================================
     // STEP 1: Calculate balance from PREVIOUS YEARS
-    // ============================================
-    let previousYearsBalance = 0; // Positive = debt, Negative = credit
-    
+    let previousYearsBalance = 0;
     const allYears = [...new Set(allPaymentsList.filter(p => p.student_id === studentId).map(p => parseInt(p.year)))].sort();
     
     for (const year of allYears) {
@@ -13849,10 +13887,8 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const previousYearsDebt = previousYearsBalance > 0 ? previousYearsBalance : 0;
     const previousYearsCredit = previousYearsBalance < 0 ? Math.abs(previousYearsBalance) : 0;
     
-    // ============================================
     // STEP 2: Calculate balance from PREVIOUS TERMS in same year
-    // ============================================
-    let previousTermsBalance = 0; // Positive = debt, Negative = credit
+    let previousTermsBalance = 0;
     
     for (let i = 0; i < currentTermIndex; i++) {
         const prevTerm = termOrder[i];
@@ -13870,9 +13906,7 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     const previousTermsDebt = previousTermsBalance > 0 ? previousTermsBalance : 0;
     const previousTermsCredit = previousTermsBalance < 0 ? Math.abs(previousTermsBalance) : 0;
     
-    // ============================================
     // STEP 3: Get current term payments
-    // ============================================
     const currentTermPayments = allPaymentsList.filter(p => 
         p.student_id === studentId && 
         p.year === targetYear && 
@@ -13880,65 +13914,48 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
     );
     const currentTermPaid = currentTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     
-    // ============================================
     // STEP 4: Calculate TOTAL BALANCE BROUGHT FORWARD
-    // This is the amount the student owes from before this term
-    // ============================================
     const totalCarryForward = previousYearsBalance + previousTermsBalance;
     
-    // ============================================
     // STEP 5: Calculate what the student needs to pay this term
-    // If they have credit, it reduces what they owe
-    // ============================================
     let amountNeededForCurrentTerm = termFee;
     let remainingCredit = 0;
     
     if (totalCarryForward < 0) {
-        // Student has credit from before
         const creditAmount = Math.abs(totalCarryForward);
         if (creditAmount >= termFee) {
-            // Credit covers full term fee
             amountNeededForCurrentTerm = 0;
             remainingCredit = creditAmount - termFee;
         } else {
-            // Credit partially covers term fee
             amountNeededForCurrentTerm = termFee - creditAmount;
             remainingCredit = 0;
         }
     } else if (totalCarryForward > 0) {
-        // Student has debt from before - they need to pay that too
         amountNeededForCurrentTerm = termFee + totalCarryForward;
     }
     
-    // ============================================
     // STEP 6: Calculate current balance
-    // ============================================
     let balance = amountNeededForCurrentTerm - currentTermPaid;
     
-    // If there's remaining credit from before, it gets added to balance (negative = credit)
     if (remainingCredit > 0) {
         balance = balance - remainingCredit;
     }
     
-    // ============================================
-    // STEP 7: Calculate total expected and total paid for display
-    // ============================================
+    // STEP 7: Calculate total expected and total paid for display (FIXED)
     let totalExpected = termFee;
     let totalPaid = currentTermPaid;
     
-    // Apply previous credits if any
+    // Apply previous credits to reduce expected (not increase paid)
     if (previousYearsCredit > 0 || previousTermsCredit > 0) {
         const totalCredit = previousYearsCredit + previousTermsCredit;
-        totalPaid += totalCredit;
+        totalExpected = Math.max(0, totalExpected - totalCredit);
     }
     
     // Add previous debts to expected
     if (previousYearsDebt > 0) totalExpected += previousYearsDebt;
     if (previousTermsDebt > 0) totalExpected += previousTermsDebt;
     
-    // ============================================
     // STEP 8: Determine STATUS
-    // ============================================
     let status = '', statusColor = '', statusBadge = '';
     
     if (balance <= 0) {
@@ -13955,14 +13972,11 @@ async function calculateStudentFeeStatusForReport(studentId, targetYear, targetT
         statusBadge = '❌ Defaulter';
     }
     
-    // For display, make balance positive for "Due" and negative for "Credit"
-    const displayBalance = balance;
-    
     return {
         termFee: termFee,
         expected: totalExpected,
         paid: totalPaid,
-        balance: displayBalance,
+        balance: balance,
         previousYearsDebt: previousYearsDebt,
         previousYearsCredit: previousYearsCredit,
         previousTermsDebt: previousTermsDebt,
@@ -14094,146 +14108,119 @@ function getRemarkMessage(totalPoints, avgPercentage, division) {
 }
 
 // ============================================
-// GENERATE REPORT CARD HTML
+// GENERATE A-LEVEL REPORT CARD HTML
 // ============================================
 
-function generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
+// ============================================
+// GENERATE A-LEVEL REPORT CARD HTML - BLACK & WHITE
+// ============================================
+
+function generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
     let totalPoints = 0;
     let totalPercentage = 0;
     
     const subjectsHtml = marks.map(m => {
         let percentage = m.percentage;
         
-        totalPoints += m.points;
+        totalPoints += m.points || 0;
         totalPercentage += percentage;
         
-        if (currentLevel === 'olevel') {
-            const caScore = m.ca_score || 0;
-            const examScore = m.exam_score || 0;
-            return `
-                <tr style="border-bottom: 1px solid #e0e0e0;">
-                    <td style="padding: 10px 8px;"><strong>${escapeHtml(m.subject)}</strong></td>
-                    <td style="padding: 10px 8px; text-align: center;">${caScore.toFixed(1)}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${examScore.toFixed(1)}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${percentage.toFixed(1)}%</span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><span class="grade-badge" style="background: ${m.color};">${m.grade}</span></span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><strong>${m.points}</strong></span></td>
-                </tr>
-            `;
-        } else {
-            const finalScore = m.marks_obtained || 0;
-            const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
-            return `
-                <tr style="border-bottom: 1px solid #e0e0e0;">
-                    <td style="padding: 10px 8px;">
-                        <strong>${escapeHtml(m.subject)}</strong>
-                        ${isSubsidiary ? '<span class="badge bg-secondary ms-2" style="font-size: 10px;">Sub</span>' : ''}
-                    </span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${finalScore}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${m.max_marks}</span></td>
-                    <td style="padding: 10px 8px; text-align: center;">${percentage.toFixed(1)}%</span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><span class="grade-badge" style="background: ${m.color};">${m.grade}</span></span></td>
-                    <td style="padding: 10px 8px; text-align: center;"><strong>${m.points}</strong></span></td>
-                </tr>
-            `;
-        }
+        const finalScore = m.marks_obtained || 0;
+        const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
+        return `
+            <tr style="border-bottom: 1px solid #000;">
+                <td style="padding: 10px 8px; border: 1px solid #000;">
+                    <strong>${escapeHtml(m.subject)}</strong>
+                    ${isSubsidiary ? '<span style="background: #000; color: white; padding: 2px 8px; font-size: 10px; margin-left: 5px;">Sub</span>' : ''}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${finalScore}</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${m.max_marks}</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${percentage.toFixed(1)}%</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;"><span style="background: #000; color: white; padding: 4px 12px; font-weight: bold;">${m.grade}</span></td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;"><strong>${m.points}</strong></td>
+            </tr>
+        `;
     }).join('');
     
     const avgPercentage = marks.length > 0 ? (totalPercentage / marks.length).toFixed(1) : 0;
     const division = calculateGradeDivision(avgPercentage, totalPoints);
-    const levelName = currentLevel === 'olevel' ? 'UCE REPORT CARD' : 'UACE REPORT CARD';
+    const levelName = 'UACE REPORT CARD';
     
-    let universityEligibility = null;
-    let promotionStatus = null;
+    let universityEligibility = checkUniversityEligibility(totalPoints, marks);
     
-    if (currentLevel === 'alevel') {
-        universityEligibility = checkUniversityEligibility(totalPoints, marks);
-    } else if (exam === 'Term 3') {
-        promotionStatus = checkOlevelPromotion(avgPercentage, student.class);
-    }
+    const tableHeaders = `<tr style="background: #000; color: white;">
+        <th style="padding: 10px; border: 1px solid #000;">Subject</th>
+        <th style="padding: 10px; border: 1px solid #000;">Marks</th>
+        <th style="padding: 10px; border: 1px solid #000;">Max</th>
+        <th style="padding: 10px; border: 1px solid #000;">%</th>
+        <th style="padding: 10px; border: 1px solid #000;">Grade</th>
+        <th style="padding: 10px; border: 1px solid #000;">Points</th>
+    </tr>`;
     
-    const tableHeaders = currentLevel === 'olevel' 
-        ? `<tr style="background: #01605a; color: white;">
-            <th style="padding: 10px;">Subject</th>
-            <th style="padding: 10px;">CA</th>
-            <th style="padding: 10px;">Exam</th>
-            <th style="padding: 10px;">%</th>
-            <th style="padding: 10px;">Grade</th>
-            <th style="padding: 10px;">Points</th>
-            </tr>`
-        : `<tr style="background: #01605a; color: white;">
-            <th style="padding: 10px;">Subject</th>
-            <th style="padding: 10px;">Marks</th>
-            <th style="padding: 10px;">Max</th>
-            <th style="padding: 10px;">%</th>
-            <th style="padding: 10px;">Grade</th>
-            <th style="padding: 10px;">Points</th>
-            </tr>`;
-    
-    // Fee display section
+    // Fee display section - Black & White
     let feeDisplay = '';
     if (feeStatus && feeStatus.status !== 'NO_FEE') {
         feeDisplay = `
-            <div style="background: ${feeStatus.statusColor}20; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid ${feeStatus.statusColor};">
+            <div style="padding: 15px; border: 2px solid #000; margin-bottom: 20px;">
                 <table style="width: 100%; border: none; font-size: 13px;">
-                    <tr style="background: #01605a10;">
-                        <td colspan="3" style="padding: 8px; text-align: center; font-weight: bold;">💰 FEE STATEMENT FOR ${exam} ${year}</td>
+                    <tr style="background: #000; color: white;">
+                        <td colspan="3" style="padding: 8px; text-align: center; font-weight: bold; border: 1px solid #000;">FEE STATEMENT FOR ${exam} ${year}</td>
                     </tr>
                     <tr>
-                        <td style="width: 45%; padding: 6px;"><strong>Term Fee:</strong></td>
-                        <td style="width: 55%; padding: 6px;" colspan="2">${formatCurrency(feeStatus.termFee)}</span></td>
+                        <td style="width: 45%; padding: 6px; border: 1px solid #000;"><strong>Term Fee:</strong></td>
+                        <td style="width: 55%; padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.termFee)}</td>
                     </tr>
                     ${feeStatus.previousYearsDebt > 0 ? `
-                    <tr style="background: #fff3cd;">
-                        <td style="padding: 6px;"><strong>⚠️ Previous Years Debt:</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-danger">${formatCurrency(feeStatus.previousYearsDebt)}</span></td>
+                    <tr>
+                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Years Debt:</strong></td>
+                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousYearsDebt)}</td>
                     </tr>` : ''}
                     ${feeStatus.previousYearsCredit > 0 ? `
-                    <tr style="background: #d4edda;">
-                        <td style="padding: 6px;"><strong>✅ Previous Years Credit:</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-success">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</span></td>
+                    <tr>
+                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Years Credit:</strong></td>
+                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</td>
                     </tr>` : ''}
                     ${feeStatus.previousTermsDebt > 0 ? `
-                    <tr style="background: #fff3cd;">
-                        <td style="padding: 6px;"><strong>⚠️ Previous Terms Debt (${year}):</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-danger">${formatCurrency(feeStatus.previousTermsDebt)}</span></td>
+                    <tr>
+                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Terms Debt (${year}):</strong></td>
+                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousTermsDebt)}</td>
                     </tr>` : ''}
                     ${feeStatus.previousTermsCredit > 0 ? `
-                    <tr style="background: #d4edda;">
-                        <td style="padding: 6px;"><strong>✅ Previous Terms Credit (${year}):</strong></td>
-                        <td style="padding: 6px;" colspan="2" class="text-success">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</span></td>
+                    <tr>
+                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Terms Credit (${year}):</strong></td>
+                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</td>
                     </tr>` : ''}
-                    <tr style="border-top: 1px solid #ddd;">
-                        <td style="padding: 6px;"><strong>Total Expected:</strong></td>
-                        <td style="padding: 6px;" colspan="2">${formatCurrency(feeStatus.expected)}</span></td>
+                    <tr style="border-top: 2px solid #000;">
+                        <td style="padding: 6px; border: 1px solid #000;"><strong>Total Expected:</strong></td>
+                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.expected)}</td>
                     </tr>
                     <tr>
-                        <td style="padding: 6px;"><strong>Paid This Term:</strong></td>
-                        <td style="padding: 6px;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</span></td>
+                        <td style="padding: 6px; border: 1px solid #000;"><strong>Paid This Term:</strong></td>
+                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</td>
                     </tr>
-                    <tr style="border-top: 1px solid #ddd; background: ${feeStatus.balance > 0 ? '#f8d7da' : '#d4edda'}">
-                        <td style="padding: 8px;"><strong>💰 Current Balance:</strong></td>
-                        <td style="padding: 8px;" colspan="2">
-                            <strong class="${feeStatus.balance > 0 ? 'text-danger' : 'text-success'}">
+                    <tr style="border-top: 2px solid #000; background: #f0f0f0;">
+                        <td style="padding: 8px; border: 1px solid #000;"><strong>Current Balance:</strong></td>
+                        <td style="padding: 8px; border: 1px solid #000;" colspan="2">
+                            <strong>
                                 ${formatCurrency(Math.abs(feeStatus.balance))} ${feeStatus.balance > 0 ? '(Due)' : '(Credit - Carries Forward)'}
                             </strong>
-                        </span></td>
+                        </td>
                     </tr>
                     <tr>
-                        <td colspan="3" style="text-align: center; padding-top: 10px;">
-                            <span style="background: ${feeStatus.statusColor}; color: white; padding: 5px 15px; border-radius: 20px; font-size: 12px;">
+                        <td colspan="3" style="text-align: center; padding-top: 10px; border: 1px solid #000;">
+                            <span style="background: #000; color: white; padding: 5px 15px; font-size: 12px;">
                                 ${feeStatus.statusBadge}
                             </span>
-                        </span></td>
+                        </td>
                     </tr>
                 </table>
             </div>
         `;
     } else if (feeStatus && feeStatus.status === 'NO_FEE') {
         feeDisplay = `
-            <div style="background: #ffc10720; padding: 12px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+            <div style="padding: 12px; border: 2px solid #000; margin-bottom: 20px;">
                 <div style="text-align: center;">
-                    <strong>⚠️ No fee structure found for this student.</strong><br>
+                    <strong>No fee structure found for this student.</strong><br>
                     <small>Please add fee structure in Settings → Fee Structure tab.</small>
                 </div>
             </div>
@@ -14241,93 +14228,510 @@ function generateReportCardHTML(student, marks, exam, year, feeStatus, classTeac
     }
     
     return `
-        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1);">
-            ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.12; z-index: 0; width: 50%; max-width: 350px;">` : ''}
+        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border: 2px solid #000;">
             
             <div style="position: relative; z-index: 1; padding: 25px;">
-                <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px solid #01605a; padding-bottom: 15px;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-                        ${schoolInfo.school_logo ? `<img src="${schoolInfo.school_logo}" style="width: 60px; height: 60px; object-fit: contain;">` : ''}
+                <!-- HEADER - Black & White -->
+                <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px solid #000; padding-bottom: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 25px;">
+                        ${schoolInfo.school_logo ? 
+                            `<img src="${schoolInfo.school_logo}" style="width: 130px; height: 130px; object-fit: contain;">` : 
+                            `<div style="width: 130px; height: 130px; background: #000; display: flex; align-items: center; justify-content: center; font-size: 50px; color: white;">🏫</div>`
+                        }
                         <div>
-                            <h1 style="color: #01605a; margin: 0; font-size: 22px;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
-                            <p style="margin: 5px 0 0; font-style: italic;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
+                            <h1 style="color: #000; margin: 0; font-size: 28px; font-weight: bold;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
+                            <p style="margin: 5px 0 0; font-style: italic; font-size: 14px; color: #000;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
+                            <p style="margin: 5px 0 0; font-size: 12px; color: #000;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
                         </div>
                     </div>
-                    <p style="margin: 10px 0 0; font-size: 10px;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
                 </div>
                 
                 <div style="text-align: center; margin-bottom: 15px;">
-                    <h2 style="color: #ff862d; margin: 0; font-size: 18px;">${levelName}</h2>
-                    <p><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
+                    <h2 style="color: #000; margin: 0; font-size: 22px; font-weight: bold; text-decoration: underline;">${levelName}</h2>
+                    <p style="margin: 5px 0 0; font-size: 14px; color: #000;"><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
                 </div>
                 
-                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 20px;">
+                <!-- Student Info - Black & White -->
+                <div style="background: #f8f9fa; padding: 12px; border: 1px solid #000; margin-bottom: 20px;">
                     <table style="width: 100%; border: none;">
-                        <tr><td style="width: 50%;"><strong>Student:</strong> ${escapeHtml(student.name)}</span><td><strong>Admission No:</strong> ${student.admission_no || '-'}</span></tr>
-                        <tr><td><strong>Class:</strong> ${student.class}</span><td><strong>Stream:</strong> ${student.stream || '-'}</span></tr>
-                        <tr><td><strong>Type:</strong> ${student.student_type || 'Day'}</span><td><strong>Combination:</strong> ${student.combination || 'N/A'}</span></tr>
-                        <tr><td colspan="2"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</span></tr>
+                        <tr><td style="width: 50%; border: none;"><strong>Student:</strong> ${escapeHtml(student.name)}</td><td style="border: none;"><strong>Admission No:</strong> ${student.admission_no || '-'}</td></tr>
+                        <tr><td style="border: none;"><strong>Class:</strong> ${student.class}</td><td style="border: none;"><strong>Stream:</strong> ${student.stream || '-'}</td></tr>
+                        <tr><td style="border: none;"><strong>Type:</strong> ${student.student_type || 'Day'}</td><td style="border: none;"><strong>Combination:</strong> ${student.combination || 'N/A'}</td></tr>
+                        <tr><td colspan="2" style="border: none;"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</td></tr>
                     </table>
                 </div>
                 
                 ${feeDisplay}
                 
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <!-- Results Table - Black & White -->
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
                     <thead>${tableHeaders}</thead>
                     <tbody>${subjectsHtml}</tbody>
                     <tfoot>
-                        <tr style="background: #f0f0f0;">
-                            <td colspan="5" style="padding: 10px; text-align: right;"><strong>TOTAL / AVERAGE:</strong></td>
-                            <td style="padding: 10px; text-align: center;"><strong>${currentLevel === 'alevel' ? totalPoints + ' pts' : avgPercentage + '%'}</strong></td>
+                        <tr style="background: #000; color: white;">
+                            <td colspan="5" style="padding: 10px; text-align: right; border: 1px solid #000;"><strong>TOTAL / AVERAGE:</strong></td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #000;"><strong>${totalPoints + ' pts'}</strong></td>
                         </tr>
                     </tfoot>
                 </table>
                 
-                <div style="background: linear-gradient(135deg, #01605a, #ff862d); padding: 15px; border-radius: 10px; margin-bottom: 20px; color: white;">
-                    <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
-                        <div style="text-align: center;"><div style="font-size: 22px; font-weight: bold;">${currentLevel === 'alevel' ? totalPoints : avgPercentage}%</div><div style="font-size: 11px;">${currentLevel === 'alevel' ? 'POINTS' : 'AVERAGE'}</div></div>
-                        <div style="text-align: center;"><div style="font-size: 22px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 0 15px; border-radius: 30px;">${division.division}</div><div style="font-size: 11px;">DIVISION</div></div>
-                    </div>
-                </div>
-                
-                <div style="text-align: center; margin-bottom: 15px; padding: 8px; background: ${division.color}20; border-radius: 8px;">
-                    <strong>${division.name}:</strong> ${division.description}
-                </div>
-                
-                ${currentLevel === 'alevel' && universityEligibility ? `
-                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: ${universityEligibility.eligible ? '#d4edda' : '#f8d7da'}; color: ${universityEligibility.eligible ? '#155724' : '#721c24'};">
-                        <strong>🏛️ UNIVERSITY ELIGIBILITY: ${universityEligibility.eligible ? '✅ ELIGIBLE' : '❌ NOT ELIGIBLE'}</strong>
+                <!-- University Eligibility - Black & White -->
+                ${universityEligibility ? `
+                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border: 2px solid #000; background: ${universityEligibility.eligible ? '#f0f0f0' : '#f0f0f0'}; color: #000;">
+                        <strong>UNIVERSITY ELIGIBILITY: ${universityEligibility.eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}</strong>
                         ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets the minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
                     </div>
                 ` : ''}
                 
-                ${currentLevel === 'olevel' && promotionStatus ? `
-                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: ${promotionStatus.promoted ? '#d4edda' : '#f8d7da'}; color: ${promotionStatus.promoted ? '#155724' : '#721c24'};">
-                        <strong>🎓 PROMOTION STATUS: ${promotionStatus.promoted ? '✅ PROMOTED' : '❌ NOT PROMOTED'}</strong>
-                        <br><small>${promotionStatus.remarks} | Next Class: ${promotionStatus.next_class}</small>
-                    </div>
-                ` : ''}
-                
-                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ff862d;">
-                    <strong>📝 REMARKS:</strong>
-                    <p style="margin: 8px 0 0;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
+                <!-- Remarks - Black & White -->
+                <div style="background: #f8f9fa; padding: 12px; border-left: 4px solid #000; margin-bottom: 20px; border: 1px solid #000;">
+                    <strong>REMARKS:</strong>
+                    <p style="margin: 8px 0 0; color: #000;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
                 </div>
                 
+                <!-- Signatures - Black & White -->
                 <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>${escapeHtml(classTeacher)}<br><small>Class Teacher</small></div>
-                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}</div>
-                    <div style="text-align: center;"><div style="width: 150px; border-bottom: 1px solid #000; margin-bottom: 5px;"></div>Parent's Signature</div>
+                    <div style="text-align: center;">
+                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
+                        ${escapeHtml(classTeacher)}<br><small>Class Teacher</small>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
+                        ${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}<br><small>Head Teacher</small>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
+                        Parent's Signature
+                    </div>
                 </div>
-                
-                <div style="text-align: center; font-size: 9px; margin-top: 15px; color: #999;">System-generated report</div>
             </div>
         </div>
-        ${!isForPrint ? '<div class="text-center mt-3"><button class="btn btn-success" onclick="printReportCard()"><i class="fas fa-print"></i> Print Report</button></div>' : ''}
+        ${!isForPrint ? `
+        <div style="text-align: center; padding: 15px; margin-top: 20px; background: white; border-radius: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); position: sticky; bottom: 0; z-index: 100;">
+            <button class="btn btn-success btn-lg" onclick="printReportCard()" style="padding: 12px 50px; font-size: 18px; border-radius: 8px; font-weight: 600; background: #000; color: white; border: none;">
+                <i class="fas fa-print"></i> 🖨️ Print Report
+            </button>
+            <button class="btn btn-secondary btn-lg ms-2" onclick="closeReportPreview()" style="padding: 12px 30px; font-size: 18px; border-radius: 8px; background: #666; color: white; border: none;">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+        ` : ''}
+    `;
+}
+// ============================================
+// GENERATE O-LEVEL REPORT CARD HTML
+// ============================================
+
+// ============================================
+// GENERATE O-LEVEL REPORT CARD HTML - UPDATED
+// ============================================
+
+function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
+    let totalSum = 0;
+    for (const m of marks) totalSum += parseFloat(m.total100);
+    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
+    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
+    const currentDate = getCurrentDate();
+    
+    const subjectsHtml = marks.map(m => `
+        <tr>
+            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</td>
+        </tr>
+    `).join('');
+    
+    // REMOVED: promotionStatus - no longer displayed
+    
+    // Fee Status Display
+    let feeDisplay = '';
+    if (feeStatus && feeStatus.status !== 'NO_FEE') {
+        const balanceAmount = Math.abs(feeStatus.balance || 0);
+        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
+        
+        feeDisplay = `
+            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
+                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
+                    <div><strong>Balance:</strong> ${balanceText}</div>
+                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    const logoWatermark = schoolInfo.school_logo ? 
+        `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.12; z-index: 0; pointer-events: none; width: 55%; max-width: 400px;">
+            <img src="${schoolInfo.school_logo}" style="width: 100%; height: auto;">
+        </div>` : '';
+    
+    return `
+        <div class="report-container" style="max-width: 1300px; margin: 0 auto; background: white; position: relative; font-family: 'Times New Roman', Arial, sans-serif; border: 2px solid #000;">
+            ${logoWatermark}
+            
+            <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 25px;">
+                    ${schoolInfo.school_logo ? 
+                        // REMOVED: border-radius, border, padding - just plain image
+                        `<img src="${schoolInfo.school_logo}" style="height: 130px; width: 130px; object-fit: contain;">` : 
+                        `<span style="font-size: 55px;">🏫</span>`
+                    }
+                    <div>
+                        <h1 style="margin: 0; font-size: 28px; letter-spacing: 1px; color: #000000; font-weight: bold;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
+                        <p style="margin: 5px 0 0; font-size: 14px; font-style: italic; color: #555;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
+                        <p style="margin: 5px 0 0; font-size: 12px; color: #666;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
+                    </div>
+                </div>
+                <h2 style="margin: 15px 0 0; font-size: 22px; text-decoration: underline; color: #0a0502; font-weight: bold;">${exam} ASSESSMENT REPORT</h2>
+                <p style="margin: 3px 0 0; font-size: 14px; color: #555;">Year ${year} | ${currentDate}</p>
+            </div>
+            
+            <div style="margin: 15px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div><strong>Student:</strong> ${escapeHtml(student.name)}</div>
+                    <div><strong>Admission No:</strong> ${student.admission_no || '-'}</div>
+                    <div><strong>Class:</strong> ${student.class}</div>
+                    <div><strong>Stream:</strong> ${student.stream || '-'}</div>
+                    <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
+                </div>
+            </div>
+            
+            ${feeDisplay}
+            
+            <!-- REMOVED: Promotion Status Section -->
+            
+            <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">SUBJECT</th>
+                            <th colspan="3" style="border: 1px solid #000; padding: 8px;">UNIT SCORES</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">AVR</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">ID</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Descriptor</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Exam/80</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Total/100</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Grade</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Comment</th>
+                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Initials</th>
+                        </tr>
+                        <tr>
+                            <th style="border: 1px solid #000; padding: 6px;">U1</th>
+                            <th style="border: 1px solid #000; padding: 6px;">U2</th>
+                            <th style="border: 1px solid #000; padding: 6px;">U3</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${subjectsHtml}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
+                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
+                    <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
+                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
+                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
+                </div>
+            </div>
+            
+            <div style="margin: 0 20px 15px 20px;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+                    <thead>
+                        <tr><th colspan="4" style="border: 1px solid #000; padding: 6px; text-align: center;">GRADING SCALE</th></tr>
+                        <tr style="background: #f5f5f5;">
+                            <th style="border: 1px solid #000; padding: 5px;">Score</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Grade</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Descriptor</th>
+                            <th style="border: 1px solid #000; padding: 5px;">Interpretation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
+                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin: 0 20px 15px 20px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <div style="flex: 1;">
+                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
+                        <strong>CLASS TEACHER'S COMMENT</strong>
+                    </div>
+                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;"></div>
+                        <div style="text-align: right;">Signature: _________________</div>
+                        <div style="margin-top: 5px;">Name: ${escapeHtml(classTeacher)}</div>
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
+                        <strong>HEAD TEACHER'S COMMENT</strong>
+                    </div>
+                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;"></div>
+                        <div style="text-align: right;">Signature: _________________</div>
+                        <div style="margin-top: 5px;">Name: ${escapeHtml(schoolInfo.principal_name || 'HEAD TEACHER')}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin: 0 20px 20px 20px; padding: 10px; border: 1px solid #000; text-align: center; font-size: 11px; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <span>📅 Term ended: ${currentDate}</span>
+                    <span>🔹 Next Term Begins: _______________</span>
+                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
+                </div>
+            </div>
+        </div>
+        ${!isForPrint ? `
+        <div style="text-align: center; padding: 15px; margin-top: 20px; background: white; border-radius: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); position: sticky; bottom: 0; z-index: 100;">
+            <button class="btn btn-success btn-lg" onclick="printReportCard()" style="padding: 12px 50px; font-size: 18px; border-radius: 8px; font-weight: 600;">
+                <i class="fas fa-print"></i> 🖨️ Print Report
+            </button>
+            <button class="btn btn-secondary btn-lg ms-2" onclick="closeReportPreview()" style="padding: 12px 30px; font-size: 18px; border-radius: 8px;">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+        ` : ''}
     `;
 }
 
 // ============================================
-// PRINT SINGLE REPORT
+// GENERATE REPORT (AUTO-DETECT LEVEL)
+// ============================================
+
+window.generateReport = async function() {
+    const studentId = document.getElementById('reportStudent').value;
+    const exam = document.getElementById('reportExam').value;
+    const year = document.getElementById('reportYear').value;
+    
+    if (!studentId || !exam || !year) {
+        Swal.fire('Error', 'Please select student, term and year', 'error');
+        return;
+    }
+    
+    Swal.fire({ title: 'Generating Report...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        await loadSchoolInfoForReport();
+        await loadStudentsForReport();
+        await loadFeeStructureForReport();
+        await loadAllPaymentsForReport();
+        await loadGradingRulesForReport();
+        await loadUniversityEntryRequirements();
+        
+        const student = reportsStudentsList.find(s => s.id === studentId);
+        if (!student) throw new Error('Student not found');
+        
+        let marks, reportHtml, classTeacher = getClassTeacher(student);
+        const feeStatus = await calculateStudentFeeStatusForReport(studentId, year, exam);
+        
+        if (currentLevel === 'olevel') {
+            marks = await loadOlevelMarksForReport(studentId, exam, year);
+            if (marks.length === 0) {
+                Swal.fire('No Data', `No marks found for ${student.name} in ${exam} ${year}`, 'info');
+                return;
+            }
+            reportHtml = generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher);
+        } else {
+            marks = await loadMarksForReport(studentId, exam, year);
+            if (marks.length === 0) {
+                Swal.fire('No Data', `No marks found for ${student.name} in ${exam} ${year}`, 'info');
+                return;
+            }
+            reportHtml = generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher);
+        }
+        
+        document.getElementById('reportPreview').innerHTML = reportHtml;
+        document.getElementById('reportPreview').style.display = 'block';
+        Swal.close();
+        document.getElementById('reportPreview').scrollIntoView({ behavior: 'smooth' });
+        
+    } catch (error) {
+        Swal.close();
+        Swal.fire('Error', error.message, 'error');
+    }
+};
+
+// ============================================
+// GENERATE BULK REPORTS (FIXED FOR BOTH LEVELS)
+// ============================================
+
+window.generateBulkReports = async function() {
+    const className = document.getElementById('bulkClass').value;
+    const stream = document.getElementById('bulkStream').value;
+    const exam = document.getElementById('bulkExam').value;
+    const year = document.getElementById('bulkYear').value;
+    
+    if (!className || !exam || !year) {
+        Swal.fire('Error', 'Please select class, term and year', 'error');
+        return;
+    }
+    
+    Swal.fire({ 
+        title: 'Generating Bulk Reports...', 
+        text: 'Please wait while we prepare all reports',
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    try {
+        await loadSchoolInfoForReport();
+        await loadStudentsForReport();
+        await loadFeeStructureForReport();
+        await loadAllPaymentsForReport();
+        await loadGradingRulesForReport();
+        await loadUniversityEntryRequirements();
+        
+        let query = sb.from('students').select('*').eq('class', className);
+        if (stream && stream !== '') {
+            query = query.eq('stream', stream);
+        }
+        
+        const { data: students, error: studentError } = await query;
+        if (studentError) throw studentError;
+        
+        if (!students || students.length === 0) {
+            Swal.fire('No Students', 'No students found for this class/stream', 'info');
+            return;
+        }
+        
+        const allReports = [];
+        let processedCount = 0;
+        
+        for (const student of students) {
+            try {
+                let marks;
+                const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
+                const classTeacher = getClassTeacher(student);
+                
+                if (currentLevel === 'olevel') {
+                    marks = await loadOlevelMarksForReport(student.id, exam, year);
+                } else {
+                    marks = await loadMarksForReport(student.id, exam, year);
+                }
+                
+                if (marks.length > 0) {
+                    allReports.push({ student, marks, feeStatus, classTeacher });
+                }
+                
+                processedCount++;
+                if (processedCount % 5 === 0) {
+                    Swal.update({ text: `Processed ${processedCount}/${students.length} students...` });
+                }
+            } catch (err) {
+                console.error(`Error processing student ${student.name}:`, err);
+            }
+        }
+        
+        if (allReports.length === 0) {
+            Swal.fire('No Data', 'No marks found for any students', 'info');
+            return;
+        }
+        
+        Swal.close();
+        
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            Swal.fire({
+                title: 'Popup Blocked!',
+                html: 'Please allow popups for this website to print reports.',
+                icon: 'warning',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+        
+        let allReportsHtml = '';
+        let reportCount = 0;
+        
+        for (const report of allReports) {
+            const { student, marks, feeStatus, classTeacher } = report;
+            
+            if (currentLevel === 'olevel') {
+                allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, true);
+            } else {
+                allReportsHtml += generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, true);
+            }
+            
+            reportCount++;
+            if (reportCount < allReports.length) {
+                allReportsHtml += '<div style="page-break-before: always;"></div>';
+            }
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Bulk Reports - ${className} ${stream ? '- ' + stream : ''}</title>
+                <style>
+                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
+                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; font-size: 12px; background: white; }
+                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #ddd; padding: 8px; }
+                    .report-container { margin: 0 auto; max-width: 1000px; }
+                    .text-danger { color: #dc3545; }
+                    .text-success { color: #28a745; }
+                </style>
+            </head>
+            <body>
+                <div class="no-print" style="text-align: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4>📄 Bulk Reports - ${className} ${stream ? '(' + stream + ')' : ''}</h4>
+                    <p style="margin-bottom: 10px;">Total Reports: ${allReports.length} | ${exam} ${year}</p>
+                    <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px; margin-right: 10px;">
+                        🖨️ Print All (${allReports.length})
+                    </button>
+                    <button onclick="window.close()" style="padding: 10px 30px; font-size: 16px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 5px;">
+                        ❌ Close
+                    </button>
+                </div>
+                ${allReportsHtml}
+                <div class="no-print" style="text-align: center; margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <p>End of Reports - ${allReports.length} Reports Generated</p>
+                    <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px;">
+                        🖨️ Print All
+                    </button>
+                </div>
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        
+        Swal.fire({
+            title: '✅ Success!',
+            html: `${allReports.length} reports generated for ${className} ${stream ? '(' + stream + ')' : ''}<br><br>
+                   <small>Click "Print All" in the new window to print all reports.</small>`,
+            icon: 'success',
+            timer: 3000,
+            timerProgressBar: true
+        });
+        
+    } catch (error) {
+        Swal.close();
+        console.error('Bulk report error:', error);
+        Swal.fire('Error', 'Failed to generate bulk reports: ' + error.message, 'error');
+    }
+};
+
+// ============================================
+// PRINT REPORT CARD
 // ============================================
 
 window.printReportCard = function() {
@@ -14337,10 +14741,8 @@ window.printReportCard = function() {
         return;
     }
     
-    // Try to open print window
     const printWindow = window.open('', '_blank');
     
-    // Check if popup was blocked
     if (!printWindow) {
         Swal.fire({
             title: 'Popup Blocked!',
@@ -14375,7 +14777,6 @@ window.printReportCard = function() {
         `);
         printWindow.document.close();
         
-        // Small delay to ensure content is loaded
         setTimeout(function() {
             printWindow.print();
             printWindow.onafterprint = function() {
@@ -14385,263 +14786,18 @@ window.printReportCard = function() {
         
     } catch (error) {
         console.error('Print error:', error);
-
         Swal.fire('Print Error', 'Could not print the report. Please try again.', 'error');
     }
 };
 
 // ============================================
-// GENERATE SINGLE REPORT
+// CLOSE REPORT PREVIEW
 // ============================================
 
-window.generateSingleReport = async function() {
-    const studentId = document.getElementById('reportStudent').value;
-    const exam = document.getElementById('reportExam').value;
-    const year = document.getElementById('reportYear').value;
-    
-    if (!studentId) {
-        Swal.fire('Error', 'Please select a student', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Generating Report...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadGradingRulesForReport();
-        await loadUniversityEntryRequirements();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        await loadSchoolInfoForReport();
-        
-        const student = reportsStudentsList.find(s => s.id === studentId);
-        const marks = await loadMarksForReport(studentId, exam, year);
-        const feeStatus = await calculateStudentFeeStatusForReport(studentId, year, exam);
-        const classTeacher = getClassTeacher(student);
-        
-        if (marks.length === 0) {
-            Swal.fire('No Data', `No marks found for ${student?.name} in ${exam} ${year}`, 'info');
-            return;
-        }
-        
-        const reportHtml = generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher);
-        document.getElementById('reportPreview').innerHTML = reportHtml;
-        document.getElementById('reportPreview').style.display = 'block';
-        Swal.close();
-        
-        document.getElementById('reportPreview').scrollIntoView({ behavior: 'smooth' });
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
-};
-
-// ============================================
-// GENERATE BULK REPORTS
-// ============================================
-
-window.generateBulkReports = async function() {
-    const className = document.getElementById('bulkClass').value;
-    const stream = document.getElementById('bulkStream').value;
-    const exam = document.getElementById('bulkExam').value;
-    const year = document.getElementById('bulkYear').value;
-    
-    if (!className) {
-        Swal.fire('Error', 'Please select a class', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadGradingRulesForReport();
-        await loadUniversityEntryRequirements();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        await loadSchoolInfoForReport();
-        
-        let query = sb.from('students').select('*').eq('class', className);
-        if (stream) query = query.eq('stream', stream);
-        
-        const { data: students, error: studentError } = await query;
-        if (studentError) throw studentError;
-        
-        if (!students || students.length === 0) {
-            Swal.fire('No Students', 'No students found', 'info');
-            return;
-        }
-        
-        const allReports = [];
-        for (const student of students) {
-            const marks = await loadMarksForReport(student.id, exam, year);
-            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
-            const classTeacher = getClassTeacher(student);
-            if (marks.length > 0) {
-                allReports.push({ student, marks, feeStatus, classTeacher });
-            }
-        }
-        
-        if (allReports.length === 0) {
-            Swal.fire('No Data', 'No marks found', 'info');
-            return;
-        }
-        
-        const printWindow = window.open('', '_blank');
-        let allReportsHtml = '';
-        
-        for (let i = 0; i < allReports.length; i++) {
-            const { student, marks, feeStatus, classTeacher } = allReports[i];
-            allReportsHtml += generateReportCardHTML(student, marks, exam, year, feeStatus, classTeacher, true);
-            if (i < allReports.length - 1) {
-                allReportsHtml += '<div style="page-break-before: always;"></div>';
-            }
-        }
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Bulk Reports - ${className}</title>
-                <style>
-                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
-                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; font-size: 12px; }
-                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #ddd; padding: 8px; }
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
-                    <button onclick="window.print()">🖨️ Print All</button>
-                    <button onclick="window.close()">❌ Close</button>
-                </div>
-                ${allReportsHtml}
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        Swal.close();
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
-};
-
-// Add this new function - for O-Level only
-window.generateBulkOlevelReports = async function() {
-    const className = document.getElementById('bulkClass').value;
-    const stream = document.getElementById('bulkStream').value;
-    const exam = document.getElementById('bulkExam').value;
-    const year = document.getElementById('bulkYear').value;
-    
-    if (!className) {
-        Swal.fire('Error', 'Please select a class', 'error');
-        return;
-    }
-    if (!exam) {
-        Swal.fire('Error', 'Please select a term/exam', 'error');
-        return;
-    }
-    if (!year) {
-        Swal.fire('Error', 'Please enter a year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadSchoolInfoForReport();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        
-        let query = sb.from('students').select('*').eq('class', className);
-        if (stream && stream !== '') query = query.eq('stream', stream);
-        
-        const { data: students, error: studentError } = await query;
-        if (studentError) throw studentError;
-        
-        if (!students || students.length === 0) {
-            Swal.fire('No Students', 'No students found', 'info');
-            return;
-        }
-        
-        const allReports = [];
-        for (const student of students) {
-            // Use O-Level marks loader
-            const marks = await loadOlevelMarksForReport(student.id, exam, year);
-            const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
-            const classTeacher = getClassTeacher(student);
-            if (marks.length > 0) {
-                allReports.push({ student, marks, feeStatus, classTeacher });
-            }
-        }
-        
-        if (allReports.length === 0) {
-            Swal.fire('No Data', 'No marks found for these students', 'info');
-            return;
-        }
-        
-        const printWindow = window.open('', '_blank');
-        let allReportsHtml = '';
-        
-        for (let i = 0; i < allReports.length; i++) {
-            const { student, marks, feeStatus, classTeacher } = allReports[i];
-            // Use O-Level report generator
-            allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus);
-            if (i < allReports.length - 1) {
-                allReportsHtml += '<div style="page-break-before: always;"></div>';
-            }
-        }
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Bulk O-Level Reports - ${className}</title>
-                <style>
-                    @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
-                    body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; }
-                    .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #000; padding: 8px; }
-                    .report-container { margin: 0 auto; border: 1px solid #000; }
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="text-align: center; margin-bottom: 20px;">
-                    <button onclick="window.print()">🖨️ Print All</button>
-                    <button onclick="window.close()">❌ Close</button>
-                </div>
-                ${allReportsHtml}
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        Swal.close();
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
+window.closeReportPreview = function() {
+    document.getElementById('reportPreview').style.display = 'none';
+    document.getElementById('reportPreview').innerHTML = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 // ============================================
@@ -14662,15 +14818,20 @@ async function renderReports() {
         : ['S.5', 'S.6'];
     
     const currentYear = new Date().getFullYear();
+    const levelLabel = currentLevel === 'olevel' ? 'O-Level' : 'A-Level';
     
     return `
         <div class="card shadow-sm mb-3">
             <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-file-alt"></i> Student Report Card</h5>
+                <h5 class="mb-0"><i class="fas fa-file-alt"></i> ${levelLabel} Report Card System</h5>
                 <small>Complete Academic & Financial Report | Fee Calculation: Past Debts → Current Term → Forward Credit</small>
             </div>
             <div class="card-body">
+                <!-- SINGLE STUDENT REPORT -->
                 <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-graduate"></i> Single Student Report</h6>
+                    </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold">Select Student</label>
                         <select id="reportStudent" class="form-select">
@@ -14691,21 +14852,25 @@ async function renderReports() {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-bold">Year</label>
-                        <input type="text" id="reportYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
+                        <input type="number" id="reportYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
                     </div>
                     <div class="col-md-2">
-    <label class="form-label fw-bold">&nbsp;</label>
-    <button class="btn btn-primary w-100" onclick="${currentLevel === 'olevel' ? 'generateOlevelReport()' : 'generateSingleReport()'}">
-        <i class="fas fa-file-alt"></i> Generate
-    </button>
-</div>
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button class="btn btn-primary w-100" onclick="generateReport()">
+                            <i class="fas fa-file-alt"></i> Generate
+                        </button>
+                    </div>
                 </div>
                 
                 <hr>
                 
+                <!-- BULK REPORTS -->
                 <div class="row">
+                    <div class="col-12">
+                        <h6 class="fw-bold text-success mb-3"><i class="fas fa-print"></i> Bulk Reports (Print All Students)</h6>
+                    </div>
                     <div class="col-md-3">
-                        <label class="form-label fw-bold">Bulk Class</label>
+                        <label class="form-label fw-bold">Class</label>
                         <select id="bulkClass" class="form-select">
                             <option value="">-- Select Class --</option>
                             ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
@@ -14736,13 +14901,13 @@ async function renderReports() {
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-bold">Year</label>
-                        <input type="text" id="bulkYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
+                        <input type="number" id="bulkYear" class="form-control" value="${currentYear}" placeholder="e.g., 2026">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-bold">&nbsp;</label>
-                       <button class="btn btn-info w-100" onclick="${currentLevel === 'olevel' ? 'generateBulkOlevelReports()' : 'generateBulkReports'}">
-    <i class="fas fa-print"></i> Print Bulk
-</button>
+                        <button class="btn btn-info w-100" onclick="generateBulkReports()">
+                            <i class="fas fa-print"></i> Print Bulk
+                        </button>
                     </div>
                 </div>
             </div>
@@ -14751,305 +14916,20 @@ async function renderReports() {
         <div id="reportPreview" style="display: none;"></div>
     `;
 }
-// ============================================
-// NEW O-LEVEL REPORT FUNCTIONS (Image Format)
-// A-Level functions remain UNCHANGED
-// ============================================
-
-// Helper: Get descriptor for O-Level
-function getOlevelDescriptor(avg) {
-    if (avg >= 0.9 && avg <= 1.4) return 'BASIC';
-    if (avg >= 1.5 && avg <= 2.4) return 'MODERATE';
-    if (avg >= 2.5 && avg <= 3.0) return 'OUTSTANDING';
-    return 'BASIC';
-}
-
-// Load O-Level marks with A1, A2 format
-async function loadOlevelMarksForReport(studentId, exam, year) {
-    try {
-        const { data, error } = await sb
-            .from('marks')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('exam', exam)
-            .eq('year', year)
-            .eq('level', 'olevel');
-        
-        if (error) throw error;
-        
-        return (data || []).map(m => {
-            const u1 = m.unit1 || 0;
-            const u2 = m.unit2 || 0;
-            const u3 = m.unit3 || 0;
-            const exam80 = m.exam_80 || 0;
-            const unitAvg = (u1 + u2 + u3) / 3;
-            const total20 = (unitAvg / 3) * 20;
-            let total100 = total20 + exam80;
-            total100 = Math.min(100, Math.max(0, total100));
-            const gradeInfo = getOlevelGradeDescriptor(total100);
-            
-            let unitDescriptor = 'Basic';
-            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
-            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
-            
-            return {
-                subject: m.subject,
-                u1, u2, u3,
-                avgUnit: unitAvg.toFixed(1),
-                identifier: Math.round(unitAvg),
-                unitDescriptor: unitDescriptor,
-                total20: total20.toFixed(1),
-                exam80: exam80,
-                total100: total100.toFixed(1),
-                grade: gradeInfo.grade,
-                descriptor: gradeInfo.descriptor,
-                teacher_initials: m.teacher_initials || ''
-            };
-        });
-    } catch (error) {
-        console.error('Error loading O-Level marks:', error);
-        return [];
-    }
-}
-// Generate O-Level report card HTML (Image Format)
-function generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus) {
-    let totalSum = 0;
-    for (const m of marks) totalSum += parseFloat(m.total100);
-    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
-    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
-    const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    
-    const subjectsHtml = marks.map(m => `
-        <tr>
-            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</span>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</span>
-        </tr>
-    `).join('');
-    
-    // Fee Status Display
-    let feeDisplay = '';
-    if (feeStatus) {
-        const balanceAmount = Math.abs(feeStatus.balance || 0);
-        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
-        
-        feeDisplay = `
-            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
-                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
-                    <div><strong>Balance:</strong> ${balanceText}</div>
-                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Large watermark logo
-    const logoWatermark = schoolInfo.school_logo ? 
-        `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: 0; pointer-events: none;">
-            <img src="${schoolInfo.school_logo}" style="width: 700px; max-width: 70vw; height: auto;">
-        </div>` : '';
-    
-    return `
-        <div class="report-container" style="max-width: 1300px; margin: 0 auto; background: white; position: relative; font-family: 'Times New Roman', Arial, sans-serif; border: 2px solid #000;">
-            
-            <!-- Large Watermark Logo Background -->
-            ${logoWatermark}
-            
-            <!-- CLEAN SIMPLE HEADER - ONE LINE, NO EXTRA BORDERS -->
-            <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-                    ${schoolInfo.school_logo ? 
-                        `<img src="${schoolInfo.school_logo}" style="height: 70px; width: 70px; object-fit: contain;">` : 
-                        `<span style="font-size: 35px;">🏫</span>`
-                    }
-                    <div>
-                        <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">${escapeHtml(schoolInfo.school_name || 'KIDIKI SECONDARY SCHOOL')}</h1>
-                        <p style="margin: 3px 0 0; font-size: 11px;">${escapeHtml(schoolInfo.school_address || 'P.O BOX 2815, KAMULI')} | Tel: ${escapeHtml(schoolInfo.school_phone || '0758 918361')}</p>
-                    </div>
-                </div>
-                <h2 style="margin: 10px 0 0; font-size: 18px; text-decoration: underline;">${exam} ASSESSMENT REPORT</h2>
-                <p style="margin: 3px 0 0; font-size: 12px;">Year ${year} | ${currentDate}</p>
-            </div>
-            
-            <!-- Student Info - Clean horizontal layout -->
-            <div style="margin: 15px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <div><strong>Student:</strong> ${escapeHtml(student.name)}</div>
-                    <div><strong>Admission No:</strong> ${student.admission_no || '-'}</div>
-                    <div><strong>Class:</strong> ${student.class}</div>
-                    <div><strong>Stream:</strong> ${student.stream || '-'}</div>
-                    <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
-                </div>
-            </div>
-            
-            <!-- Fee Statement -->
-            ${feeDisplay}
-            
-            <!-- Main Results Table -->
-            <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">SUBJECT</th>
-                            <th colspan="3" style="border: 1px solid #000; padding: 8px;">UNIT SCORES</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">AVR</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">ID</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Descriptor</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Exam/80</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Total/100</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Grade</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Comment</th>
-                            <th rowspan="2" style="border: 1px solid #000; padding: 8px;">Initials</th>
-                        </tr>
-                        <tr>
-                            <th style="border: 1px solid #000; padding: 6px;">U1</th>
-                            <th style="border: 1px solid #000; padding: 6px;">U2</th>
-                            <th style="border: 1px solid #000; padding: 6px;">U3</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${subjectsHtml}
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Overall Achievement - Clean -->
-            <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
-                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
-                    <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
-                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
-                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
-                </div>
-            </div>
-            
-            <!-- Grading Scale - Compact -->
-            <div style="margin: 0 20px 15px 20px;">
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
-                    <thead>
-                        <tr><th colspan="4" style="border: 1px solid #000; padding: 6px; text-align: center;">GRADING SCALE</th></tr>
-                        <tr style="background: #f5f5f5;">
-                            <th style="border: 1px solid #000; padding: 5px;">Score</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Grade</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Descriptor</th>
-                            <th style="border: 1px solid #000; padding: 5px;">Interpretation</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Comments Section - Simple -->
-            <div style="margin: 0 20px 15px 20px; display: flex; gap: 15px; flex-wrap: wrap;">
-                <div style="flex: 1;">
-                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
-                        <strong>CLASS TEACHER'S COMMENT</strong>
-                    </div>
-                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
-                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
-                        <div style="text-align: right;">Signature: _________________</div>
-                        <div style="margin-top: 5px;">Name: ${escapeHtml(classTeacher)}</div>
-                    </div>
-                </div>
-                <div style="flex: 1;">
-                    <div style="border: 1px solid #000; padding: 8px; background: #f5f5f5;">
-                        <strong>HEAD TEACHER'S COMMENT</strong>
-                    </div>
-                    <div style="border: 1px solid #000; border-top: none; padding: 12px; min-height: 60px;">
-                        <div style="border-bottom: 1px solid #000; margin-bottom: 8px; padding-bottom: 5px;">_________________________________________</div>
-                        <div style="text-align: right;">Signature: _________________</div>
-                        <div style="margin-top: 5px;">Name: ${escapeHtml(schoolInfo.principal_name || 'HEAD TEACHER')}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Footer -->
-            <div style="margin: 0 20px 20px 20px; padding: 10px; border: 1px solid #000; text-align: center; font-size: 11px; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <span>📅 Term ended: ${currentDate}</span>
-                    <span>🔹 Next Term Begins: _______________</span>
-                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
-                </div>
-            </div>
-        </div>
-        <div class="text-center mt-3 no-print" style="margin-bottom: 30px;">
-            <button class="btn btn-primary" onclick="window.printReportCard()" style="padding: 10px 30px; font-size: 16px;">
-                <i class="fas fa-print"></i> Print Report
-            </button>
-        </div>
-    `;
-}
-// NEW O-Level generate function
-window.generateOlevelReport = async function() {
-    const studentId = document.getElementById('reportStudent').value;
-    const exam = document.getElementById('reportExam').value;
-    const year = document.getElementById('reportYear').value;
-    
-    if (!studentId || !exam || !year) {
-        Swal.fire('Error', 'Please select student, term and year', 'error');
-        return;
-    }
-    
-    Swal.fire({ title: 'Generating Report...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        await loadSchoolInfoForReport();
-        await loadStudentsForReport();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
-        
-        const student = reportsStudentsList.find(s => s.id === studentId);
-        if (!student) throw new Error('Student not found');
-        
-        const marks = await loadOlevelMarksForReport(studentId, exam, year);
-        
-        if (marks.length === 0) {
-            Swal.fire('No Data', `No marks found for ${student.name} in ${exam} ${year}. Please enter marks first.`, 'info');
-            return;
-        }
-        
-        const feeStatus = await calculateStudentFeeStatusForReport(studentId, year, exam);
-        const classTeacher = getClassTeacher(student);
-        const reportHtml = generateOlevelReportHTML(student, marks, exam, year, classTeacher, schoolInfo, feeStatus);
-        
-        document.getElementById('reportPreview').innerHTML = reportHtml;
-        document.getElementById('reportPreview').style.display = 'block';
-        Swal.close();
-        document.getElementById('reportPreview').scrollIntoView({ behavior: 'smooth' });
-        
-    } catch (error) {
-        Swal.close();
-        Swal.fire('Error', error.message, 'error');
-    }
-};
 
 // ============================================
 // INITIALIZATION
 // ============================================
 
-console.log('✅ Reports Module Loaded - Final Masterpiece');
+console.log('✅ Reports Module Loaded - Complete & Perfected');
+console.log('✅ Supports both O-Level and A-Level');
 console.log('✅ Fee Calculation: Past Debts → Current Term → Forward Credit');
 console.log('✅ Class Teacher from School Settings');
-
+console.log('✅ No Duplicate Buttons');
 // ============================================
-// PROMOTION MODULE - NO STATISTICS CARDS
-// Clean and simple - Just the table
+// PROMOTION MODULE - AUTO-LOAD TABLE
+// New Curriculum: Students don't fail, just promote
+// Table loads automatically when page opens
 // ============================================
 
 // Global variables
@@ -15057,7 +14937,7 @@ let promotionStudentsList = [];
 let promotionClasses = [];
 
 // ============================================
-// LOAD STUDENTS FOR PROMOTION - FILTER BY LEVEL
+// LOAD STUDENTS FOR PROMOTION
 // ============================================
 
 async function loadPromotionStudents() {
@@ -15074,15 +14954,8 @@ async function loadPromotionStudents() {
             .order('name', { ascending: true });
         
         if (error) throw error;
-        
-        let filteredData = data || [];
-        if (currentLevel) {
-            filteredData = filteredData.filter(s => s.level === currentLevel);
-        }
-        
-        promotionStudentsList = filteredData;
+        promotionStudentsList = data || [];
         promotionClasses = [...new Set(promotionStudentsList.map(s => s.class))].sort();
-        
         return promotionStudentsList;
     } catch (error) {
         console.error('Error loading students:', error);
@@ -15095,48 +14968,29 @@ async function loadPromotionStudents() {
 // ============================================
 
 function getNextClass(currentClass) {
-    if (currentLevel === 'olevel') {
-        const classMap = {
-            'S.1': 'S.2',
-            'S.2': 'S.3',
-            'S.3': 'S.4',
-            'S.4': 'S.5'
-        };
-        return classMap[currentClass] || currentClass;
-    } else {
-        const classMap = {
-            'S.5': 'S.6',
-            'S.6': 'Completed'
-        };
-        return classMap[currentClass] || currentClass;
-    }
+    const classMap = {
+        'S.1': 'S.2',
+        'S.2': 'S.3',
+        'S.3': 'S.4',
+        'S.4': 'S.5',
+        'S.5': 'S.6',
+        'S.6': 'Completed'
+    };
+    return classMap[currentClass] || currentClass;
 }
 
 // ============================================
-// CHECK IF STUDENT IS IN FINAL CLASS
-// ============================================
-
-function isFinalClass(studentClass) {
-    if (currentLevel === 'olevel') {
-        return studentClass === 'S.4';
-    } else {
-        return studentClass === 'S.6';
-    }
-}
-
-// ============================================
-// RENDER PROMOTION PAGE - NO CARDS
+// RENDER PROMOTION PAGE - WITH AUTO-LOAD
 // ============================================
 
 async function renderPromotion() {
+    // Load students FIRST before rendering
     await loadPromotionStudents();
-    
-    const levelName = currentLevel === 'olevel' ? 'O-Level' : 'A-Level';
     
     return `
         <div class="card shadow-sm mb-3">
             <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-arrow-up"></i> Student Promotion - ${levelName}</h5>
+                <h5 class="mb-0"><i class="fas fa-arrow-up"></i> Student Promotion</h5>
                 <small>New Curriculum: All students are promoted to the next class</small>
             </div>
             <div class="card-body">
@@ -15151,12 +15005,6 @@ async function renderPromotion() {
                         <button class="btn btn-secondary ms-2" onclick="refreshPromotionTable()">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
-                        <span class="ms-3 text-muted">
-                            <i class="fas fa-info-circle"></i> 
-                            ${currentLevel === 'olevel' ? 
-                                'Students from S.4 will be promoted to S.5 (A-Level)' : 
-                                'Students from S.6 will be marked as Completed'}
-                        </span>
                     </div>
                 </div>
             </div>
@@ -15195,33 +15043,20 @@ async function loadPromotionTable() {
     const tbody = document.getElementById('promotionTableBody');
     if (!tbody) return;
     
+    // Load students if not already loaded
     if (promotionStudentsList.length === 0) {
         await loadPromotionStudents();
     }
     
     if (promotionStudentsList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4">No ${currentLevel} students found.</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No students found.</td></tr>';
         return;
     }
     
     let html = '';
     for (const student of promotionStudentsList) {
         const nextClass = getNextClass(student.class);
-        const isFinal = isFinalClass(student.class);
         const isCompleted = nextClass === 'Completed';
-        
-        let statusBadge = '';
-        let statusColor = '';
-        if (isCompleted) {
-            statusBadge = '🎓 Completed';
-            statusColor = 'bg-success';
-        } else if (isFinal) {
-            statusBadge = currentLevel === 'olevel' ? '➡️ To A-Level' : '➡️ To Complete';
-            statusColor = 'bg-info';
-        } else {
-            statusBadge = '⬆️ To Promote';
-            statusColor = 'bg-warning';
-        }
         
         html += `
             <tr>
@@ -15231,10 +15066,10 @@ async function loadPromotionTable() {
                 <td><span class="badge bg-primary">${student.class}</span></td>
                 <td>${student.stream || '-'}</td>
                 <td>
-                    <span class="badge ${isCompleted ? 'bg-success' : isFinal ? 'bg-info' : 'bg-warning'}">
+                    <span class="badge ${isCompleted ? 'bg-success' : 'bg-warning'}">
                         ${nextClass}
                     </span>
-                    <br><small class="text-muted">${statusBadge}</small>
+                    ${isCompleted ? ' 🎓' : ''}
                 </td>
                 <td class="text-center">
                     <button class="btn btn-sm btn-success" onclick="promoteSingleStudent('${student.id}')">
@@ -15246,6 +15081,7 @@ async function loadPromotionTable() {
     }
     tbody.innerHTML = html;
     
+    // Select All
     const selectAll = document.getElementById('selectAllPromotion');
     if (selectAll) {
         selectAll.onclick = function() {
@@ -15253,6 +15089,28 @@ async function loadPromotionTable() {
         };
     }
 }
+
+// ============================================
+// AUTO-LOAD TABLE WHEN PAGE IS RENDERED
+// ============================================
+
+// This ensures the table loads automatically when the page is shown
+// Override the loadPage function to handle promotion page specially
+const originalLoadPage = window.loadPage;
+window.loadPage = async function(page) {
+    // Call the original loadPage first
+    if (originalLoadPage) {
+        await originalLoadPage(page);
+    }
+    
+    // If it's the promotion page, load the table automatically
+    if (page === 'promotion') {
+        // Small delay to ensure DOM is ready
+        setTimeout(async () => {
+            await loadPromotionTable();
+        }, 100);
+    }
+};
 
 // ============================================
 // PROMOTE SINGLE STUDENT
@@ -15264,158 +15122,29 @@ window.promoteSingleStudent = async function(studentId) {
     
     const nextClass = getNextClass(student.class);
     
-    // For O-Level S.4 to A-Level
-    if (currentLevel === 'olevel' && student.class === 'S.4') {
-        const result = await showAlevelPromotionModal(student);
-        if (!result) return;
-        
-        const { stream, combination } = result;
-        
-        const confirmResult = await Swal.fire({
-            title: 'Confirm Promotion to A-Level',
-            html: `
-                <div class="text-start">
-                    <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
-                    <p><strong>From:</strong> ${student.class} (O-Level)</p>
-                    <p><strong>To:</strong> S.5 (A-Level)</p>
-                    <p><strong>Stream:</strong> ${stream}</p>
-                    <p><strong>Combination:</strong> ${combination}</p>
-                </div>
-            `,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Promote to A-Level',
-            cancelButtonText: 'Cancel'
-        });
-        
-        if (!confirmResult.isConfirmed) return;
-        
-        Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        try {
-            const updateData = { 
-                class: 'S.5',
-                stream: stream,
-                combination: combination,
-                level: 'alevel',
-                updated_at: new Date().toISOString()
-            };
-            
-            const { error } = await sb
-                .from('students')
-                .update(updateData)
-                .eq('id', studentId);
-            
-            if (error) throw error;
-            
-            Swal.fire('Success!', `${student.name} promoted to S.5 (${stream} - ${combination})`, 'success');
-            await loadPromotionStudents();
-            await loadPromotionTable();
-            
-        } catch (error) {
-            Swal.fire('Error', error.message, 'error');
-        }
-        return;
-    }
-    
-    // For A-Level S.6 to Completed
-    if (currentLevel === 'alevel' && student.class === 'S.6') {
-        const confirmResult = await Swal.fire({
-            title: 'Mark Student as Completed?',
-            html: `
-                <div class="text-start">
-                    <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
-                    <p><strong>From:</strong> ${student.class}</p>
-                    <p><strong>Status:</strong> 🎓 Completed S.6</p>
-                    <p class="text-success">This student has completed A-Level education.</p>
-                </div>
-            `,
-            icon: 'success',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Mark as Completed',
-            cancelButtonText: 'Cancel'
-        });
-        
-        if (!confirmResult.isConfirmed) return;
-        
-        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        try {
-            const { error } = await sb
-                .from('students')
-                .update({ 
-                    class: 'Completed',
-                    status: 'Completed',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', studentId);
-            
-            if (error) throw error;
-            
-            Swal.fire('🎓 Success!', `${student.name} has been marked as Completed.`, 'success');
-            await loadPromotionStudents();
-            await loadPromotionTable();
-            
-        } catch (error) {
-            Swal.fire('Error', error.message, 'error');
-        }
-        return;
-    }
-    
-    // Regular promotion
-    const confirmResult = await Swal.fire({
-        title: 'Confirm Promotion',
-        html: `
-            <div class="text-start">
-                <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
-                <p><strong>From:</strong> ${student.class}</p>
-                <p><strong>To:</strong> ${nextClass}</p>
-            </div>
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, Promote',
-        cancelButtonText: 'Cancel'
-    });
-    
-    if (!confirmResult.isConfirmed) return;
-    
-    Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        const { error } = await sb
-            .from('students')
-            .update({ 
-                class: nextClass,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', studentId);
-        
-        if (error) throw error;
-        
-        Swal.fire('Success!', `${student.name} promoted to ${nextClass}`, 'success');
-        await loadPromotionStudents();
-        await loadPromotionTable();
-        
-    } catch (error) {
-        Swal.fire('Error', error.message, 'error');
-    }
-};
-
-// ============================================
-// SHOW A-LEVEL PROMOTION MODAL (For S.4 to S.5)
-// ============================================
-
-async function showAlevelPromotionModal(student) {
-    return new Promise((resolve) => {
+    if (nextClass === 'Completed') {
         Swal.fire({
+            title: '🎓 Student Completed!',
+            html: `<p><strong>${escapeHtml(student.name)}</strong> has completed ${student.class}.</p>
+                   <p>They are now eligible for graduation.</p>`,
+            icon: 'success',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
+    // For S.4 to S.5, ask for stream and combination
+    let stream = student.stream || '';
+    let combination = student.combination || '';
+    
+    if (student.class === 'S.4' && nextClass === 'S.5') {
+        const result = await Swal.fire({
             title: `Promote ${escapeHtml(student.name)} to A-Level`,
             html: `
                 <div class="text-start">
-                    <div class="alert alert-info mb-3">
-                        <i class="fas fa-info-circle"></i> 
-                        <strong>${escapeHtml(student.name)}</strong> is completing O-Level and will join A-Level.
-                    </div>
+                    <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
+                    <p><strong>From Class:</strong> ${student.class}</p>
+                    <p><strong>To Class:</strong> ${nextClass}</p>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Select Stream *</label>
                         <select id="promoteStreamSelect" class="form-select">
@@ -15430,43 +15159,80 @@ async function showAlevelPromotionModal(student) {
                         <input type="text" id="promoteCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
                         <small class="text-muted">Enter combination code</small>
                     </div>
-                    <div class="alert alert-warning">
-                        <i class="fas fa-graduation-cap"></i> 
-                        <strong>Common Combinations:</strong><br>
-                        Arts: HEG, HEM, PEM, ICT<br>
-                        Sciences: PCM, PCB, BCM, PEM<br>
-                        Business: BAM, HEB
-                    </div>
                 </div>
             `,
             width: '500px',
             showCancelButton: true,
-            confirmButtonText: 'Promote to A-Level',
+            confirmButtonText: 'Promote',
             preConfirm: () => {
-                const stream = document.getElementById('promoteStreamSelect').value;
-                const combo = document.getElementById('promoteCombinationInput').value.trim().toUpperCase();
-                if (!stream) {
+                const streamValue = document.getElementById('promoteStreamSelect').value;
+                const comboValue = document.getElementById('promoteCombinationInput').value.trim().toUpperCase();
+                if (!streamValue) {
                     Swal.showValidationMessage('Please select a stream');
                     return false;
                 }
-                if (!combo) {
+                if (!comboValue) {
                     Swal.showValidationMessage('Please enter a combination');
                     return false;
                 }
-                return { stream, combination: combo };
-            }
-        }).then((result) => {
-            if (result.isConfirmed && result.value) {
-                resolve(result.value);
-            } else {
-                resolve(null);
+                return { stream: streamValue, combination: comboValue };
             }
         });
+        
+        if (!result.value) return;
+        stream = result.value.stream;
+        combination = result.value.combination;
+    }
+    
+    const confirmResult = await Swal.fire({
+        title: 'Confirm Promotion',
+        html: `
+            <div class="text-start">
+                <p><strong>Student:</strong> ${escapeHtml(student.name)}</p>
+                <p><strong>From:</strong> ${student.class}</p>
+                <p><strong>To:</strong> ${nextClass}</p>
+                ${stream ? `<p><strong>Stream:</strong> ${stream}</p>` : ''}
+                ${combination ? `<p><strong>Combination:</strong> ${combination}</p>` : ''}
+            </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Promote',
+        cancelButtonText: 'Cancel'
     });
-}
+    
+    if (!confirmResult.isConfirmed) return;
+    
+    Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const updateData = { 
+            class: nextClass,
+            updated_at: new Date().toISOString()
+        };
+        
+        if (stream) updateData.stream = stream;
+        if (combination) updateData.combination = combination;
+        
+        const { error } = await sb
+            .from('students')
+            .update(updateData)
+            .eq('id', studentId);
+        
+        if (error) throw error;
+        
+        Swal.fire('Success!', `${student.name} promoted to ${nextClass}`, 'success');
+        // Auto-reload table after promotion
+        await loadPromotionStudents();
+        await loadPromotionTable();
+        
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+};
 
 // ============================================
-// SHOW PROMOTION MODAL (Bulk)
+// SHOW PROMOTION MODAL
 // ============================================
 
 window.showPromotionModal = function() {
@@ -15480,28 +15246,19 @@ window.showPromotionModal = function() {
     
     const uniqueClasses = Object.keys(classMap).sort();
     
-    if (uniqueClasses.length === 0) {
-        Swal.fire('No Students', `No ${currentLevel} students found to promote.`, 'info');
-        return;
-    }
-    
     let classOptions = '<option value="">-- Select Class --</option>';
     for (const c of uniqueClasses) {
         const next = getNextClass(c);
-        const isFinal = isFinalClass(c);
-        const label = isFinal ? 
-            (currentLevel === 'olevel' ? '➡️ To A-Level' : '🎓 To Complete') : 
-            '⬆️ To Promote';
-        classOptions += `<option value="${c}">${c} → ${next} (${classMap[c]} students) ${label}</option>`;
+        classOptions += `<option value="${c}">${c} → ${next} (${classMap[c]} students)</option>`;
     }
     
     Swal.fire({
-        title: `<i class="fas fa-arrow-up"></i> Bulk Promote ${currentLevel} Students`,
+        title: '<i class="fas fa-arrow-up"></i> Bulk Promote Students',
         html: `
             <div class="text-start">
                 <div class="alert alert-info mb-3">
                     <i class="fas fa-info-circle"></i> 
-                    <strong>${currentLevel} Students:</strong> All students will be promoted to the next class.
+                    <strong>New Curriculum:</strong> All students will be promoted to the next class.
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">From Class *</label>
@@ -15517,7 +15274,7 @@ window.showPromotionModal = function() {
                 </div>
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle"></i> 
-                    <strong>Note:</strong> Students in ${currentLevel === 'olevel' ? 'S.4' : 'S.6'} will be ${currentLevel === 'olevel' ? 'promoted to A-Level' : 'marked as Completed'}.
+                    <strong>Note:</strong> Students in S.6 will be marked as "Completed".
                 </div>
             </div>
         `,
@@ -15559,181 +15316,22 @@ async function executeBulkPromotion(fromClass) {
     const students = promotionStudentsList.filter(s => s.class === fromClass);
     
     if (students.length === 0) {
-        Swal.fire('No Students', `No ${currentLevel} students found in ${fromClass}`, 'info');
+        Swal.fire('No Students', `No students found in ${fromClass}`, 'info');
         return;
     }
     
-    // For S.4 to S.5 (O-Level to A-Level transition)
-    if (currentLevel === 'olevel' && fromClass === 'S.4') {
-        const result = await showBulkAlevelPromotionModal(students.length);
-        if (!result) return;
-        
-        const { stream, combination } = result;
-        
-        const confirmResult = await Swal.fire({
-            title: `Promote ${students.length} Students to A-Level?`,
-            html: `
-                <div class="text-start">
-                    <p><strong>From:</strong> ${fromClass} (O-Level)</p>
-                    <p><strong>To:</strong> S.5 (A-Level)</p>
-                    <p><strong>Stream:</strong> ${stream}</p>
-                    <p><strong>Combination:</strong> ${combination}</p>
-                    <p><strong>Students:</strong> ${students.length}</p>
-                    <p class="text-warning">⚠️ This action cannot be undone!</p>
-                </div>
-            `,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Promote All',
-            cancelButtonText: 'Cancel'
-        });
-        
-        if (!confirmResult.isConfirmed) return;
-        
-        Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        let promoted = 0;
-        let errors = 0;
-        const promotedList = [];
-        
-        for (const student of students) {
-            const { error } = await sb
-                .from('students')
-                .update({ 
-                    class: 'S.5',
-                    stream: stream,
-                    combination: combination,
-                    level: 'alevel',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', student.id);
-            
-            if (!error) {
-                promoted++;
-                promotedList.push({ name: student.name });
-            } else {
-                errors++;
-            }
-        }
-        
-        showPromotionResult(promoted, errors, promotedList, `S.5 (${stream} - ${combination})`);
-        await loadPromotionStudents();
-        await loadPromotionTable();
-        return;
-    }
+    // For S.4 to S.5, ask for stream and combination
+    let selectedStream = null;
+    let selectedCombination = null;
     
-    // For A-Level S.6 to Completed
-    if (currentLevel === 'alevel' && fromClass === 'S.6') {
-        const confirmResult = await Swal.fire({
-            title: `Mark ${students.length} Students as Completed?`,
-            html: `
-                <div class="text-start">
-                    <p><strong>From:</strong> ${fromClass}</p>
-                    <p><strong>Status:</strong> 🎓 Completed A-Level</p>
-                    <p><strong>Students:</strong> ${students.length}</p>
-                    <p class="text-warning">⚠️ This action cannot be undone!</p>
-                </div>
-            `,
-            icon: 'success',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Mark as Completed',
-            cancelButtonText: 'Cancel'
-        });
-        
-        if (!confirmResult.isConfirmed) return;
-        
-        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        let promoted = 0;
-        let errors = 0;
-        const promotedList = [];
-        
-        for (const student of students) {
-            const { error } = await sb
-                .from('students')
-                .update({ 
-                    class: 'Completed',
-                    status: 'Completed',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', student.id);
-            
-            if (!error) {
-                promoted++;
-                promotedList.push({ name: student.name });
-            } else {
-                errors++;
-            }
-        }
-        
-        showPromotionResult(promoted, errors, promotedList, '🎓 Completed');
-        await loadPromotionStudents();
-        await loadPromotionTable();
-        return;
-    }
-    
-    // Regular promotion
-    const nextClass = getNextClass(fromClass);
-    
-    const confirmResult = await Swal.fire({
-        title: `Promote ${students.length} Students?`,
-        html: `
-            <div class="text-start">
-                <p><strong>From Class:</strong> ${fromClass}</p>
-                <p><strong>To Class:</strong> ${nextClass}</p>
-                <p><strong>Students:</strong> ${students.length}</p>
-                <p class="text-warning">⚠️ This action cannot be undone!</p>
-            </div>
-        `,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, Promote All',
-        cancelButtonText: 'Cancel'
-    });
-    
-    if (!confirmResult.isConfirmed) return;
-    
-    Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    let promoted = 0;
-    let errors = 0;
-    const promotedList = [];
-    
-    for (const student of students) {
-        const { error } = await sb
-            .from('students')
-            .update({ 
-                class: nextClass,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', student.id);
-        
-        if (!error) {
-            promoted++;
-            promotedList.push({ name: student.name });
-        } else {
-            errors++;
-        }
-    }
-    
-    showPromotionResult(promoted, errors, promotedList, nextClass);
-    await loadPromotionStudents();
-    await loadPromotionTable();
-}
-
-// ============================================
-// SHOW BULK A-LEVEL PROMOTION MODAL
-// ============================================
-
-async function showBulkAlevelPromotionModal(studentCount) {
-    return new Promise((resolve) => {
-        Swal.fire({
-            title: 'Promote Students to A-Level',
+    if (fromClass === 'S.4') {
+        const result = await Swal.fire({
+            title: 'Promote S.4 Students to A-Level',
             html: `
                 <div class="text-start">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i> 
-                        <strong>${studentCount}</strong> students will be promoted from S.4 to S.5 (A-Level).
+                        <strong>${students.length}</strong> students will be promoted from S.4 to S.5.
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Select Stream *</label>
@@ -15748,13 +15346,6 @@ async function showBulkAlevelPromotionModal(studentCount) {
                         <label class="form-label fw-bold">Combination *</label>
                         <input type="text" id="bulkCombinationInput" class="form-control" placeholder="e.g., PCM, HEG, BAM">
                         <small class="text-muted">All students will get this combination</small>
-                    </div>
-                    <div class="alert alert-warning">
-                        <i class="fas fa-graduation-cap"></i> 
-                        <strong>Common Combinations:</strong><br>
-                        Arts: HEG, HEM, PEM, ICT<br>
-                        Sciences: PCM, PCB, BCM, PEM<br>
-                        Business: BAM, HEB
                     </div>
                 </div>
             `,
@@ -15774,21 +15365,87 @@ async function showBulkAlevelPromotionModal(studentCount) {
                 }
                 return { stream, combination: combo };
             }
-        }).then((result) => {
-            if (result.isConfirmed && result.value) {
-                resolve(result.value);
-            } else {
-                resolve(null);
-            }
         });
+        
+        if (!result.value) return;
+        selectedStream = result.value.stream;
+        selectedCombination = result.value.combination;
+    }
+    
+    const confirmResult = await Swal.fire({
+        title: `Promote ${students.length} Students?`,
+        html: `
+            <div class="text-start">
+                <p><strong>From Class:</strong> ${fromClass}</p>
+                <p><strong>To Class:</strong> ${getNextClass(fromClass)}</p>
+                ${selectedStream ? `<p><strong>Stream:</strong> ${selectedStream}</p>` : ''}
+                ${selectedCombination ? `<p><strong>Combination:</strong> ${selectedCombination}</p>` : ''}
+                <p><strong>Students:</strong> ${students.length}</p>
+                <p class="text-warning">⚠️ This action cannot be undone!</p>
+            </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Promote All',
+        cancelButtonText: 'Cancel'
     });
-}
-
-// ============================================
-// SHOW PROMOTION RESULT
-// ============================================
-
-function showPromotionResult(promoted, errors, promotedList, toClass) {
+    
+    if (!confirmResult.isConfirmed) return;
+    
+    Swal.fire({ title: 'Promoting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    let promoted = 0;
+    let errors = 0;
+    const promotedList = [];
+    
+    for (const student of students) {
+        const nextClass = getNextClass(student.class);
+        
+        if (nextClass === 'Completed') {
+            // S.6 students - mark as completed
+            const { error } = await sb
+                .from('students')
+                .update({ 
+                    class: 'Completed',
+                    status: 'Completed',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', student.id);
+            
+            if (!error) {
+                promoted++;
+                promotedList.push({ name: student.name, toClass: '🎓 Completed' });
+            } else {
+                errors++;
+            }
+        } else {
+            const updateData = { 
+                class: nextClass,
+                updated_at: new Date().toISOString()
+            };
+            
+            if (selectedStream) updateData.stream = selectedStream;
+            if (selectedCombination) updateData.combination = selectedCombination;
+            
+            const { error } = await sb
+                .from('students')
+                .update(updateData)
+                .eq('id', student.id);
+            
+            if (!error) {
+                promoted++;
+                promotedList.push({ 
+                    name: student.name, 
+                    toClass: nextClass,
+                    stream: selectedStream,
+                    combination: selectedCombination
+                });
+            } else {
+                errors++;
+            }
+        }
+    }
+    
     let message = `<div class="text-start">
         <p><strong>✅ Promoted:</strong> ${promoted} students</p>
         ${errors > 0 ? `<p><strong>❌ Failed:</strong> ${errors} students</p>` : ''}
@@ -15797,7 +15454,7 @@ function showPromotionResult(promoted, errors, promotedList, toClass) {
         <ul>`;
     
     promotedList.slice(0, 15).forEach(s => {
-        message += `<li>${escapeHtml(s.name)} → ${toClass}</li>`;
+        message += `<li>${escapeHtml(s.name)} → ${s.toClass}${s.stream ? ' (' + s.stream + ')' : ''}${s.combination ? ' [' + s.combination + ']' : ''}</li>`;
     });
     
     if (promotedList.length > 15) {
@@ -15811,22 +15468,22 @@ function showPromotionResult(promoted, errors, promotedList, toClass) {
         html: message,
         icon: errors > 0 ? 'warning' : 'success'
     });
+    
+    // Auto-reload table after bulk promotion
+    await loadPromotionStudents();
+    await loadPromotionTable();
 }
 
 // ============================================
-// REFRESH PROMOTION TABLE
+// REFRESH PROMOTION TABLE (Manual Refresh)
 // ============================================
 
 window.refreshPromotionTable = async function() {
-    Swal.fire({ 
-        title: `Refreshing ${currentLevel} students...`, 
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
-    });
+    Swal.fire({ title: 'Refreshing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     await loadPromotionStudents();
     await loadPromotionTable();
     Swal.close();
-    Swal.fire('Refreshed!', `Promotion table updated for ${currentLevel}.`, 'success');
+    Swal.fire('Refreshed!', 'Promotion table updated.', 'success');
 };
 
 // ============================================
@@ -15837,13 +15494,12 @@ window.printPromotionList = async function() {
     await loadPromotionStudents();
     
     if (promotionStudentsList.length === 0) {
-        Swal.fire('No Students', `No ${currentLevel} students found to print.`, 'info');
+        Swal.fire('No Students', 'No students found to print.', 'info');
         return;
     }
     
     const printWindow = window.open('', '_blank');
     const currentDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-    const levelName = currentLevel === 'olevel' ? 'O-Level' : 'A-Level';
     
     let tableRows = '';
     for (const student of promotionStudentsList) {
@@ -15863,7 +15519,7 @@ window.printPromotionList = async function() {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Promotion List - ${levelName}</title>
+            <title>Promotion List</title>
             <style>
                 @media print { body { margin: 0; padding: 0; } .no-print { display: none; } }
                 body { font-family: 'Times New Roman', Arial, sans-serif; padding: 20px; font-size: 12px; }
@@ -15880,8 +15536,8 @@ window.printPromotionList = async function() {
         <body>
             <div class="header">
                 <div class="school-name">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</div>
-                <div class="report-title">📋 STUDENT PROMOTION LIST - ${levelName}</div>
-                <div>Generated: ${currentDate} | Total: ${promotionStudentsList.length} students</div>
+                <div class="report-title">📋 STUDENT PROMOTION LIST</div>
+                <div>Generated: ${currentDate} | ${currentLevel === 'olevel' ? 'O-Level' : 'A-Level'}</div>
             </div>
             <table>
                 <thead>
@@ -15911,18 +15567,22 @@ window.printPromotionList = async function() {
 };
 
 // ============================================
-// AUTO-LOAD
+// AUTO-LOAD: Hook into the page rendering
 // ============================================
 
+// Method 1: Override the loadPage function to auto-load promotion table
 (function() {
     const originalLoadPage = window.loadPage;
     
     window.loadPage = async function(page) {
+        // Call the original function
         if (originalLoadPage) {
             await originalLoadPage(page);
         }
         
+        // If we're on the promotion page, load the table automatically
         if (page === 'promotion') {
+            // Small delay to ensure DOM is ready
             setTimeout(async () => {
                 await loadPromotionTable();
             }, 200);
@@ -15930,7 +15590,9 @@ window.printPromotionList = async function() {
     };
 })();
 
+// Method 2: Also auto-load when the page is first loaded
 document.addEventListener('DOMContentLoaded', function() {
+    // Check if current page is promotion and load table
     setTimeout(async () => {
         if (currentPage === 'promotion') {
             await loadPromotionTable();
@@ -15938,31 +15600,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
 });
 
-// Level switch handler
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.level-badge-item').forEach(el => {
-        el.addEventListener('click', function() {
-            const newLevel = this.dataset.level;
-            if (newLevel && newLevel !== currentLevel) {
-                setTimeout(async () => {
-                    if (currentPage === 'promotion') {
-                        await loadPromotionStudents();
-                        await loadPromotionTable();
-                    }
-                }, 400);
-            }
-        });
-    });
-});
-
 // ============================================
 // INITIALIZATION
 // ============================================
 
-console.log('✅ Promotion Module Loaded - No Stats Cards');
-console.log('✅ O-Level: S.1→S.2→S.3→S.4→S.5 (A-Level)');
-console.log('✅ A-Level: S.5→S.6→Completed');
-console.log('✅ Clean and simple - Just the table');
+console.log('✅ Promotion Module Loaded - Auto-Load Table');
+console.log('✅ New Curriculum: All students are promoted');
+console.log('✅ Table loads automatically when page opens');
+console.log('✅ S.4 → S.5: Stream and Combination selection');
+console.log('✅ S.6: Marked as Completed');
 // ==================== USER MANAGEMENT ====================
 // ============================================
 // USER MANAGEMENT MODULE - ADD BUTTON REMOVED
