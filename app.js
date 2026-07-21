@@ -3,9 +3,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let sb = null;
 let currentUser = null;
-
-let sb = null;
-let currentUser = null;
 let currentUserRole = null;
 let currentLevel = 'olevel';
 let currentPage = 'dashboard';
