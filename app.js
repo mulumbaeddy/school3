@@ -3,6 +3,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let sb = null;
 let currentUser = null;
+
+let sb = null;
+let currentUser = null;
 let currentUserRole = null;
 let currentLevel = 'olevel';
 let currentPage = 'dashboard';
@@ -4966,6 +4969,10 @@ function escapeHtml(text) {
 // ============================================
 // MARKS MODULE - WITH DYNAMIC SUBJECTS FROM DATABASE
 // U1, U2, U3 each out of 20 with validation
+// TEACHERS: Can ADD marks but CANNOT EDIT marks
+// GRADE COLORS: From olevel_grades table
+// ALL BUTTONS REMAIN VISIBLE
+// BATCH ENTRY: Existing marks show padlocks for teachers
 // ============================================
 
 // ============================================
@@ -5023,16 +5030,13 @@ function getCurrentYear() {
 function validateUnitInput(input, maxValue) {
     let value = parseFloat(input.value);
     
-    // If value is greater than max, reset to max
     if (value > maxValue) {
         input.value = maxValue;
-        // Show a quick visual feedback
         input.style.backgroundColor = '#f8d7da';
         setTimeout(() => {
             input.style.backgroundColor = '';
         }, 800);
         
-        // Show a toast notification (only once)
         if (!input.dataset.notified) {
             input.dataset.notified = 'true';
             Swal.fire({
@@ -5048,7 +5052,6 @@ function validateUnitInput(input, maxValue) {
         }
     }
     
-    // If value is negative, reset to 0
     if (value < 0) {
         input.value = 0;
     }
@@ -5062,7 +5065,6 @@ async function loadSubjectsFromDB() {
     try {
         console.log("🔄 Loading subjects from database...");
         
-        // 1. LOAD O-LEVEL SUBJECTS
         const { data: olevelData, error: olevelError } = await sb
             .from('subjects')
             .select('name, category')
@@ -5077,7 +5079,6 @@ async function loadSubjectsFromDB() {
             console.warn("No O-Level subjects found, using defaults");
         }
         
-        // 2. LOAD A-LEVEL PRINCIPAL SUBJECTS
         const { data: alevelData, error: alevelError } = await sb
             .from('subjects')
             .select('name, category')
@@ -5092,7 +5093,6 @@ async function loadSubjectsFromDB() {
             console.warn("No A-Level subjects found, using defaults");
         }
         
-        // 3. LOAD A-LEVEL SUBSIDIARY SUBJECTS
         const { data: subsidiaryData, error: subsidiaryError } = await sb
             .from('subsidiary_subjects')
             .select('subject_name')
@@ -5120,21 +5120,6 @@ async function loadSubjectsFromDB() {
         dbAlevelSubsidiarySubjects = ['General Paper', 'ICT'];
         return false;
     }
-}
-
-// ============================================
-// GET STUDENT SUBJECTS
-// ============================================
-
-function getStudentSubjects(student) {
-    if (currentLevel === 'olevel') {
-        return dbOlevelSubjects;
-    }
-    return [...dbAlevelPrincipalSubjects];
-}
-
-function getAllAlevelSubjects() {
-    return [...dbAlevelPrincipalSubjects, ...dbAlevelSubsidiarySubjects];
 }
 
 // ============================================
@@ -5227,10 +5212,23 @@ function calculateGrade(percentage, isSubsidiary = false) {
 
 // ============================================
 // O-LEVEL GRADE DESCRIPTOR (U1, U2, U3 out of 20)
+// Uses colors from olevel_grades table
 // ============================================
 
 function getOlevelGradeDescriptor(total100) {
     total100 = Math.min(100, Math.max(0, total100));
+    
+    if (gradingRules.olevel && gradingRules.olevel.length > 0) {
+        for (const rule of gradingRules.olevel) {
+            if (total100 >= rule.min_percentage && total100 <= rule.max_percentage) {
+                return {
+                    grade: rule.grade,
+                    descriptor: rule.remark || '',
+                    color: rule.color_code || '#2ecc71'
+                };
+            }
+        }
+    }
     
     if (total100 >= 85) return { grade: 'A', descriptor: 'Exceptional', color: '#2ecc71' };
     if (total100 >= 70) return { grade: 'B', descriptor: 'Outstanding', color: '#3498db' };
@@ -5552,7 +5550,7 @@ function renderTableHeader() {
 }
 
 // ============================================
-// LOAD MARKS TABLE
+// LOAD MARKS TABLE - ALL BUTTONS VISIBLE
 // ============================================
 
 async function loadMarksTable() {
@@ -5600,7 +5598,6 @@ async function loadMarksTable() {
             const exam80 = mark.exam_80 || 0;
             const initials = mark.teacher_initials || '';
             
-            // ✅ NEW CALCULATION: each unit is out of 20
             const unitAvg = (u1 + u2 + u3) / 3;
             const total20 = unitAvg;
             let total100 = total20 + exam80;
@@ -5622,7 +5619,9 @@ async function loadMarksTable() {
                     <td class="text-center">${u3.toFixed(1)}</td>
                     <td class="text-center">${exam80}</td>
                     <td class="text-center"><strong>${total100.toFixed(1)}</strong></td>
-                    <td class="text-center"><span class="badge" style="background: ${gradeInfo.color}">${gradeInfo.grade}</span></td>
+                    <td class="text-center" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
+                        ${gradeInfo.grade}
+                    </td>
                     <td class="text-center">${escapeHtml(initials) || '-'}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
@@ -5653,7 +5652,9 @@ async function loadMarksTable() {
                     <td class="text-center">${mark.year}</td>
                     <td class="text-center"><strong>${mark.marks_obtained}</strong></td>
                     <td class="text-center">${percentage.toFixed(1)}%</td>
-                    <td class="text-center"><span class="badge" style="background: ${grade.color}">${grade.grade}</span></td>
+                    <td class="text-center" style="background: ${grade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
+                        ${grade.grade}
+                    </td>
                     <td class="text-center"><strong>${grade.points}</strong></td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
@@ -5767,7 +5768,7 @@ window.loadBatchMarks = async function() {
 };
 
 // ============================================
-// RENDER O-LEVEL BATCH TABLE - U1, U2, U3 out of 20 WITH VALIDATION
+// RENDER O-LEVEL BATCH TABLE - WITH PADLOCKS FOR TEACHERS
 // ============================================
 
 function renderOlevelBatchTable() {
@@ -5788,6 +5789,7 @@ function renderOlevelBatchTable() {
             <th width="80">Total/100</th>
             <th width="60">Grade</th>
             <th width="100">Descriptor</th>
+            <th width="80">Status</th>
         </tr>
     `;
     
@@ -5802,8 +5804,12 @@ function renderOlevelBatchTable() {
         const u3 = existingMark?.unit3 || 0;
         const exam80 = existingMark?.exam_80 || 0;
         const initials = existingMark?.teacher_initials || '';
+        const hasExistingMark = !!existingMark;
         
-        // ✅ NEW CALCULATION: each unit is out of 20
+        // TEACHERS: Disable inputs if mark already exists
+        const isTeacher = currentUserRole === 'teacher';
+        const isDisabled = isTeacher && hasExistingMark;
+        
         const unitAvg = (u1 + u2 + u3) / 3;
         const total20 = unitAvg;
         let total100 = total20 + exam80;
@@ -5823,29 +5829,34 @@ function renderOlevelBatchTable() {
                     <input type="number" class="form-control form-control-sm u1-input" 
                            data-student="${student.id}" value="${u1}" 
                            min="0" max="20" step="0.5" style="width:70px;"
-                           oninput="validateUnitInput(this, 20)">
+                           oninput="validateUnitInput(this, 20)" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u2-input" 
                            data-student="${student.id}" value="${u2}" 
                            min="0" max="20" step="0.5" style="width:70px;"
-                           oninput="validateUnitInput(this, 20)">
+                           oninput="validateUnitInput(this, 20)" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u3-input" 
                            data-student="${student.id}" value="${u3}" 
                            min="0" max="20" step="0.5" style="width:70px;"
-                           oninput="validateUnitInput(this, 20)">
+                           oninput="validateUnitInput(this, 20)" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm exam-input" 
                            data-student="${student.id}" value="${exam80}" 
-                           min="0" max="80" step="1" style="width:80px;">
+                           min="0" max="80" step="1" style="width:80px;" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="text" class="form-control form-control-sm initials-input" 
                            data-student="${student.id}" value="${escapeHtml(initials)}" 
-                           maxlength="5" style="width:70px; text-transform:uppercase;">
+                           maxlength="5" style="width:70px; text-transform:uppercase;" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center total20-cell" data-student="${student.id}">
                     <strong>${total20.toFixed(1)}</strong>
@@ -5853,11 +5864,14 @@ function renderOlevelBatchTable() {
                 <td class="text-center total100-cell" data-student="${student.id}">
                     <strong>${total100.toFixed(1)}</strong>
                 </td>
-                <td class="text-center grade-cell" data-student="${student.id}">
-                    <span class="badge" style="background: ${gradeInfo.color}; padding: 5px 10px;">${gradeInfo.grade}</span>
+                <td class="text-center grade-cell" data-student="${student.id}" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
+                    ${gradeInfo.grade}
                 </td>
                 <td class="text-center descriptor-cell" data-student="${student.id}">
                     ${gradeInfo.descriptor}
+                </td>
+                <td class="text-center">
+                    ${hasExistingMark ? '<span class="badge bg-success"><i class="fas fa-check"></i> Saved</span>' : '<span class="badge bg-warning text-dark">New</span>'}
                 </td>
             </tr>
         `;
@@ -5865,7 +5879,8 @@ function renderOlevelBatchTable() {
     
     bodyRow.innerHTML = html;
     
-    document.querySelectorAll('.u1-input, .u2-input, .u3-input, .exam-input').forEach(input => {
+    // Only add event listeners for enabled inputs (non-disabled)
+    document.querySelectorAll('.u1-input:not([disabled]), .u2-input:not([disabled]), .u3-input:not([disabled]), .exam-input:not([disabled])').forEach(input => {
         input.addEventListener('input', function() {
             const studentId = this.dataset.student;
             recalculateOlevelRow(studentId);
@@ -5874,16 +5889,15 @@ function renderOlevelBatchTable() {
 }
 
 // ============================================
-// RECALCULATE O-LEVEL ROW - U1, U2, U3 out of 20
+// RECALCULATE O-LEVEL ROW
 // ============================================
 
 function recalculateOlevelRow(studentId) {
-    const u1 = parseFloat(document.querySelector(`.u1-input[data-student="${studentId}"]`).value) || 0;
-    const u2 = parseFloat(document.querySelector(`.u2-input[data-student="${studentId}"]`).value) || 0;
-    const u3 = parseFloat(document.querySelector(`.u3-input[data-student="${studentId}"]`).value) || 0;
-    const exam80 = parseFloat(document.querySelector(`.exam-input[data-student="${studentId}"]`).value) || 0;
+    const u1 = parseFloat(document.querySelector(`.u1-input[data-student="${studentId}"]:not([disabled])`)?.value) || 0;
+    const u2 = parseFloat(document.querySelector(`.u2-input[data-student="${studentId}"]:not([disabled])`)?.value) || 0;
+    const u3 = parseFloat(document.querySelector(`.u3-input[data-student="${studentId}"]:not([disabled])`)?.value) || 0;
+    const exam80 = parseFloat(document.querySelector(`.exam-input[data-student="${studentId}"]:not([disabled])`)?.value) || 0;
     
-    // ✅ NEW CALCULATION: each unit is out of 20
     const unitAvg = (u1 + u2 + u3) / 3;
     const total20 = unitAvg;
     let total100 = total20 + exam80;
@@ -5898,12 +5912,18 @@ function recalculateOlevelRow(studentId) {
     
     if (total20Cell) total20Cell.innerHTML = `<strong>${total20.toFixed(1)}</strong>`;
     if (total100Cell) total100Cell.innerHTML = `<strong>${total100.toFixed(1)}</strong>`;
-    if (gradeCell) gradeCell.innerHTML = `<span class="badge" style="background: ${gradeInfo.color}; padding: 5px 10px;">${gradeInfo.grade}</span>`;
+    if (gradeCell) {
+        gradeCell.innerHTML = gradeInfo.grade;
+        gradeCell.style.background = gradeInfo.color;
+        gradeCell.style.color = 'white';
+        gradeCell.style.fontWeight = 'bold';
+        gradeCell.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
+    }
     if (descriptorCell) descriptorCell.innerHTML = gradeInfo.descriptor;
 }
 
 // ============================================
-// RENDER A-LEVEL BATCH TABLE
+// RENDER A-LEVEL BATCH TABLE - WITH PADLOCKS FOR TEACHERS
 // ============================================
 
 function renderAlevelBatchTable() {
@@ -5921,7 +5941,7 @@ function renderAlevelBatchTable() {
             <th width="80">Total</th>
             <th width="80">Grade</th>
             <th width="80">Points</th>
-            <th width="80">Action</th>
+            <th width="80">Status</th>
         </tr>
     `;
     
@@ -5929,6 +5949,7 @@ function renderAlevelBatchTable() {
     for (let i = 0; i < batchState.students.length; i++) {
         const student = batchState.students[i];
         let totalPoints = 0;
+        let hasExistingMarks = false;
         
         html += `
             <tr>
@@ -5947,7 +5968,14 @@ function renderAlevelBatchTable() {
             const isSubsidiary = subject.category === 'Subsidiary';
             const gradeInfo = calculateGrade(percentage, isSubsidiary);
             
-            if (markValue) totalPoints += gradeInfo.points;
+            if (markValue) {
+                totalPoints += gradeInfo.points;
+                hasExistingMarks = true;
+            }
+            
+            // TEACHERS: Disable input if mark already exists
+            const isTeacher = currentUserRole === 'teacher';
+            const isDisabled = isTeacher && !!existingMark;
             
             html += `
                 <td class="text-center mark-cell" data-student="${student.id}" data-subject="${subject.name}" data-type="${isSubsidiary ? 'subsidiary' : 'principal'}">
@@ -5955,7 +5983,8 @@ function renderAlevelBatchTable() {
                            data-student="${student.id}" data-subject="${subject.name}" 
                            data-type="${isSubsidiary ? 'subsidiary' : 'principal'}" 
                            value="${markValue}" min="0" max="100" step="0.5" 
-                           style="width:80px;text-align:center;transition:all 0.3s;">
+                           style="width:80px;text-align:center;transition:all 0.3s;" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                     ${markValue ? `<small class="grade-display" style="display:block;margin-top:4px;color:${gradeInfo.color}">${gradeInfo.grade} (${gradeInfo.points} pts)</small>` : ''}
                 </td>
             `;
@@ -5966,16 +5995,21 @@ function renderAlevelBatchTable() {
         
         html += `
             <td class="text-center total-points" data-student="${student.id}"><strong>${totalPoints}</strong></td>
-            <td class="text-center overall-grade" data-student="${student.id}"><span class="badge" style="background:${overallGrade.color};padding:8px 12px;">${overallGrade.grade}</span></td>
+            <td class="text-center overall-grade" data-student="${student.id}" style="background: ${overallGrade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
+                ${overallGrade.grade}
+            </td>
             <td class="text-center"><strong>${totalPoints}</strong></td>
-            <td class="text-center"><button class="btn btn-sm btn-primary edit-batch-row" data-student="${student.id}"><i class="fas fa-edit"></i> Edit</button></td>
+            <td class="text-center">
+                ${hasExistingMarks ? '<span class="badge bg-success"><i class="fas fa-check"></i> Saved</span>' : '<span class="badge bg-warning text-dark">New</span>'}
+            </td>
         </tr>
         `;
     }
     
     bodyRow.innerHTML = html;
     
-    document.querySelectorAll('.batch-mark-input').forEach(input => {
+    // Only add event listeners for enabled inputs
+    document.querySelectorAll('.batch-mark-input:not([disabled])').forEach(input => {
         input.addEventListener('input', function() { updateAlevelBatchTotals(); });
     });
     
@@ -5991,9 +6025,10 @@ function renderAlevelBatchTable() {
 function updateAlevelBatchTotals() {
     for (const student of batchState.students) {
         let totalPoints = 0;
+        let hasExistingMarks = false;
         
         for (const subject of batchState.subjects) {
-            const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]`);
+            const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]:not([disabled])`);
             const cell = document.querySelector(`.mark-cell[data-student="${student.id}"][data-subject="${subject.name}"]`);
             
             if (input && cell) {
@@ -6001,7 +6036,10 @@ function updateAlevelBatchTotals() {
                 const isSubsidiary = input.dataset.type === 'subsidiary';
                 const gradeInfo = calculateGrade(marks, isSubsidiary);
                 
-                if (marks > 0) totalPoints += gradeInfo.points;
+                if (marks > 0) {
+                    totalPoints += gradeInfo.points;
+                    hasExistingMarks = true;
+                }
                 
                 input.style.borderLeft = `3px solid ${gradeInfo.color}`;
                 
@@ -6029,15 +6067,32 @@ function updateAlevelBatchTotals() {
         const overallGradeCell = document.querySelector(`.overall-grade[data-student="${student.id}"]`);
         
         if (totalPointsCell) totalPointsCell.innerHTML = `<strong>${totalPoints}</strong>`;
-        if (overallGradeCell) overallGradeCell.innerHTML = `<span class="badge" style="background:${overallGrade.color};padding:8px 12px;">${overallGrade.grade}</span>`;
+        if (overallGradeCell) {
+            overallGradeCell.innerHTML = overallGrade.grade;
+            overallGradeCell.style.background = overallGrade.color;
+            overallGradeCell.style.color = 'white';
+            overallGradeCell.style.fontWeight = 'bold';
+            overallGradeCell.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
+        }
     }
 }
 
 // ============================================
-// EDIT BATCH STUDENT (A-Level only)
+// EDIT BATCH STUDENT (A-Level only) - TEACHERS BLOCKED
 // ============================================
 
 async function editBatchStudent(studentId) {
+    // ONLY block teachers - Admins and Super Admins can edit
+    if (currentUserRole === 'teacher') {
+        Swal.fire({
+            icon: 'error',
+            title: 'Access Denied',
+            text: 'Teachers are not allowed to edit marks. Only Admins can edit marks.',
+            timer: 3000
+        });
+        return;
+    }
+    
     const student = batchState.students.find(s => s.id === studentId);
     if (!student) return;
     
@@ -6123,11 +6178,11 @@ window.saveBatchMarks = async function() {
     
     for (const student of batchState.students) {
         if (currentLevel === 'olevel') {
-            const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]`);
-            const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]`);
-            const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]`);
-            const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]`);
-            const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]`);
+            const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]:not([disabled])`);
+            const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]:not([disabled])`);
+            const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]:not([disabled])`);
+            const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]:not([disabled])`);
+            const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]:not([disabled])`);
             
             if (u1Input && u2Input && u3Input && examInput) {
                 const u1 = parseFloat(u1Input.value) || 0;
@@ -6136,13 +6191,15 @@ window.saveBatchMarks = async function() {
                 const exam80 = parseFloat(examInput.value) || 0;
                 const initials = initialsInput?.value || '';
                 
-                // ✅ NEW CALCULATION: each unit is out of 20
                 const unitAvg = (u1 + u2 + u3) / 3;
                 const total20 = unitAvg;
                 const total100 = total20 + exam80;
                 
                 const key = `${student.id}_${batchState.subject}`;
                 const existingMark = batchState.marksMap[key];
+                
+                // Skip if mark already exists (to prevent overwriting)
+                if (existingMark) continue;
                 
                 const markData = {
                     student_id: student.id,
@@ -6158,33 +6215,33 @@ window.saveBatchMarks = async function() {
                     unit3: u3,
                     exam_80: exam80,
                     teacher_initials: initials,
+                    created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 };
                 
                 try {
-                    let result;
-                    if (existingMark?.id) {
-                        result = await sb.from('marks').update(markData).eq('id', existingMark.id);
-                    } else if (total100 > 0 || u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0) {
-                        markData.created_at = new Date().toISOString();
-                        result = await sb.from('marks').insert([markData]);
+                    if (total100 > 0 || u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0) {
+                        const { error } = await sb.from('marks').insert([markData]);
+                        if (error) throw error;
+                        saved++;
                     }
-                    if (result?.error) throw result.error;
-                    saved++;
                 } catch (error) {
                     console.error('Save error:', error);
                     errors++;
                 }
             }
         } else {
-            // A-Level: Save all subjects
             for (const subject of batchState.subjects) {
-                const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]`);
+                const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]:not([disabled])`);
                 
                 if (input) {
                     const marksObtained = parseFloat(input.value) || 0;
                     const key = `${student.id}_${subject.name}`;
                     const existingMark = batchState.marksMap[key];
+                    
+                    // Skip if mark already exists
+                    if (existingMark) continue;
+                    
                     const isSubsidiary = subject.category === 'Subsidiary';
                     
                     const markData = {
@@ -6196,19 +6253,16 @@ window.saveBatchMarks = async function() {
                         marks_obtained: marksObtained,
                         max_marks: 100,
                         level: currentLevel,
+                        created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString()
                     };
                     
                     try {
-                        let result;
-                        if (existingMark?.id) {
-                            result = await sb.from('marks').update(markData).eq('id', existingMark.id);
-                        } else if (marksObtained > 0) {
-                            markData.created_at = new Date().toISOString();
-                            result = await sb.from('marks').insert([markData]);
+                        if (marksObtained > 0) {
+                            const { error } = await sb.from('marks').insert([markData]);
+                            if (error) throw error;
+                            saved++;
                         }
-                        if (result?.error) throw result.error;
-                        saved++;
                     } catch (error) {
                         console.error('Save error:', error);
                         errors++;
@@ -6218,7 +6272,7 @@ window.saveBatchMarks = async function() {
         }
     }
     
-    Swal.fire('Complete!', `✅ Saved: ${saved} | ❌ Errors: ${errors}`, errors ? 'warning' : 'success');
+    Swal.fire('Complete!', `✅ Saved: ${saved} new marks | ❌ Errors: ${errors}`, errors ? 'warning' : 'success');
     
     await loadBatchMarks();
     await loadMarksTable();
@@ -6279,7 +6333,6 @@ window.openAddMarkModal = async function() {
     
     const isOlevel = currentLevel === 'olevel';
     
-    // Load students for dropdown
     const { data: studentsList } = await sb
         .from('students')
         .select('*')
@@ -6305,9 +6358,6 @@ window.openAddMarkModal = async function() {
     }
     
     if (isOlevel) {
-        // ============================================
-        // O-LEVEL ADD MARK - U1, U2, U3 out of 20 WITH VALIDATION
-        // ============================================
         Swal.fire({
             title: '<i class="fas fa-plus-circle"></i> Add Single Mark - O-Level',
             html: `
@@ -6410,7 +6460,6 @@ window.openAddMarkModal = async function() {
                     const u3 = parseFloat(document.getElementById('markU3')?.value) || 0;
                     const exam80 = parseFloat(document.getElementById('markExam80')?.value) || 0;
                     
-                    // ✅ NEW CALCULATION: each unit is out of 20
                     const unitAvg = (u1 + u2 + u3) / 3;
                     const total20 = unitAvg;
                     let total100 = total20 + exam80;
@@ -6464,7 +6513,6 @@ window.openAddMarkModal = async function() {
                     return false;
                 }
                 
-                // ✅ NEW CALCULATION
                 const unitAvg = (u1 + u2 + u3) / 3;
                 const total20 = unitAvg;
                 const total100 = total20 + exam80;
@@ -6537,9 +6585,6 @@ window.openAddMarkModal = async function() {
             }
         });
     } else {
-        // ============================================
-        // A-LEVEL ADD MARK
-        // ============================================
         Swal.fire({
             title: 'Add Single Mark - A-Level',
             html: `
@@ -6583,10 +6628,22 @@ window.openAddMarkModal = async function() {
 };
 
 // ============================================
-// EDIT MARK
+// EDIT MARK - TEACHERS CANNOT EDIT
+// Admins and Super Admins can edit freely
 // ============================================
 
 window.editMark = async function(id) {
+    // ONLY block teachers - Admins and Super Admins can edit
+    if (currentUserRole === 'teacher') {
+        Swal.fire({
+            icon: 'error',
+            title: 'Access Denied',
+            text: 'Teachers are not allowed to edit marks. Only Admins can edit marks.',
+            timer: 3000
+        });
+        return;
+    }
+    
     const mark = allMarksList.find(m => m.id === id);
     if (!mark) return;
     
@@ -6611,9 +6668,6 @@ window.editMark = async function(id) {
     }
     
     if (isOlevel) {
-        // ============================================
-        // O-LEVEL EDIT MARK - U1, U2, U3 out of 20 WITH VALIDATION
-        // ============================================
         Swal.fire({
             title: '<i class="fas fa-edit"></i> Edit Mark - O-Level',
             html: `
@@ -6722,7 +6776,6 @@ window.editMark = async function(id) {
                     const u3 = parseFloat(document.getElementById('editU3')?.value) || 0;
                     const exam80 = parseFloat(document.getElementById('editExam80')?.value) || 0;
                     
-                    // ✅ NEW CALCULATION: each unit is out of 20
                     const unitAvg = (u1 + u2 + u3) / 3;
                     const total20 = unitAvg;
                     let total100 = total20 + exam80;
@@ -6762,7 +6815,6 @@ window.editMark = async function(id) {
                     return false;
                 }
                 
-                // ✅ NEW CALCULATION
                 const unitAvg = (u1 + u2 + u3) / 3;
                 const total20 = unitAvg;
                 let total100 = total20 + exam80;
@@ -6816,9 +6868,6 @@ window.editMark = async function(id) {
         });
         
     } else {
-        // ============================================
-        // A-LEVEL EDIT MARK
-        // ============================================
         Swal.fire({
             title: 'Edit Mark - A-Level',
             html: `
@@ -7161,8 +7210,11 @@ window.refreshMarksTable = async function() {
     console.log('✅ U1, U2, U3 validation: min 0, max 20, step 0.5');
     console.log('✅ Calculation: Unit Avg = (U1+U2+U3)/3, Total/20 = Unit Avg');
     console.log('✅ Total/100 = Total/20 + Exam/80');
+    console.log('✅ Grade colors loaded from olevel_grades table');
+    console.log('✅ Teachers: CAN ADD marks but CANNOT EDIT marks');
+    console.log('✅ ALL BUTTONS VISIBLE for all users');
+    console.log('✅ Batch Entry: Padlocks 🔒 shown for existing marks (Teachers)');
 })();
-
 
 // ==================== TEACHERS MODULE ====================
 // ============================================
@@ -13350,7 +13402,8 @@ window.bulkDeleteAttendanceRecords = async function() {
 console.log('✅ Attendance Module Loaded - Table Working Properly');
 // ============================================
 // SCHOOL MANAGEMENT SYSTEM - REPORTS MODULE
-// COMPLETE & PERFECTED - NO DUPLICATE BUTTONS
+// FIXED: Grades from Marks Module (olevel_grades table)
+// REMOVED: Fee Structure from Report
 // ============================================
 
 // ============================================
@@ -13362,8 +13415,10 @@ let reportsPrincipalGradingRules = [];
 let reportsSubsidiaryGradingRules = [];
 let reportsUniversityEntry = {};
 let schoolInfo = {};
-let feeStructureData = [];
 let academicTermsList = [];
+
+// O-Level grades from database (same as Marks Module)
+let reportsOlevelGrades = [];
 
 // Subsidiary subjects list
 const subsidiarySubjectsList = ['General Paper', 'ICT', 'Subsidiary Mathematics'];
@@ -13380,10 +13435,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function formatCurrency(amount) {
-    return 'UGX ' + (amount || 0).toLocaleString();
-}
-
 function getCurrentDate() {
     return new Date().toLocaleDateString('en-GB', {
         day: '2-digit',
@@ -13392,12 +13443,59 @@ function getCurrentDate() {
     });
 }
 
-function getOlevelGradeDescriptor(score) {
-    if (score >= 85) return { grade: 'A', descriptor: 'Exceptional' };
-    if (score >= 70) return { grade: 'B', descriptor: 'Outstanding' };
-    if (score >= 60) return { grade: 'C', descriptor: 'Satisfactory' };
-    if (score >= 40) return { grade: 'D', descriptor: 'Basic' };
-    return { grade: 'E', descriptor: 'Elementary' };
+// ============================================
+// GET O-LEVEL GRADE - SAME AS MARKS MODULE
+// ============================================
+
+function getOlevelGradeFromDatabase(total100) {
+    total100 = Math.min(100, Math.max(0, total100));
+    
+    // Try to get grade from database (same as Marks Module)
+    if (reportsOlevelGrades && reportsOlevelGrades.length > 0) {
+        for (const rule of reportsOlevelGrades) {
+            if (total100 >= rule.min_percentage && total100 <= rule.max_percentage) {
+                return {
+                    grade: rule.grade,
+                    descriptor: rule.remark || rule.description || '',
+                    color: rule.color_code || '#2ecc71'
+                };
+            }
+        }
+    }
+    
+    // If no database rules found, return unknown
+    console.warn("⚠️ No O-Level grade rules found in database!");
+    return {
+        grade: '?',
+        descriptor: 'No rules configured',
+        color: '#6c757d'
+    };
+}
+
+// ============================================
+// LOAD O-LEVEL GRADES FROM DATABASE (SAME AS MARKS MODULE)
+// ============================================
+
+async function loadOlevelGradesForReports() {
+    try {
+        const { data, error } = await sb
+            .from('olevel_grades')
+            .select('*')
+            .order('min_percentage', { ascending: true });
+        
+        if (error) {
+            console.error("Error loading O-Level grades:", error);
+            reportsOlevelGrades = [];
+        } else {
+            reportsOlevelGrades = data || [];
+            console.log(`✅ Reports: Loaded ${reportsOlevelGrades.length} O-Level grades from database (same as Marks Module)`);
+        }
+        return reportsOlevelGrades;
+    } catch (e) {
+        console.error("Exception:", e);
+        reportsOlevelGrades = [];
+        return [];
+    }
 }
 
 // ============================================
@@ -13504,90 +13602,6 @@ async function loadAcademicTermsForReports() {
 }
 
 // ============================================
-// LOAD FEE STRUCTURE
-// ============================================
-
-async function loadFeeStructureForReport() {
-    try {
-        const { data, error } = await sb
-            .from('fee_structure')
-            .select('*');
-        
-        if (error) throw error;
-        feeStructureData = data || [];
-        return feeStructureData;
-    } catch (error) {
-        console.error('Error loading fee structure:', error);
-        return [];
-    }
-}
-
-// ============================================
-// GET TOTAL FEE FOR A STUDENT
-// ============================================
-
-async function getTotalFeeForStudent(student) {
-    if (!student) return 0;
-    
-    let studentType = student.student_type || 'Day';
-    studentType = studentType.charAt(0).toUpperCase() + studentType.slice(1).toLowerCase();
-    
-    let possibleClassNames = [student.class];
-    
-    if (currentLevel === 'alevel') {
-        let stream = student.stream || 'Arts';
-        stream = stream.charAt(0).toUpperCase() + stream.slice(1).toLowerCase();
-        possibleClassNames.push(`${student.class} ${stream}`);
-        if (student.class.includes(' ')) {
-            possibleClassNames.push(student.class);
-        }
-    }
-    
-    possibleClassNames = [...new Set(possibleClassNames)];
-    
-    let studentFees = [];
-    
-    for (const className of possibleClassNames) {
-        studentFees = feeStructureData.filter(f => 
-            f.class_name === className && 
-            f.student_type === studentType
-        );
-        
-        if (studentFees.length > 0) break;
-    }
-    
-    if (studentFees.length === 0) {
-        for (const className of possibleClassNames) {
-            studentFees = feeStructureData.filter(f => f.class_name === className);
-            if (studentFees.length > 0) break;
-        }
-    }
-    
-    const total = studentFees.reduce((sum, fee) => sum + (fee.amount || 0), 0);
-    return total;
-}
-
-// ============================================
-// LOAD ALL PAYMENTS
-// ============================================
-
-async function loadAllPaymentsForReport() {
-    try {
-        const { data, error } = await sb
-            .from('payments')
-            .select('*')
-            .order('payment_date', { ascending: true });
-        
-        if (error) throw error;
-        allPaymentsList = data || [];
-        return allPaymentsList;
-    } catch (error) {
-        console.error('Error loading payments:', error);
-        return [];
-    }
-}
-
-// ============================================
 // LOAD STUDENTS
 // ============================================
 
@@ -13613,21 +13627,29 @@ async function loadStudentsForReport() {
 }
 
 // ============================================
-// LOAD GRADING RULES
+// LOAD GRADING RULES - SAME AS MARKS MODULE
 // ============================================
 
 async function loadGradingRulesForReport() {
     try {
         if (currentLevel === 'olevel') {
+            // Load O-Level grades from olevel_grades table (same as Marks Module)
             const { data, error } = await sb
                 .from('olevel_grades')
                 .select('*')
-                .order('points', { ascending: true });
+                .order('min_percentage', { ascending: true });
             
-            if (error) throw error;
-            reportsPrincipalGradingRules = data || [];
+            if (error) {
+                console.error("Error loading O-Level grades:", error);
+                reportsPrincipalGradingRules = [];
+            } else {
+                reportsPrincipalGradingRules = data || [];
+                reportsOlevelGrades = data || [];
+                console.log(`✅ Reports: Loaded ${reportsPrincipalGradingRules.length} O-Level grades (same as Marks Module)`);
+            }
             reportsSubsidiaryGradingRules = [];
         } else {
+            // A-Level grades
             const { data: principal, error: principalError } = await sb
                 .from('alevel_principal_grades')
                 .select('*')
@@ -13686,21 +13708,24 @@ async function loadUniversityEntryRequirements() {
 }
 
 // ============================================
-// GET GRADE AND POINTS
+// GET GRADE AND POINTS - SAME AS MARKS MODULE
 // ============================================
 
 function getGradeAndPointsFromSettings(percentage, subjectName = '') {
     let rules = [];
     
     if (currentLevel === 'olevel') {
+        // Use O-Level grades from database (same as Marks Module)
         rules = reportsPrincipalGradingRules;
     } else {
         const isSubsidiary = subsidiarySubjectsList.includes(subjectName);
         rules = isSubsidiary ? reportsSubsidiaryGradingRules : reportsPrincipalGradingRules;
     }
     
+    // ONLY use database rules - NO HARDCODED FALLBACK
     if (!rules || rules.length === 0) {
-        return { grade: '?', points: 0, color: '#6c757d', remark: 'No rules' };
+        console.warn("⚠️ No grading rules found in database!");
+        return { grade: '?', points: 0, color: '#6c757d', remark: 'No rules configured' };
     }
     
     for (const rule of rules) {
@@ -13709,7 +13734,7 @@ function getGradeAndPointsFromSettings(percentage, subjectName = '') {
                 grade: rule.grade,
                 points: rule.points || 0,
                 color: rule.color_code || '#2ecc71',
-                remark: rule.remark || ''
+                remark: rule.remark || rule.description || ''
             };
         }
     }
@@ -13718,65 +13743,7 @@ function getGradeAndPointsFromSettings(percentage, subjectName = '') {
 }
 
 // ============================================
-// CALCULATE O-LEVEL FINAL SCORE
-// ============================================
-
-function calculateOlevelFinalScore(caScore, examScore) {
-    return (caScore * 0.2) + (examScore * 0.8);
-}
-
-// ============================================
-// LOAD MARKS WITH GRADES
-// ============================================
-
-async function loadMarksForReport(studentId, exam, year) {
-    try {
-        const { data, error } = await sb
-            .from('marks')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('exam', exam)
-            .eq('year', year);
-        
-        if (error) throw error;
-        
-        if (!data || data.length === 0) {
-            return [];
-        }
-        
-        return (data || []).map(m => {
-            let percentage;
-            let subjectName = m.subject || '';
-            
-            if (currentLevel === 'olevel') {
-                const caScore = m.ca_score || 0;
-                const examScore = m.exam_score || 0;
-                percentage = calculateOlevelFinalScore(caScore, examScore);
-            } else {
-                const maxMarks = m.max_marks || 100;
-                const obtained = m.marks_obtained || 0;
-                percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
-            }
-            
-            const gradeInfo = getGradeAndPointsFromSettings(percentage, subjectName);
-            
-            return {
-                ...m,
-                percentage: percentage,
-                grade: gradeInfo.grade,
-                points: gradeInfo.points || 0,
-                color: gradeInfo.color || '#6c757d',
-                subject: subjectName
-            };
-        });
-    } catch (error) {
-        console.error('Error loading marks:', error);
-        return [];
-    }
-}
-
-// ============================================
-// LOAD O-LEVEL MARKS (SPECIAL FORMAT)
+// LOAD O-LEVEL MARKS - FIXED
 // ============================================
 
 async function loadOlevelMarksForReport(studentId, exam, year) {
@@ -13800,11 +13767,16 @@ async function loadOlevelMarksForReport(studentId, exam, year) {
             const u2 = m.unit2 || 0;
             const u3 = m.unit3 || 0;
             const exam80 = m.exam_80 || 0;
+            
+            // CORRECT CALCULATION (same as Marks Module)
             const unitAvg = (u1 + u2 + u3) / 3;
-            const total20 = (unitAvg / 3) * 20;
-            let total100 = total20 + exam80;
+            const unitContribution = (unitAvg / 20) * 100;
+            const examContribution = (exam80 / 80) * 100;
+            let total100 = (unitContribution * 0.2) + (examContribution * 0.8);
             total100 = Math.min(100, Math.max(0, total100));
-            const gradeInfo = getOlevelGradeDescriptor(total100);
+            
+            // GET GRADE FROM DATABASE (same as Marks Module)
+            const gradeInfo = getGradeAndPointsFromSettings(total100, m.subject);
             
             let unitDescriptor = 'Basic';
             if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
@@ -13816,11 +13788,12 @@ async function loadOlevelMarksForReport(studentId, exam, year) {
                 avgUnit: unitAvg.toFixed(1),
                 identifier: Math.round(unitAvg),
                 unitDescriptor: unitDescriptor,
-                total20: total20.toFixed(1),
+                total20: (unitAvg / 3 * 20).toFixed(1),
                 exam80: exam80,
                 total100: total100.toFixed(1),
                 grade: gradeInfo.grade,
-                descriptor: gradeInfo.descriptor,
+                color: gradeInfo.color,
+                descriptor: gradeInfo.remark || gradeInfo.grade,
                 teacher_initials: m.teacher_initials || ''
             };
         });
@@ -13831,164 +13804,60 @@ async function loadOlevelMarksForReport(studentId, exam, year) {
 }
 
 // ============================================
-// CALCULATE STUDENT FEE STATUS (FIXED)
+// LOAD MARKS WITH GRADES - FIXED
 // ============================================
 
-async function calculateStudentFeeStatusForReport(studentId, targetYear, targetTerm) {
-    const student = reportsStudentsList.find(s => s.id === studentId);
-    if (!student) return null;
-    
-    const termFee = await getTotalFeeForStudent(student);
-    
-    if (termFee === 0) {
-        return {
-            termFee: 0,
-            expected: 0,
-            paid: 0,
-            balance: 0,
-            previousYearsDebt: 0,
-            previousYearsCredit: 0,
-            previousTermsDebt: 0,
-            previousTermsCredit: 0,
-            currentTermPaid: 0,
-            status: 'NO_FEE',
-            statusColor: '#ffc107',
-            statusBadge: '⚠️ No Fee Set',
-            student: student
-        };
-    }
-    
-    const currentTermIndex = termOrder.indexOf(targetTerm);
-    
-    // STEP 1: Calculate balance from PREVIOUS YEARS
-    let previousYearsBalance = 0;
-    const allYears = [...new Set(allPaymentsList.filter(p => p.student_id === studentId).map(p => parseInt(p.year)))].sort();
-    
-    for (const year of allYears) {
-        if (year < parseInt(targetYear)) {
-            let yearTotalFee = 0;
-            let yearTotalPaid = 0;
+async function loadMarksForReport(studentId, exam, year) {
+    try {
+        const { data, error } = await sb
+            .from('marks')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam', exam)
+            .eq('year', year);
+        
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            return [];
+        }
+        
+        return (data || []).map(m => {
+            let percentage;
+            let subjectName = m.subject || '';
             
-            for (const term of termOrder) {
-                yearTotalFee += termFee;
-                const termPayments = allPaymentsList.filter(p => 
-                    p.student_id === studentId && 
-                    p.year === year.toString() && 
-                    p.term === term
-                );
-                yearTotalPaid += termPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            if (currentLevel === 'olevel') {
+                // O-Level: Use unit-based calculation
+                const u1 = m.unit1 || 0;
+                const u2 = m.unit2 || 0;
+                const u3 = m.unit3 || 0;
+                const exam80 = m.exam_80 || 0;
+                const unitAvg = (u1 + u2 + u3) / 3;
+                const unitContribution = (unitAvg / 20) * 100;
+                const examContribution = (exam80 / 80) * 100;
+                percentage = (unitContribution * 0.2) + (examContribution * 0.8);
+                percentage = Math.min(100, Math.max(0, percentage));
+            } else {
+                const maxMarks = m.max_marks || 100;
+                const obtained = m.marks_obtained || 0;
+                percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
             }
             
-            const yearBalance = yearTotalFee - yearTotalPaid;
-            previousYearsBalance += yearBalance;
-        }
+            const gradeInfo = getGradeAndPointsFromSettings(percentage, subjectName);
+            
+            return {
+                ...m,
+                percentage: percentage,
+                grade: gradeInfo.grade,
+                points: gradeInfo.points || 0,
+                color: gradeInfo.color || '#6c757d',
+                subject: subjectName
+            };
+        });
+    } catch (error) {
+        console.error('Error loading marks:', error);
+        return [];
     }
-    
-    const previousYearsDebt = previousYearsBalance > 0 ? previousYearsBalance : 0;
-    const previousYearsCredit = previousYearsBalance < 0 ? Math.abs(previousYearsBalance) : 0;
-    
-    // STEP 2: Calculate balance from PREVIOUS TERMS in same year
-    let previousTermsBalance = 0;
-    
-    for (let i = 0; i < currentTermIndex; i++) {
-        const prevTerm = termOrder[i];
-        const prevTermPayments = allPaymentsList.filter(p => 
-            p.student_id === studentId && 
-            p.year === targetYear && 
-            p.term === prevTerm
-        );
-        const prevTermPaid = prevTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-        
-        const prevTermBalance = termFee - prevTermPaid;
-        previousTermsBalance += prevTermBalance;
-    }
-    
-    const previousTermsDebt = previousTermsBalance > 0 ? previousTermsBalance : 0;
-    const previousTermsCredit = previousTermsBalance < 0 ? Math.abs(previousTermsBalance) : 0;
-    
-    // STEP 3: Get current term payments
-    const currentTermPayments = allPaymentsList.filter(p => 
-        p.student_id === studentId && 
-        p.year === targetYear && 
-        p.term === targetTerm
-    );
-    const currentTermPaid = currentTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-    
-    // STEP 4: Calculate TOTAL BALANCE BROUGHT FORWARD
-    const totalCarryForward = previousYearsBalance + previousTermsBalance;
-    
-    // STEP 5: Calculate what the student needs to pay this term
-    let amountNeededForCurrentTerm = termFee;
-    let remainingCredit = 0;
-    
-    if (totalCarryForward < 0) {
-        const creditAmount = Math.abs(totalCarryForward);
-        if (creditAmount >= termFee) {
-            amountNeededForCurrentTerm = 0;
-            remainingCredit = creditAmount - termFee;
-        } else {
-            amountNeededForCurrentTerm = termFee - creditAmount;
-            remainingCredit = 0;
-        }
-    } else if (totalCarryForward > 0) {
-        amountNeededForCurrentTerm = termFee + totalCarryForward;
-    }
-    
-    // STEP 6: Calculate current balance
-    let balance = amountNeededForCurrentTerm - currentTermPaid;
-    
-    if (remainingCredit > 0) {
-        balance = balance - remainingCredit;
-    }
-    
-    // STEP 7: Calculate total expected and total paid for display (FIXED)
-    let totalExpected = termFee;
-    let totalPaid = currentTermPaid;
-    
-    // Apply previous credits to reduce expected (not increase paid)
-    if (previousYearsCredit > 0 || previousTermsCredit > 0) {
-        const totalCredit = previousYearsCredit + previousTermsCredit;
-        totalExpected = Math.max(0, totalExpected - totalCredit);
-    }
-    
-    // Add previous debts to expected
-    if (previousYearsDebt > 0) totalExpected += previousYearsDebt;
-    if (previousTermsDebt > 0) totalExpected += previousTermsDebt;
-    
-    // STEP 8: Determine STATUS
-    let status = '', statusColor = '', statusBadge = '';
-    
-    if (balance <= 0) {
-        status = 'CLEARED';
-        statusColor = '#28a745';
-        statusBadge = '✅ Fully Paid';
-    } else if (balance < totalExpected * 0.5) {
-        status = 'PARTIAL';
-        statusColor = '#ffc107';
-        statusBadge = '⚠️ Partially Paid';
-    } else {
-        status = 'DEFAULTER';
-        statusColor = '#dc3545';
-        statusBadge = '❌ Defaulter';
-    }
-    
-    return {
-        termFee: termFee,
-        expected: totalExpected,
-        paid: totalPaid,
-        balance: balance,
-        previousYearsDebt: previousYearsDebt,
-        previousYearsCredit: previousYearsCredit,
-        previousTermsDebt: previousTermsDebt,
-        previousTermsCredit: previousTermsCredit,
-        currentTermPaid: currentTermPaid,
-        totalCarryForward: totalCarryForward,
-        remainingCredit: remainingCredit,
-        status: status,
-        statusColor: statusColor,
-        statusBadge: statusBadge,
-        student: student
-    };
 }
 
 // ============================================
@@ -14108,229 +13977,14 @@ function getRemarkMessage(totalPoints, avgPercentage, division) {
 }
 
 // ============================================
-// GENERATE A-LEVEL REPORT CARD HTML
+// GENERATE O-LEVEL REPORT CARD HTML - NO FEE STRUCTURE
 // ============================================
 
-// ============================================
-// GENERATE A-LEVEL REPORT CARD HTML - BLACK & WHITE
-// ============================================
-
-function generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
-    let totalPoints = 0;
-    let totalPercentage = 0;
-    
-    const subjectsHtml = marks.map(m => {
-        let percentage = m.percentage;
-        
-        totalPoints += m.points || 0;
-        totalPercentage += percentage;
-        
-        const finalScore = m.marks_obtained || 0;
-        const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
-        return `
-            <tr style="border-bottom: 1px solid #000;">
-                <td style="padding: 10px 8px; border: 1px solid #000;">
-                    <strong>${escapeHtml(m.subject)}</strong>
-                    ${isSubsidiary ? '<span style="background: #000; color: white; padding: 2px 8px; font-size: 10px; margin-left: 5px;">Sub</span>' : ''}
-                </td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${finalScore}</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${m.max_marks}</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${percentage.toFixed(1)}%</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;"><span style="background: #000; color: white; padding: 4px 12px; font-weight: bold;">${m.grade}</span></td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;"><strong>${m.points}</strong></td>
-            </tr>
-        `;
-    }).join('');
-    
-    const avgPercentage = marks.length > 0 ? (totalPercentage / marks.length).toFixed(1) : 0;
-    const division = calculateGradeDivision(avgPercentage, totalPoints);
-    const levelName = 'UACE REPORT CARD';
-    
-    let universityEligibility = checkUniversityEligibility(totalPoints, marks);
-    
-    const tableHeaders = `<tr style="background: #000; color: white;">
-        <th style="padding: 10px; border: 1px solid #000;">Subject</th>
-        <th style="padding: 10px; border: 1px solid #000;">Marks</th>
-        <th style="padding: 10px; border: 1px solid #000;">Max</th>
-        <th style="padding: 10px; border: 1px solid #000;">%</th>
-        <th style="padding: 10px; border: 1px solid #000;">Grade</th>
-        <th style="padding: 10px; border: 1px solid #000;">Points</th>
-    </tr>`;
-    
-    // Fee display section - Black & White
-    let feeDisplay = '';
-    if (feeStatus && feeStatus.status !== 'NO_FEE') {
-        feeDisplay = `
-            <div style="padding: 15px; border: 2px solid #000; margin-bottom: 20px;">
-                <table style="width: 100%; border: none; font-size: 13px;">
-                    <tr style="background: #000; color: white;">
-                        <td colspan="3" style="padding: 8px; text-align: center; font-weight: bold; border: 1px solid #000;">FEE STATEMENT FOR ${exam} ${year}</td>
-                    </tr>
-                    <tr>
-                        <td style="width: 45%; padding: 6px; border: 1px solid #000;"><strong>Term Fee:</strong></td>
-                        <td style="width: 55%; padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.termFee)}</td>
-                    </tr>
-                    ${feeStatus.previousYearsDebt > 0 ? `
-                    <tr>
-                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Years Debt:</strong></td>
-                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousYearsDebt)}</td>
-                    </tr>` : ''}
-                    ${feeStatus.previousYearsCredit > 0 ? `
-                    <tr>
-                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Years Credit:</strong></td>
-                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousYearsCredit)} (Carried Forward)</td>
-                    </tr>` : ''}
-                    ${feeStatus.previousTermsDebt > 0 ? `
-                    <tr>
-                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Terms Debt (${year}):</strong></td>
-                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousTermsDebt)}</td>
-                    </tr>` : ''}
-                    ${feeStatus.previousTermsCredit > 0 ? `
-                    <tr>
-                        <td style="padding: 6px; border: 1px solid #000;"><strong>Previous Terms Credit (${year}):</strong></td>
-                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.previousTermsCredit)} (Carried Forward)</td>
-                    </tr>` : ''}
-                    <tr style="border-top: 2px solid #000;">
-                        <td style="padding: 6px; border: 1px solid #000;"><strong>Total Expected:</strong></td>
-                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.expected)}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 6px; border: 1px solid #000;"><strong>Paid This Term:</strong></td>
-                        <td style="padding: 6px; border: 1px solid #000;" colspan="2">${formatCurrency(feeStatus.currentTermPaid)}</td>
-                    </tr>
-                    <tr style="border-top: 2px solid #000; background: #f0f0f0;">
-                        <td style="padding: 8px; border: 1px solid #000;"><strong>Current Balance:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #000;" colspan="2">
-                            <strong>
-                                ${formatCurrency(Math.abs(feeStatus.balance))} ${feeStatus.balance > 0 ? '(Due)' : '(Credit - Carries Forward)'}
-                            </strong>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="3" style="text-align: center; padding-top: 10px; border: 1px solid #000;">
-                            <span style="background: #000; color: white; padding: 5px 15px; font-size: 12px;">
-                                ${feeStatus.statusBadge}
-                            </span>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        `;
-    } else if (feeStatus && feeStatus.status === 'NO_FEE') {
-        feeDisplay = `
-            <div style="padding: 12px; border: 2px solid #000; margin-bottom: 20px;">
-                <div style="text-align: center;">
-                    <strong>No fee structure found for this student.</strong><br>
-                    <small>Please add fee structure in Settings → Fee Structure tab.</small>
-                </div>
-            </div>
-        `;
-    }
-    
-    return `
-        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border: 2px solid #000;">
-            
-            <div style="position: relative; z-index: 1; padding: 25px;">
-                <!-- HEADER - Black & White -->
-                <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px solid #000; padding-bottom: 15px;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 25px;">
-                        ${schoolInfo.school_logo ? 
-                            `<img src="${schoolInfo.school_logo}" style="width: 130px; height: 130px; object-fit: contain;">` : 
-                            `<div style="width: 130px; height: 130px; background: #000; display: flex; align-items: center; justify-content: center; font-size: 50px; color: white;">🏫</div>`
-                        }
-                        <div>
-                            <h1 style="color: #000; margin: 0; font-size: 28px; font-weight: bold;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
-                            <p style="margin: 5px 0 0; font-style: italic; font-size: 14px; color: #000;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
-                            <p style="margin: 5px 0 0; font-size: 12px; color: #000;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div style="text-align: center; margin-bottom: 15px;">
-                    <h2 style="color: #000; margin: 0; font-size: 22px; font-weight: bold; text-decoration: underline;">${levelName}</h2>
-                    <p style="margin: 5px 0 0; font-size: 14px; color: #000;"><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
-                </div>
-                
-                <!-- Student Info - Black & White -->
-                <div style="background: #f8f9fa; padding: 12px; border: 1px solid #000; margin-bottom: 20px;">
-                    <table style="width: 100%; border: none;">
-                        <tr><td style="width: 50%; border: none;"><strong>Student:</strong> ${escapeHtml(student.name)}</td><td style="border: none;"><strong>Admission No:</strong> ${student.admission_no || '-'}</td></tr>
-                        <tr><td style="border: none;"><strong>Class:</strong> ${student.class}</td><td style="border: none;"><strong>Stream:</strong> ${student.stream || '-'}</td></tr>
-                        <tr><td style="border: none;"><strong>Type:</strong> ${student.student_type || 'Day'}</td><td style="border: none;"><strong>Combination:</strong> ${student.combination || 'N/A'}</td></tr>
-                        <tr><td colspan="2" style="border: none;"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</td></tr>
-                    </table>
-                </div>
-                
-                ${feeDisplay}
-                
-                <!-- Results Table - Black & White -->
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
-                    <thead>${tableHeaders}</thead>
-                    <tbody>${subjectsHtml}</tbody>
-                    <tfoot>
-                        <tr style="background: #000; color: white;">
-                            <td colspan="5" style="padding: 10px; text-align: right; border: 1px solid #000;"><strong>TOTAL / AVERAGE:</strong></td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #000;"><strong>${totalPoints + ' pts'}</strong></td>
-                        </tr>
-                    </tfoot>
-                </table>
-                
-                <!-- University Eligibility - Black & White -->
-                ${universityEligibility ? `
-                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border: 2px solid #000; background: ${universityEligibility.eligible ? '#f0f0f0' : '#f0f0f0'}; color: #000;">
-                        <strong>UNIVERSITY ELIGIBILITY: ${universityEligibility.eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}</strong>
-                        ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets the minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
-                    </div>
-                ` : ''}
-                
-                <!-- Remarks - Black & White -->
-                <div style="background: #f8f9fa; padding: 12px; border-left: 4px solid #000; margin-bottom: 20px; border: 1px solid #000;">
-                    <strong>REMARKS:</strong>
-                    <p style="margin: 8px 0 0; color: #000;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
-                </div>
-                
-                <!-- Signatures - Black & White -->
-                <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                    <div style="text-align: center;">
-                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
-                        ${escapeHtml(classTeacher)}<br><small>Class Teacher</small>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
-                        ${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}<br><small>Head Teacher</small>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
-                        Parent's Signature
-                    </div>
-                </div>
-            </div>
-        </div>
-        ${!isForPrint ? `
-        <div style="text-align: center; padding: 15px; margin-top: 20px; background: white; border-radius: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); position: sticky; bottom: 0; z-index: 100;">
-            <button class="btn btn-success btn-lg" onclick="printReportCard()" style="padding: 12px 50px; font-size: 18px; border-radius: 8px; font-weight: 600; background: #000; color: white; border: none;">
-                <i class="fas fa-print"></i> 🖨️ Print Report
-            </button>
-            <button class="btn btn-secondary btn-lg ms-2" onclick="closeReportPreview()" style="padding: 12px 30px; font-size: 18px; border-radius: 8px; background: #666; color: white; border: none;">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-        ` : ''}
-    `;
-}
-// ============================================
-// GENERATE O-LEVEL REPORT CARD HTML
-// ============================================
-
-// ============================================
-// GENERATE O-LEVEL REPORT CARD HTML - UPDATED
-// ============================================
-
-function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, isForPrint = false) {
+function generateOlevelReportHTML(student, marks, exam, year, classTeacher, isForPrint = false) {
     let totalSum = 0;
     for (const m of marks) totalSum += parseFloat(m.total100);
     const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
-    const overallGrade = getOlevelGradeDescriptor(parseFloat(overallAvg));
+    const gradeInfo = getGradeAndPointsFromSettings(parseFloat(overallAvg), '');
     const currentDate = getCurrentDate();
     
     const subjectsHtml = marks.map(m => `
@@ -14344,31 +13998,13 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
             <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</td>
             <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</td>
             <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold;">${m.grade}</td>
+            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold; background: ${m.color}; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+                ${m.grade}
+            </td>
             <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</td>
             <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</td>
         </tr>
     `).join('');
-    
-    // REMOVED: promotionStatus - no longer displayed
-    
-    // Fee Status Display
-    let feeDisplay = '';
-    if (feeStatus && feeStatus.status !== 'NO_FEE') {
-        const balanceAmount = Math.abs(feeStatus.balance || 0);
-        const balanceText = feeStatus.balance > 0 ? `${formatCurrency(balanceAmount)} (Due)` : (feeStatus.balance < 0 ? `${formatCurrency(balanceAmount)} (Credit)` : formatCurrency(balanceAmount));
-        
-        feeDisplay = `
-            <div style="margin: 0 20px 20px 20px; padding: 10px 15px; border: 1px solid #000; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div><strong>Term Fee:</strong> ${formatCurrency(feeStatus.termFee || 0)}</div>
-                    <div><strong>Amount Paid:</strong> ${formatCurrency(feeStatus.paid || 0)}</div>
-                    <div><strong>Balance:</strong> ${balanceText}</div>
-                    <div><strong>Status:</strong> ${feeStatus.statusBadge || 'Pending'}</div>
-                </div>
-            </div>
-        `;
-    }
     
     const logoWatermark = schoolInfo.school_logo ? 
         `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.12; z-index: 0; pointer-events: none; width: 55%; max-width: 400px;">
@@ -14382,7 +14018,6 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
             <div style="text-align: center; padding: 20px 20px 10px 20px; position: relative; z-index: 1;">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 25px;">
                     ${schoolInfo.school_logo ? 
-                        // REMOVED: border-radius, border, padding - just plain image
                         `<img src="${schoolInfo.school_logo}" style="height: 130px; width: 130px; object-fit: contain;">` : 
                         `<span style="font-size: 55px;">🏫</span>`
                     }
@@ -14405,10 +14040,6 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
                     <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
                 </div>
             </div>
-            
-            ${feeDisplay}
-            
-            <!-- REMOVED: Promotion Status Section -->
             
             <div style="margin: 0 20px 20px 20px; overflow-x: auto;">
                 <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
@@ -14440,8 +14071,8 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
             <div style="margin: 0 20px 15px 20px; padding: 12px; border: 1px solid #000; text-align: center; background: #fafafa;">
                 <div style="display: flex; justify-content: center; align-items: center; gap: 40px; flex-wrap: wrap;">
                     <div><strong>OVERALL AVERAGE:</strong> <span style="font-size: 22px; font-weight: bold;">${overallAvg}%</span></div>
-                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold;">${overallGrade.grade}</span></div>
-                    <div><strong>DESCRIPTOR:</strong> ${overallGrade.descriptor}</div>
+                    <div><strong>GRADE:</strong> <span style="font-size: 32px; font-weight: bold; background: ${gradeInfo.color}; color: white; padding: 5px 20px; border-radius: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">${gradeInfo.grade}</span></div>
+                    <div><strong>DESCRIPTOR:</strong> ${gradeInfo.remark || gradeInfo.grade}</div>
                 </div>
             </div>
             
@@ -14457,11 +14088,14 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">85-100</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">A</td><td style="border: 1px solid #000; padding: 5px;">Exceptional</td><td style="border: 1px solid #000; padding: 5px;">Exceptional performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">70-84</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">B</td><td style="border: 1px solid #000; padding: 5px;">Outstanding</td><td style="border: 1px solid #000; padding: 5px;">Outstanding performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">60-69</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">C</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory</td><td style="border: 1px solid #000; padding: 5px;">Satisfactory performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">40-59</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">D</td><td style="border: 1px solid #000; padding: 5px;">Basic</td><td style="border: 1px solid #000; padding: 5px;">Basic performance</td></tr>
-                        <tr><td style="border: 1px solid #000; padding: 5px;">0-39</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">E</td><td style="border: 1px solid #000; padding: 5px;">Elementary</td><td style="border: 1px solid #000; padding: 5px;">Needs improvement</td></tr>
+                        ${reportsOlevelGrades.map(rule => `
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 5px;">${rule.min_percentage}-${rule.max_percentage}</td>
+                                <td style="border: 1px solid #000; padding: 5px; text-align: center; background: ${rule.color_code}; color: white; font-weight: bold;">${rule.grade}</td>
+                                <td style="border: 1px solid #000; padding: 5px;">${rule.remark || rule.description || ''}</td>
+                                <td style="border: 1px solid #000; padding: 5px;">${rule.description || ''}</td>
+                            </tr>
+                        `).join('')}
                     </tbody>
                 </table>
             </div>
@@ -14493,7 +14127,6 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
                 <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
                     <span>📅 Term ended: ${currentDate}</span>
                     <span>🔹 Next Term Begins: _______________</span>
-                    <span>💰 Balance: ${feeStatus ? formatCurrency(Math.abs(feeStatus.balance || 0)) : '_______________'}</span>
                 </div>
             </div>
         </div>
@@ -14503,6 +14136,143 @@ function generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTe
                 <i class="fas fa-print"></i> 🖨️ Print Report
             </button>
             <button class="btn btn-secondary btn-lg ms-2" onclick="closeReportPreview()" style="padding: 12px 30px; font-size: 18px; border-radius: 8px;">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+        ` : ''}
+    `;
+}
+
+// ============================================
+// GENERATE A-LEVEL REPORT CARD HTML - NO FEE STRUCTURE
+// ============================================
+
+function generateAlevelReportHTML(student, marks, exam, year, classTeacher, isForPrint = false) {
+    let totalPoints = 0;
+    let totalPercentage = 0;
+    
+    const subjectsHtml = marks.map(m => {
+        let percentage = m.percentage;
+        
+        totalPoints += m.points || 0;
+        totalPercentage += percentage;
+        
+        const finalScore = m.marks_obtained || 0;
+        const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
+        return `
+            <tr style="border-bottom: 1px solid #000;">
+                <td style="padding: 10px 8px; border: 1px solid #000;">
+                    <strong>${escapeHtml(m.subject)}</strong>
+                    ${isSubsidiary ? '<span style="background: #000; color: white; padding: 2px 8px; font-size: 10px; margin-left: 5px;">Sub</span>' : ''}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${finalScore}</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${m.max_marks}</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${percentage.toFixed(1)}%</td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; background: ${m.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+                    ${m.grade}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;"><strong>${m.points}</strong></td>
+            </tr>
+        `;
+    }).join('');
+    
+    const avgPercentage = marks.length > 0 ? (totalPercentage / marks.length).toFixed(1) : 0;
+    const division = calculateGradeDivision(avgPercentage, totalPoints);
+    const levelName = 'UACE REPORT CARD';
+    
+    let universityEligibility = checkUniversityEligibility(totalPoints, marks);
+    
+    const tableHeaders = `<tr style="background: #000; color: white;">
+        <th style="padding: 10px; border: 1px solid #000;">Subject</th>
+        <th style="padding: 10px; border: 1px solid #000;">Marks</th>
+        <th style="padding: 10px; border: 1px solid #000;">Max</th>
+        <th style="padding: 10px; border: 1px solid #000;">%</th>
+        <th style="padding: 10px; border: 1px solid #000;">Grade</th>
+        <th style="padding: 10px; border: 1px solid #000;">Points</th>
+    </tr>`;
+    
+    return `
+        <div class="report-container" style="position: relative; background: white; max-width: 950px; margin: 0 auto; border: 2px solid #000;">
+            <div style="position: relative; z-index: 1; padding: 25px;">
+                <!-- HEADER -->
+                <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px solid #000; padding-bottom: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 25px;">
+                        ${schoolInfo.school_logo ? 
+                            `<img src="${schoolInfo.school_logo}" style="width: 130px; height: 130px; object-fit: contain;">` : 
+                            `<div style="width: 130px; height: 130px; background: #000; display: flex; align-items: center; justify-content: center; font-size: 50px; color: white;">🏫</div>`
+                        }
+                        <div>
+                            <h1 style="color: #000; margin: 0; font-size: 28px; font-weight: bold;">${escapeHtml(schoolInfo.school_name || 'UGANDA SCHOOL SYSTEM')}</h1>
+                            <p style="margin: 5px 0 0; font-style: italic; font-size: 14px; color: #000;">${escapeHtml(schoolInfo.school_motto || 'Education for All')}</p>
+                            <p style="margin: 5px 0 0; font-size: 12px; color: #000;">${escapeHtml(schoolInfo.school_address || '')} | Tel: ${escapeHtml(schoolInfo.school_phone || '')}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <h2 style="color: #000; margin: 0; font-size: 22px; font-weight: bold; text-decoration: underline;">${levelName}</h2>
+                    <p style="margin: 5px 0 0; font-size: 14px; color: #000;"><strong>${exam} - ${year}</strong> | ${getCurrentDate()}</p>
+                </div>
+                
+                <!-- Student Info -->
+                <div style="background: #f8f9fa; padding: 12px; border: 1px solid #000; margin-bottom: 20px;">
+                    <table style="width: 100%; border: none;">
+                        <tr><td style="width: 50%; border: none;"><strong>Student:</strong> ${escapeHtml(student.name)}</td><td style="border: none;"><strong>Admission No:</strong> ${student.admission_no || '-'}</td></tr>
+                        <tr><td style="border: none;"><strong>Class:</strong> ${student.class}</td><td style="border: none;"><strong>Stream:</strong> ${student.stream || '-'}</td></tr>
+                        <tr><td style="border: none;"><strong>Type:</strong> ${student.student_type || 'Day'}</td><td style="border: none;"><strong>Combination:</strong> ${student.combination || 'N/A'}</td></tr>
+                        <tr><td colspan="2" style="border: none;"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</td></tr>
+                    </table>
+                </div>
+                
+                <!-- Results Table -->
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+                    <thead>${tableHeaders}</thead>
+                    <tbody>${subjectsHtml}</tbody>
+                    <tfoot>
+                        <tr style="background: #000; color: white;">
+                            <td colspan="5" style="padding: 10px; text-align: right; border: 1px solid #000;"><strong>TOTAL / AVERAGE:</strong></td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #000;"><strong>${totalPoints + ' pts'}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                
+                <!-- University Eligibility -->
+                ${universityEligibility ? `
+                    <div style="text-align: center; margin-bottom: 15px; padding: 8px; border: 2px solid #000; background: ${universityEligibility.eligible ? '#f0f0f0' : '#f0f0f0'}; color: #000;">
+                        <strong>UNIVERSITY ELIGIBILITY: ${universityEligibility.eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}</strong>
+                        ${!universityEligibility.eligible ? `<br><small>${universityEligibility.reasons.join('; ')}</small>` : `<br><small>Meets the minimum requirement of ${reportsUniversityEntry.minimum_points} points</small>`}
+                    </div>
+                ` : ''}
+                
+                <!-- Remarks -->
+                <div style="background: #f8f9fa; padding: 12px; border-left: 4px solid #000; margin-bottom: 20px; border: 1px solid #000;">
+                    <strong>REMARKS:</strong>
+                    <p style="margin: 8px 0 0; color: #000;">${getRemarkMessage(totalPoints, avgPercentage, division)}</p>
+                </div>
+                
+                <!-- Signatures -->
+                <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                    <div style="text-align: center;">
+                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
+                        ${escapeHtml(classTeacher)}<br><small>Class Teacher</small>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
+                        ${escapeHtml(schoolInfo.principal_name || 'Head Teacher')}<br><small>Head Teacher</small>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="width: 150px; border-bottom: 2px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
+                        Parent's Signature
+                    </div>
+                </div>
+            </div>
+        </div>
+        ${!isForPrint ? `
+        <div style="text-align: center; padding: 15px; margin-top: 20px; background: white; border-radius: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); position: sticky; bottom: 0; z-index: 100;">
+            <button class="btn btn-success btn-lg" onclick="printReportCard()" style="padding: 12px 50px; font-size: 18px; border-radius: 8px; font-weight: 600; background: #000; color: white; border: none;">
+                <i class="fas fa-print"></i> 🖨️ Print Report
+            </button>
+            <button class="btn btn-secondary btn-lg ms-2" onclick="closeReportPreview()" style="padding: 12px 30px; font-size: 18px; border-radius: 8px; background: #666; color: white; border: none;">
                 <i class="fas fa-times"></i> Close
             </button>
         </div>
@@ -14529,16 +14299,14 @@ window.generateReport = async function() {
     try {
         await loadSchoolInfoForReport();
         await loadStudentsForReport();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
         await loadGradingRulesForReport();
         await loadUniversityEntryRequirements();
+        await loadOlevelGradesForReports();
         
         const student = reportsStudentsList.find(s => s.id === studentId);
         if (!student) throw new Error('Student not found');
         
         let marks, reportHtml, classTeacher = getClassTeacher(student);
-        const feeStatus = await calculateStudentFeeStatusForReport(studentId, year, exam);
         
         if (currentLevel === 'olevel') {
             marks = await loadOlevelMarksForReport(studentId, exam, year);
@@ -14546,14 +14314,14 @@ window.generateReport = async function() {
                 Swal.fire('No Data', `No marks found for ${student.name} in ${exam} ${year}`, 'info');
                 return;
             }
-            reportHtml = generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher);
+            reportHtml = generateOlevelReportHTML(student, marks, exam, year, classTeacher);
         } else {
             marks = await loadMarksForReport(studentId, exam, year);
             if (marks.length === 0) {
                 Swal.fire('No Data', `No marks found for ${student.name} in ${exam} ${year}`, 'info');
                 return;
             }
-            reportHtml = generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher);
+            reportHtml = generateAlevelReportHTML(student, marks, exam, year, classTeacher);
         }
         
         document.getElementById('reportPreview').innerHTML = reportHtml;
@@ -14568,7 +14336,7 @@ window.generateReport = async function() {
 };
 
 // ============================================
-// GENERATE BULK REPORTS (FIXED FOR BOTH LEVELS)
+// GENERATE BULK REPORTS
 // ============================================
 
 window.generateBulkReports = async function() {
@@ -14592,10 +14360,9 @@ window.generateBulkReports = async function() {
     try {
         await loadSchoolInfoForReport();
         await loadStudentsForReport();
-        await loadFeeStructureForReport();
-        await loadAllPaymentsForReport();
         await loadGradingRulesForReport();
         await loadUniversityEntryRequirements();
+        await loadOlevelGradesForReports();
         
         let query = sb.from('students').select('*').eq('class', className);
         if (stream && stream !== '') {
@@ -14616,7 +14383,6 @@ window.generateBulkReports = async function() {
         for (const student of students) {
             try {
                 let marks;
-                const feeStatus = await calculateStudentFeeStatusForReport(student.id, year, exam);
                 const classTeacher = getClassTeacher(student);
                 
                 if (currentLevel === 'olevel') {
@@ -14626,7 +14392,7 @@ window.generateBulkReports = async function() {
                 }
                 
                 if (marks.length > 0) {
-                    allReports.push({ student, marks, feeStatus, classTeacher });
+                    allReports.push({ student, marks, classTeacher });
                 }
                 
                 processedCount++;
@@ -14660,12 +14426,12 @@ window.generateBulkReports = async function() {
         let reportCount = 0;
         
         for (const report of allReports) {
-            const { student, marks, feeStatus, classTeacher } = report;
+            const { student, marks, classTeacher } = report;
             
             if (currentLevel === 'olevel') {
-                allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, true);
+                allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, true);
             } else {
-                allReportsHtml += generateAlevelReportHTML(student, marks, exam, year, feeStatus, classTeacher, true);
+                allReportsHtml += generateAlevelReportHTML(student, marks, exam, year, classTeacher, true);
             }
             
             reportCount++;
@@ -14746,11 +14512,7 @@ window.printReportCard = function() {
     if (!printWindow) {
         Swal.fire({
             title: 'Popup Blocked!',
-            html: 'Please allow popups for this website to print reports.<br><br>' +
-                  '<strong>How to fix:</strong><br>' +
-                  '1. Click the popup blocker icon in your address bar<br>' +
-                  '2. Select "Always allow popups"<br>' +
-                  '3. Refresh the page and try again',
+            html: 'Please allow popups for this website to print reports.',
             icon: 'warning',
             confirmButtonText: 'OK'
         });
@@ -14808,10 +14570,9 @@ async function renderReports() {
     await loadSchoolInfoForReport();
     await loadGradingRulesForReport();
     await loadUniversityEntryRequirements();
-    await loadFeeStructureForReport();
-    await loadAllPaymentsForReport();
     await loadStudentsForReport();
     await loadAcademicTermsForReports();
+    await loadOlevelGradesForReports();
     
     const classOptions = currentLevel === 'olevel' 
         ? ['S.1', 'S.2', 'S.3', 'S.4']
@@ -14824,7 +14585,7 @@ async function renderReports() {
         <div class="card shadow-sm mb-3">
             <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
                 <h5 class="mb-0"><i class="fas fa-file-alt"></i> ${levelLabel} Report Card System</h5>
-                <small>Complete Academic & Financial Report | Fee Calculation: Past Debts → Current Term → Forward Credit</small>
+                <small>Academic Report | Grades from O-Level Settings</small>
             </div>
             <div class="card-body">
                 <!-- SINGLE STUDENT REPORT -->
@@ -14921,17 +14682,11 @@ async function renderReports() {
 // INITIALIZATION
 // ============================================
 
-console.log('✅ Reports Module Loaded - Complete & Perfected');
+console.log('✅ Reports Module Loaded - Grades from Marks Module');
 console.log('✅ Supports both O-Level and A-Level');
-console.log('✅ Fee Calculation: Past Debts → Current Term → Forward Credit');
+console.log('✅ Fee Structure REMOVED from Reports');
 console.log('✅ Class Teacher from School Settings');
-console.log('✅ No Duplicate Buttons');
-// ============================================
-// PROMOTION MODULE - AUTO-LOAD TABLE
-// New Curriculum: Students don't fail, just promote
-// Table loads automatically when page opens
-// ============================================
-
+console.log('✅ Grades and Colors from O-Level Settings Tab');
 // Global variables
 let promotionStudentsList = [];
 let promotionClasses = [];
