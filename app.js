@@ -16001,7 +16001,7 @@ window.updateSchoolSettings = async function() {
         school_email: document.getElementById('schoolEmail')?.value || '',
         school_website: document.getElementById('schoolWebsite')?.value || '',
         principal_name: document.getElementById('principalName')?.value || '',
-        vice_principal_name: document.getElementById('vicePrincipalName')?.value || '',
+        director_of_studies_name: document.getElementById('directorOfStudiesName')?.value || '',  // Changed from vice_principal_name
         director_name: document.getElementById('directorName')?.value || '',
         school_logo: schoolLogoData || (existing ? existing.school_logo : null),
         updated_at: new Date().toISOString()
@@ -16221,7 +16221,7 @@ async function renderSchoolInfoTabContent() {
                         <div class="col-md-6"><label class="form-label">Email</label><input type="email" id="schoolEmail" class="form-control" value="${escapeHtml(school.school_email || '')}"></div>
                         <div class="col-md-6"><label class="form-label">Website</label><input type="text" id="schoolWebsite" class="form-control" value="${escapeHtml(school.school_website || '')}"></div>
                         <div class="col-md-4"><label class="form-label">Principal</label><input type="text" id="principalName" class="form-control" value="${escapeHtml(school.principal_name || '')}"></div>
-                        <div class="col-md-4"><label class="form-label">Vice Principal</label><input type="text" id="vicePrincipalName" class="form-control" value="${escapeHtml(school.vice_principal_name || '')}"></div>
+                        <div class="col-md-4"><label class="form-label">Director of Studies (D.O.S)</label><input type="text" id="directorOfStudiesName" class="form-control" value="${escapeHtml(school.director_of_studies_name || '')}"></div>
                         <div class="col-md-4"><label class="form-label">Director</label><input type="text" id="directorName" class="form-control" value="${escapeHtml(school.director_name || '')}"></div>
                     </div>
                 </div>
@@ -16283,7 +16283,6 @@ async function renderSchoolInfoTabContent() {
         </div>
     `;
 }
-
 // ============================================
 // PART 9: RENDER MAIN SETTINGS PAGE
 // ============================================
