@@ -855,7 +855,7 @@ async function renderDashboard() {
             extra: "Staff Members"
         },
         subjects: { 
-            roles: ['superadmin', 'admin', 'teacher'], 
+            roles: ['superadmin', 'admin'], 
             onclick: "loadPage('subjects')",
             icon: "fa-book-open",
             bg: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
