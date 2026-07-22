@@ -81,7 +81,9 @@ const roleMenus = {
     teacher: [
         { page: "dashboard", icon: "fa-tachometer-alt", label: "Dashboard" },
         { page: "marks", icon: "fa-chart-line", label: "Marks" },
-        { page: "subjects", icon: "fa-book-open", label: "Subjects" }
+        // { page: "subjects", icon: "fa-book-open", label: "Subjects" },
+        { page: "attendance", icon: "fa-calendar-check", label: "Attendance" }
+
         
         
     ],
