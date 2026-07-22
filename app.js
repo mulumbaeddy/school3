@@ -9998,6 +9998,11 @@ async function getPayments() {
 // CALCULATE STUDENT FEE STATUS
 // ============================================
 
+// ============================================
+// CALCULATE STUDENT FEE STATUS - FIXED FOR NEW STUDENTS
+// Previous terms ONLY apply if student existed in those terms
+// ============================================
+
 async function calculateStudentFeeStatusWithCarryForward(studentId, targetYear, targetTerm) {
     const student = allStudentsList.find(s => s.id === studentId);
     if (!student) return { expected: 0, paid: 0, balance: 0, status: 'UNKNOWN', statusColor: '#6c757d', statusBadge: '❓ Unknown' };
@@ -10021,16 +10026,96 @@ async function calculateStudentFeeStatusWithCarryForward(studentId, targetYear, 
     const termOrder = ['Term 1', 'Term 2', 'Term 3'];
     const currentTermIndex = termOrder.indexOf(targetTerm);
     
-    // Previous terms balance in same year
+    // ============================================
+    // CHECK: Is this a new student?
+    // Get the earliest payment date for this student
+    // ============================================
+    const studentPayments = allPaymentsList.filter(p => p.student_id === studentId);
+    let studentStartDate = null;
+    
+    if (studentPayments.length > 0) {
+        // Get the earliest payment date
+        const sortedPayments = [...studentPayments].sort((a, b) => new Date(a.payment_date) - new Date(b.payment_date));
+        studentStartDate = new Date(sortedPayments[0].payment_date);
+    } else {
+        // If no payments exist, check student's created_at date
+        if (student.created_at) {
+            studentStartDate = new Date(student.created_at);
+        } else {
+            // If no created_at, assume they are new and start from current term
+            studentStartDate = new Date();
+        }
+    }
+    
+    // Determine which term the student started in
+    let studentStartYear = parseInt(targetYear);
+    let studentStartTermIndex = currentTermIndex;
+    
+    // If we have a start date, check if it's after the start of the target term
+    const targetTermStartDate = getTermStartDate(targetYear, targetTerm);
+    if (studentStartDate > targetTermStartDate) {
+        // Student joined after the term started - they should only pay from current term
+        console.log(`🆕 New student ${student.name} joined after ${targetTerm} ${targetYear} started. No previous terms applied.`);
+        // Only calculate current term
+        const currentTermPayments = allPaymentsList.filter(p => 
+            p.student_id === studentId && p.year === targetYear && p.term === targetTerm
+        );
+        const currentTermPaid = currentTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+        
+        const totalExpected = termFee;
+        const balance = totalExpected - currentTermPaid;
+        
+        let status = '', statusColor = '', statusBadge = '';
+        if (balance <= 0) {
+            status = 'CLEARED';
+            statusColor = '#28a745';
+            statusBadge = '✅ Fully Paid';
+        } else if (balance < totalExpected * 0.5) {
+            status = 'PARTIAL';
+            statusColor = '#ffc107';
+            statusBadge = '⚠️ Partially Paid';
+        } else {
+            status = 'DEFAULTER';
+            statusColor = '#dc3545';
+            statusBadge = '❌ Defaulter';
+        }
+        
+        return {
+            termFee: termFee,
+            expected: totalExpected,
+            paid: currentTermPaid,
+            balance: balance,
+            previousTermsBalance: 0,
+            currentTermPaid: currentTermPaid,
+            status: status,
+            statusColor: statusColor,
+            statusBadge: statusBadge,
+            student: student,
+            isNewStudent: true
+        };
+    }
+    
+    // ============================================
+    // EXISTING STUDENT: Calculate previous terms
+    // Only apply to terms where student existed
+    // ============================================
     let previousTermsBalance = 0;
+    
     for (let i = 0; i < currentTermIndex; i++) {
         const prevTerm = termOrder[i];
-        const prevTermPayments = allPaymentsList.filter(p => 
-            p.student_id === studentId && p.year === targetYear && p.term === prevTerm
-        );
-        const prevTermPaid = prevTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-        if (prevTermPaid < termFee) {
-            previousTermsBalance += (termFee - prevTermPaid);
+        const prevTermStartDate = getTermStartDate(targetYear, prevTerm);
+        
+        // ONLY charge previous terms if student existed during that term
+        if (studentStartDate <= prevTermStartDate) {
+            const prevTermPayments = allPaymentsList.filter(p => 
+                p.student_id === studentId && p.year === targetYear && p.term === prevTerm
+            );
+            const prevTermPaid = prevTermPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            if (prevTermPaid < termFee) {
+                previousTermsBalance += (termFee - prevTermPaid);
+            }
+        } else {
+            console.log(`ℹ️ Student ${student.name} joined after ${prevTerm} ${targetYear}. Not charged.`);
         }
     }
     
@@ -10070,10 +10155,72 @@ async function calculateStudentFeeStatusWithCarryForward(studentId, targetYear, 
         status: status,
         statusColor: statusColor,
         statusBadge: statusBadge,
-        student: student
+        student: student,
+        isNewStudent: false
     };
 }
 
+// ============================================
+// HELPER: GET TERM START DATE
+// ============================================
+
+function getTermStartDate(year, term) {
+    // Approximate term start dates
+    const termStartMonths = {
+        'Term 1': 1,  // January
+        'Term 2': 5,  // May
+        'Term 3': 9   // September
+    };
+    
+    const month = termStartMonths[term] || 1;
+    return new Date(parseInt(year), month - 1, 15); // Mid-month start
+}
+
+// ============================================
+// LOAD SCHOOL SETTINGS (UPDATED with director_of_studies_name)
+// ============================================
+
+async function loadSchoolSettingsForPayments() {
+    try {
+        const { data, error } = await sb
+            .from('school_settings')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        
+        if (error) throw error;
+        
+        schoolSettings = data || {
+            school_name: 'Uganda School System',
+            school_motto: 'Education for All',
+            school_address: 'Kampala, Uganda',
+            school_phone: '+256 XXX XXX XXX',
+            school_email: 'info@school.ug',
+            school_logo: '',
+            principal_name: 'Principal',
+            director_of_studies_name: 'Director of Studies',  // UPDATED
+            director_name: 'Director',
+            bursar_name: 'Bursar'
+        };
+        return schoolSettings;
+    } catch (error) {
+        console.error('Error loading school settings:', error);
+        schoolSettings = {
+            school_name: 'Uganda School System',
+            school_motto: 'Education for All',
+            school_address: 'Kampala, Uganda',
+            school_phone: '+256 XXX XXX XXX',
+            school_email: 'info@school.ug',
+            school_logo: '',
+            principal_name: 'Principal',
+            director_of_studies_name: 'Director of Studies',  // UPDATED
+            director_name: 'Director',
+            bursar_name: 'Bursar'
+        };
+        return schoolSettings;
+    }
+}
 // ============================================
 // PROCESS PAYMENT
 // ============================================
