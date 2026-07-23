@@ -16912,7 +16912,6 @@ async function generateAlevelBoardHtml() {
                             <th style="width:80px">Grade</th>
                             <th style="width:100px">Min %</th>
                             <th style="width:100px">Max %</th>
-                            <th style="width:80px">Points</th>
                             <th>Description</th>
                             <th>Competency Level</th>
                             <th style="width:80px">Color</th>
@@ -16921,68 +16920,14 @@ async function generateAlevelBoardHtml() {
                         </tr>
                     </thead>
                     <tbody id="olevelGradesTableBody">
-                        <!-- Grade A -->
-                        <tr>
-                            <td class="text-center"><span class="grade-badge" style="background:#2ecc71; display:inline-block; width:50px; height:50px; line-height:50px; text-align:center; border-radius:12px; font-weight:bold; font-size:20px; color:white;">A</span></td>
-                            <td><input type="number" id="omin_A" class="form-control form-control-sm" value="85" style="width:100px" min="0" max="100"></span></td>
-                            <td><input type="number" id="omax_A" class="form-control form-control-sm" value="100" style="width:100px" min="0" max="100"></span></td>
-                            <td><input type="number" id="opoints_A" class="form-control form-control-sm" value="0" style="width:80px" readonly disabled></span></span>
-                            <td><input type="text" id="odesc_A" class="form-control form-control-sm" value="Exceptional"></span></span>
-                            <td><input type="text" id="ocomp_A" class="form-control form-control-sm" value="Outstanding"></span></span>
-                            <td><input type="color" id="ocolor_A" class="form-control form-control-sm" value="#2ecc71" style="width:60px"></span></span>
-                            <td><input type="text" id="oremark_A" class="form-control form-control-sm" value="Excellent performance"></span></span>
-                            <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('A')"><i class="fas fa-save"></i> Save</button></span></span>
-                        </tr>
-                        <!-- Grade B -->
-                        <tr>
-                            <td class="text-center"><span class="grade-badge" style="background:#3498db; display:inline-block; width:50px; height:50px; line-height:50px; text-align:center; border-radius:12px; font-weight:bold; font-size:20px; color:white;">B</span></span>
-                            <td><input type="number" id="omin_B" class="form-control form-control-sm" value="70" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="omax_B" class="form-control form-control-sm" value="84" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="opoints_B" class="form-control form-control-sm" value="0" style="width:80px" readonly disabled></span></span>
-                            <td><input type="text" id="odesc_B" class="form-control form-control-sm" value="Outstanding"></span></span>
-                            <td><input type="text" id="ocomp_B" class="form-control form-control-sm" value="Highly Proficient"></span></span>
-                            <td><input type="color" id="ocolor_B" class="form-control form-control-sm" value="#3498db" style="width:60px"></span></span>
-                            <td><input type="text" id="oremark_B" class="form-control form-control-sm" value="Very Good performance"></span></span>
-                            <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('B')"><i class="fas fa-save"></i> Save</button></span></span>
-                        </tr>
-                        <!-- Grade C -->
-                        <tr>
-                            <td class="text-center"><span class="grade-badge" style="background:#f39c12; display:inline-block; width:50px; height:50px; line-height:50px; text-align:center; border-radius:12px; font-weight:bold; font-size:20px; color:white;">C</span></span>
-                            <td><input type="number" id="omin_C" class="form-control form-control-sm" value="60" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="omax_C" class="form-control form-control-sm" value="69" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="opoints_C" class="form-control form-control-sm" value="0" style="width:80px" readonly disabled></span></span>
-                            <td><input type="text" id="odesc_C" class="form-control form-control-sm" value="Satisfactory"></span></span>
-                            <td><input type="text" id="ocomp_C" class="form-control form-control-sm" value="Proficient"></span></span>
-                            <td><input type="color" id="ocolor_C" class="form-control form-control-sm" value="#f39c12" style="width:60px"></span></span>
-                            <td><input type="text" id="oremark_C" class="form-control form-control-sm" value="Good performance"></span></span>
-                            <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('C')"><i class="fas fa-save"></i> Save</button></span></span>
-                        </tr>
-                        <!-- Grade D -->
-                        <tr>
-                            <td class="text-center"><span class="grade-badge" style="background:#e67e22; display:inline-block; width:50px; height:50px; line-height:50px; text-align:center; border-radius:12px; font-weight:bold; font-size:20px; color:white;">D</span></span>
-                            <td><input type="number" id="omin_D" class="form-control form-control-sm" value="40" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="omax_D" class="form-control form-control-sm" value="59" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="opoints_D" class="form-control form-control-sm" value="0" style="width:80px" readonly disabled></span></span>
-                            <td><input type="text" id="odesc_D" class="form-control form-control-sm" value="Basic"></span></span>
-                            <td><input type="text" id="ocomp_D" class="form-control form-control-sm" value="Basic"></span></span>
-                            <td><input type="color" id="ocolor_D" class="form-control form-control-sm" value="#e67e22" style="width:60px"></span></span>
-                            <td><input type="text" id="oremark_D" class="form-control form-control-sm" value="Satisfactory performance"></span></span>
-                            <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('D')"><i class="fas fa-save"></i> Save</button></span></span>
-                        </tr>
-                        <!-- Grade E -->
-                        <tr>
-                            <td class="text-center"><span class="grade-badge" style="background:#e74c3c; display:inline-block; width:50px; height:50px; line-height:50px; text-align:center; border-radius:12px; font-weight:bold; font-size:20px; color:white;">E</span></span>
-                            <td><input type="number" id="omin_E" class="form-control form-control-sm" value="0" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="omax_E" class="form-control form-control-sm" value="39" style="width:100px" min="0" max="100"></span></span>
-                            <td><input type="number" id="opoints_E" class="form-control form-control-sm" value="0" style="width:80px" readonly disabled></span></span>
-                            <td><input type="text" id="odesc_E" class="form-control form-control-sm" value="Elementary"></span></span>
-                            <td><input type="text" id="ocomp_E" class="form-control form-control-sm" value="Below Expected"></span></span>
-                            <td><input type="color" id="ocolor_E" class="form-control form-control-sm" value="#e74c3c" style="width:60px"></span></span>
-                            <td><input type="text" id="oremark_E" class="form-control form-control-sm" value="Needs improvement"></span></span>
-                            <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('E')"><i class="fas fa-save"></i> Save</button></span></span>
-                        </tr>
+                        <!-- Data loaded from database by JavaScript -->
                     </tbody>
                 </table>
+            </div>
+            <div class="text-end mt-3">
+                <button class="btn btn-secondary btn-sm" onclick="renderOlevelGradesTable()">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
             </div>
         </div>
         
@@ -17041,12 +16986,13 @@ async function generateAlevelBoardHtml() {
                 <button class="btn btn-primary" onclick="saveOlevelPromotion()">
                     <i class="fas fa-save"></i> Save Promotion Criteria
                 </button>
+                <button class="btn btn-secondary ms-2" onclick="loadOlevelPromotionToUI()">
+                    <i class="fas fa-sync"></i> Reload
+                </button>
             </div>
         </div>
     </div>
 </div>
-
-
             
  <!-- ============================================ -->
 <!-- PART 3: A-LEVEL PANEL HTML                  -->
@@ -17642,15 +17588,8 @@ async function generateAlevelBoardHtml() {
 
     
 }
-
 // ============================================
 // PART 9.5: O-LEVEL GRADING FUNCTIONS
-// ============================================
-
-// Load O-Level grades from database
-// ============================================
-// O-LEVEL GRADING FUNCTIONS - UGANDA NEW CURRICULUM
-// Same function names, updated logic for A-E grading
 // ============================================
 
 // Load O-Level grades from database
@@ -17667,6 +17606,7 @@ async function loadOlevelGrades() {
             console.error("Error loading O-Level grades:", error);
             return [];
         }
+        console.log("Grades loaded from database:", data);
         return data || [];
     } catch (e) {
         console.error("Exception:", e);
@@ -17716,7 +17656,7 @@ async function loadOlevelPromotion() {
     }
 }
 
-// Save O-Level Grade - UPDATED (no points, just min/max/descriptor)
+// Save O-Level Grade
 window.saveOlevelGrade = async function(grade) {
     console.log("Saving O-Level grade:", grade);
     
@@ -17759,10 +17699,12 @@ window.saveOlevelGrade = async function(grade) {
         Swal.fire('Error', error.message, 'error');
     } else {
         Swal.fire({ title: 'Success!', text: `Grade ${grade} saved!`, icon: 'success', timer: 1500, showConfirmButton: false });
+        // Auto-reload the table after save
+        await renderOlevelGradesTable();
     }
 };
 
-// Save O-Level Promotion Criteria - UPDATED (added min_exam_score)
+// Save O-Level Promotion Criteria
 window.saveOlevelPromotion = async function() {
     console.log("Saving O-Level promotion criteria");
     
@@ -17806,10 +17748,12 @@ window.saveOlevelPromotion = async function() {
         Swal.fire('Error', error.message, 'error');
     } else {
         Swal.fire({ title: 'Success!', text: 'Promotion criteria saved!', icon: 'success', timer: 1500, showConfirmButton: false });
+        // Auto-reload promotion after save
+        await loadOlevelPromotionToUI();
     }
 };
 
-// Edit Assessment Component - KEPT AS IS (but weights are now fixed 20/80)
+// Edit Assessment Component
 window.editComponent = async function(componentType, currentWeight) {
     const { value: weight } = await Swal.fire({
         title: `Edit ${componentType} Weight`,
@@ -17840,7 +17784,7 @@ window.editComponent = async function(componentType, currentWeight) {
 };
 
 // ============================================
-// NEW HELPER FUNCTIONS FOR THE NEW CURRICULUM
+// HELPER FUNCTIONS
 // ============================================
 
 // Calculate total from U1, U2, U3, Exam80
@@ -17865,73 +17809,244 @@ function getOlevelGradeFromTotal(total100) {
 // Render O-Level grades table (for settings panel)
 async function renderOlevelGradesTable() {
     const tbody = document.getElementById('olevelGradesTableBody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.error('Table body not found!');
+        return;
+    }
     
-    // Default grades for new curriculum
-    const defaultGrades = [
-        { grade: 'A', min: 85, max: 100, desc: 'Exceptional', competency: 'Outstanding', color: '#2ecc71', remark: 'Excellent performance' },
-        { grade: 'B', min: 70, max: 84, desc: 'Outstanding', competency: 'Highly Proficient', color: '#3498db', remark: 'Very Good' },
-        { grade: 'C', min: 60, max: 69, desc: 'Satisfactory', competency: 'Proficient', color: '#f39c12', remark: 'Good' },
-        { grade: 'D', min: 40, max: 59, desc: 'Basic', competency: 'Basic', color: '#e67e22', remark: 'Satisfactory' },
-        { grade: 'E', min: 0, max: 39, desc: 'Elementary', competency: 'Below Expected', color: '#e74c3c', remark: 'Needs Improvement' }
-    ];
+    console.log('Rendering grades table...');
+    
+    // Try to load from database first
+    const savedGrades = await loadOlevelGrades();
+    
+    let gradesToRender;
+    if (savedGrades && savedGrades.length > 0) {
+        // Use data from database
+        gradesToRender = savedGrades.map(g => ({
+            grade: g.grade,
+            min: g.min_percentage,
+            max: g.max_percentage,
+            desc: g.description || '',
+            competency: g.competency_level || '',
+            color: g.color_code || '#2ecc71',
+            remark: g.remark || ''
+        }));
+        console.log('Rendering grades from database:', gradesToRender);
+    } else {
+        // Fallback to defaults if no data in database
+        gradesToRender = [
+            { grade: 'A', min: 85, max: 100, desc: 'Exceptional', competency: 'Outstanding', color: '#2ecc71', remark: 'Excellent performance' },
+            { grade: 'B', min: 70, max: 84, desc: 'Outstanding', competency: 'Highly Proficient', color: '#3498db', remark: 'Very Good' },
+            { grade: 'C', min: 60, max: 69, desc: 'Satisfactory', competency: 'Proficient', color: '#f39c12', remark: 'Good' },
+            { grade: 'D', min: 40, max: 59, desc: 'Basic', competency: 'Basic', color: '#e67e22', remark: 'Satisfactory' },
+            { grade: 'E', min: 0, max: 39, desc: 'Elementary', competency: 'Below Expected', color: '#e74c3c', remark: 'Needs Improvement' }
+        ];
+        console.log('No data in database, using defaults');
+    }
     
     let html = '';
-    for (const g of defaultGrades) {
+    for (const g of gradesToRender) {
         html += `
             <tr>
                 <td class="text-center"><span class="grade-badge" style="display:inline-block; width:50px; height:50px; line-height:50px; text-align:center; border-radius:12px; font-weight:bold; font-size:20px; background:${g.color}; color:white;">${g.grade}</span></td>
-                <td><input type="number" id="omin_${g.grade}" class="form-control form-control-sm" value="${g.min}" style="width:100px" min="0" max="100"></span></td>
-                <td><input type="number" id="omax_${g.grade}" class="form-control form-control-sm" value="${g.max}" style="width:100px" min="0" max="100"></span></td>
-                <td><input type="number" id="opoints_${g.grade}" class="form-control form-control-sm" value="0" style="width:80px" readonly disabled></td>
-                <td><input type="text" id="odesc_${g.grade}" class="form-control form-control-sm" value="${g.desc}"></span></td>
-                <td><input type="text" id="ocomp_${g.grade}" class="form-control form-control-sm" value="${g.competency}"></span></td>
-                <td><input type="color" id="ocolor_${g.grade}" class="form-control form-control-sm" value="${g.color}" style="width:60px"></span></td>
-                <td><input type="text" id="oremark_${g.grade}" class="form-control form-control-sm" value="${g.remark}"></span></td>
-                <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('${g.grade}')"><i class="fas fa-save"></i> Save</button></span></td>
+                <td><input type="number" id="omin_${g.grade}" class="form-control form-control-sm" value="${g.min}" style="width:100px" min="0" max="100"></td>
+                <td><input type="number" id="omax_${g.grade}" class="form-control form-control-sm" value="${g.max}" style="width:100px" min="0" max="100"></td>
+                <td><input type="text" id="odesc_${g.grade}" class="form-control form-control-sm" value="${g.desc}"></td>
+                <td><input type="text" id="ocomp_${g.grade}" class="form-control form-control-sm" value="${g.competency}"></td>
+                <td><input type="color" id="ocolor_${g.grade}" class="form-control form-control-sm" value="${g.color}" style="width:60px"></td>
+                <td><input type="text" id="oremark_${g.grade}" class="form-control form-control-sm" value="${g.remark}"></td>
+                <td><button class="btn btn-sm btn-primary" onclick="saveOlevelGrade('${g.grade}')"><i class="fas fa-save"></i> Save</button></td>
             </tr>
         `;
     }
     tbody.innerHTML = html;
+    console.log('Table rendered successfully');
 }
 
-// Load saved grades into the table
-async function loadOlevelGradesToTable() {
-    const savedGrades = await loadOlevelGrades();
-    if (savedGrades && savedGrades.length > 0) {
-        for (const g of savedGrades) {
-            const minInput = document.getElementById(`omin_${g.grade}`);
-            const maxInput = document.getElementById(`omax_${g.grade}`);
-            const descInput = document.getElementById(`odesc_${g.grade}`);
-            const compInput = document.getElementById(`ocomp_${g.grade}`);
-            const colorInput = document.getElementById(`ocolor_${g.grade}`);
-            const remarkInput = document.getElementById(`oremark_${g.grade}`);
+// Load promotion criteria to UI
+async function loadOlevelPromotionToUI() {
+    const promo = await loadOlevelPromotion();
+    
+    if (promo && Object.keys(promo).length > 0) {
+        const minAvg = document.getElementById('promoMinAvg');
+        const maxFail = document.getElementById('promoMaxFailures');
+        const minExam = document.getElementById('promoMinExam');
+        
+        if (minAvg) minAvg.value = promo.min_average || 50;
+        if (maxFail) maxFail.value = promo.max_failures || 2;
+        if (minExam) minExam.value = promo.min_exam_score || 40;
+        console.log('Promotion loaded from database:', promo);
+    } else {
+        console.log('No promotion data in database, using defaults');
+    }
+}
+
+// Reset to defaults
+window.resetOlevelDefaults = async function() {
+    const confirm = await Swal.fire({
+        title: 'Reset to Defaults?',
+        text: 'This will overwrite all custom grade settings in the database!',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, reset!'
+    });
+    
+    if (!confirm.isConfirmed) return;
+    
+    Swal.fire({ 
+        title: 'Resetting...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    try {
+        // Delete all existing grades
+        await sb.from('olevel_grades').delete().neq('grade', '');
+        
+        // Insert default grades
+        const defaultGrades = [
+            { grade: 'A', min_percentage: 85, max_percentage: 100, description: 'Exceptional', competency_level: 'Outstanding', color_code: '#2ecc71', remark: 'Excellent performance' },
+            { grade: 'B', min_percentage: 70, max_percentage: 84, description: 'Outstanding', competency_level: 'Highly Proficient', color_code: '#3498db', remark: 'Very Good' },
+            { grade: 'C', min_percentage: 60, max_percentage: 69, description: 'Satisfactory', competency_level: 'Proficient', color_code: '#f39c12', remark: 'Good' },
+            { grade: 'D', min_percentage: 40, max_percentage: 59, description: 'Basic', competency_level: 'Basic', color_code: '#e67e22', remark: 'Satisfactory' },
+            { grade: 'E', min_percentage: 0, max_percentage: 39, description: 'Elementary', competency_level: 'Below Expected', color_code: '#e74c3c', remark: 'Needs Improvement' }
+        ];
+        
+        for (const g of defaultGrades) {
+            const { error } = await sb
+                .from('olevel_grades')
+                .insert({
+                    grade: g.grade,
+                    min_percentage: g.min_percentage,
+                    max_percentage: g.max_percentage,
+                    description: g.description,
+                    competency_level: g.competency_level,
+                    color_code: g.color_code,
+                    remark: g.remark,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                });
             
-            if (minInput) minInput.value = g.min_percentage;
-            if (maxInput) maxInput.value = g.max_percentage;
-            if (descInput) descInput.value = g.description || '';
-            if (compInput) compInput.value = g.competency_level || '';
-            if (colorInput) colorInput.value = g.color_code || '#2ecc71';
-            if (remarkInput) remarkInput.value = g.remark || '';
+            if (error) {
+                console.error('Error inserting default grade:', error);
+            }
+        }
+        
+        Swal.close();
+        Swal.fire('Reset Complete!', 'All grades reset to defaults', 'success');
+        
+        // Auto-reload the table
+        await renderOlevelGradesTable();
+    } catch (e) {
+        Swal.close();
+        console.error('Exception resetting defaults:', e);
+        Swal.fire('Error', 'Failed to reset defaults', 'error');
+    }
+};
+
+// Initialize O-Level panel - THIS LOADS THE TABLE AUTOMATICALLY
+async function initOlevelPanel() {
+    console.log('Initializing O-Level panel...');
+    if (document.getElementById('olevelGradesTableBody')) {
+        await renderOlevelGradesTable(); // Auto-loads from database
+        await loadOlevelPromotionToUI(); // Auto-loads from database
+        console.log('O-Level panel initialized successfully - Table loaded automatically');
+    } else {
+        console.error('olevelGradesTableBody not found!');
+    }
+}
+
+// ============================================
+// AUTO-LOAD WHEN SETTINGS TAB IS CLICKED
+// ============================================
+
+// Function to handle Settings tab click and O-Level tab click
+function setupOlevelAutoLoad() {
+    console.log('Setting up O-Level auto-load...');
+    
+    // 1. Listen for Settings tab click
+    const settingsTab = document.querySelector('[data-bs-target="#tab-settings"]');
+    if (settingsTab) {
+        console.log('Settings tab found');
+        
+        settingsTab.addEventListener('click', function() {
+            console.log('Settings tab clicked - will load O-Level when ready');
+            
+            // Wait for settings panel to load
+            setTimeout(function() {
+                const olevelTab = document.getElementById('tab-olevel');
+                if (olevelTab) {
+                    const isActive = olevelTab.classList.contains('active') || 
+                                    olevelTab.style.display !== 'none';
+                    
+                    if (isActive) {
+                        console.log('O-Level tab is active, loading data...');
+                        initOlevelPanel();
+                    }
+                }
+            }, 600);
+        });
+    } else {
+        console.log('Settings tab not found');
+    }
+    
+    // 2. Listen for O-Level tab click directly
+    const olevelTrigger = document.querySelector('[data-bs-target="#tab-olevel"]');
+    if (olevelTrigger) {
+        console.log('O-Level tab trigger found');
+        
+        olevelTrigger.addEventListener('click', function() {
+            console.log('O-Level tab clicked directly, loading data...');
+            setTimeout(initOlevelPanel, 300);
+        });
+    } else {
+        console.log('O-Level tab trigger not found');
+    }
+    
+    // 3. Check if O-Level tab is already visible when page loads
+    setTimeout(function() {
+        const olevelTab = document.getElementById('tab-olevel');
+        if (olevelTab) {
+            const isActive = olevelTab.classList.contains('active') || 
+                            olevelTab.style.display !== 'none';
+            if (isActive) {
+                console.log('O-Level tab is already active on page load');
+                initOlevelPanel();
+            }
+        }
+    }, 1000);
+}
+
+
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, setting up O-Level auto-load...');
+    setupOlevelAutoLoad();
+});
+
+// Also check when page is fully loaded
+window.addEventListener('load', function() {
+    console.log('Page fully loaded, checking O-Level tab...');
+    const olevelTab = document.getElementById('tab-olevel');
+    if (olevelTab) {
+        const isActive = olevelTab.classList.contains('active') || 
+                        olevelTab.style.display !== 'none';
+        if (isActive) {
+            const tbody = document.getElementById('olevelGradesTableBody');
+            if (tbody && !tbody.innerHTML) {
+                console.log('Table is empty, loading data...');
+                initOlevelPanel();
+            }
         }
     }
-}
+});
 
-// Initialize O-Level panel
-async function initOlevelPanel() {
-    if (document.getElementById('olevelGradesTableBody')) {
-        await renderOlevelGradesTable();
-        await loadOlevelGradesToTable();
-        await loadOlevelPromotion();
-    }
-}
+// Expose functions globally
+window.initOlevelPanel = initOlevelPanel;
+window.renderOlevelGradesTable = renderOlevelGradesTable;
 
-// Call initialization when settings tab is opened
-setTimeout(() => {
-    if (document.getElementById('tab-olevel')) {
-        initOlevelPanel();
-    }
-}, 500);
 // ============================================
 // PART 9.6: A-LEVEL GRADING FUNCTIONS
 // COMPLETE - NO AUTO REFRESH, JUST ALERTS
