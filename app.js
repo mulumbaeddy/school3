@@ -13047,6 +13047,10 @@ async function getTodayAttendanceStatus() {
 // RENDER ATTENDANCE PAGE
 // ============================================
 
+// ============================================
+// RENDER ATTENDANCE PAGE - MOBILE FRIENDLY
+// ============================================
+
 async function renderAttendance() {
     await loadSchoolSettingsForAttendance();
     await getAttendance();
@@ -13058,109 +13062,107 @@ async function renderAttendance() {
     
     const today = getCurrentDate();
     const todayStatus = await getTodayAttendanceStatus();
-    const levelName = currentLevel === 'olevel' ? 'O-Level (UCE)' : 'A-Level (UACE)';
+    const levelName = currentLevel === 'olevel' ? 'O-Level' : 'A-Level';
     
     return `
         <div class="card shadow-sm mb-3">
-            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-calendar-check"></i> Attendance Management - ${levelName}</h5>
-                <small>📅 Today: ${formatDate(today)} | ✅ Marked: ${todayStatus.count}/${todayStatus.totalStudents} | ⏳ Remaining: ${todayStatus.remaining}</small>
+            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white; padding: 10px 15px;">
+                <h5 class="mb-0" style="font-size: 16px;"><i class="fas fa-calendar-check"></i> Attendance - ${levelName}</h5>
+                <small style="font-size: 11px;">📅 ${formatDate(today)} | ✅ ${todayStatus.count}/${todayStatus.totalStudents} | ⏳ ${todayStatus.remaining}</small>
             </div>
-            <div class="card-body">
-                <div class="row g-2">
-                    <div class="col-md-12">
-                        <button class="btn btn-primary" onclick="showSingleAttendanceModal()">
-                            <i class="fas fa-plus"></i> Single Mark
-                        </button>
-                        <button class="btn btn-info ms-2" onclick="showBulkAttendanceModal()">
-                            <i class="fas fa-users"></i> Bulk Mark
-                        </button>
-                        <button class="btn btn-secondary ms-2" onclick="printAttendanceReport()">
-                            <i class="fas fa-print"></i> Print Report
-                        </button>
-                        <button class="btn btn-danger ms-2" onclick="bulkDeleteAttendanceRecords()">
-                            <i class="fas fa-trash"></i> Bulk Delete
-                        </button>
-                        <button class="btn btn-outline-secondary ms-2" onclick="refreshAttendanceTable()">
-                            <i class="fas fa-sync-alt"></i> Refresh
-                        </button>
-                    </div>
+            <div class="card-body" style="padding: 10px;">
+                <div class="d-flex flex-wrap gap-1">
+                    <button class="btn btn-primary btn-sm flex-fill" onclick="showSingleAttendanceModal()" style="font-size: 12px; padding: 5px 8px; min-width: 60px;">
+                        <i class="fas fa-plus"></i> Single
+                    </button>
+                    <button class="btn btn-info btn-sm flex-fill" onclick="showBulkAttendanceModal()" style="font-size: 12px; padding: 5px 8px; min-width: 60px;">
+                        <i class="fas fa-users"></i> Bulk
+                    </button>
+                    <button class="btn btn-secondary btn-sm flex-fill" onclick="printAttendanceReport()" style="font-size: 12px; padding: 5px 8px; min-width: 60px;">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                    <button class="btn btn-danger btn-sm flex-fill" onclick="bulkDeleteAttendanceRecords()" style="font-size: 12px; padding: 5px 8px; min-width: 60px;">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm flex-fill" onclick="refreshAttendanceTable()" style="font-size: 12px; padding: 5px 8px; min-width: 60px;">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
                 </div>
             </div>
         </div>
         
-        <!-- FILTERS -->
+        <!-- FILTERS - Mobile Friendly -->
         <div class="card shadow-sm mb-3">
-            <div class="card-body">
-                <div class="row g-2">
-                    <div class="col-md-3">
-                        <label class="form-label">From Date</label>
-                        <input type="date" id="filterFromDate" class="form-control" onchange="filterAttendanceRecords()">
+            <div class="card-body" style="padding: 10px;">
+                <div class="row g-1">
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">From</label>
+                        <input type="date" id="filterFromDate" class="form-control form-control-sm" style="font-size: 12px;" onchange="filterAttendanceRecords()">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label">To Date</label>
-                        <input type="date" id="filterToDate" class="form-control" onchange="filterAttendanceRecords()">
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">To</label>
+                        <input type="date" id="filterToDate" class="form-control form-control-sm" style="font-size: 12px;" onchange="filterAttendanceRecords()">
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Status</label>
-                        <select id="filterStatus" class="form-select" onchange="filterAttendanceRecords()">
-                            <option value="">All Status</option>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">Status</label>
+                        <select id="filterStatus" class="form-select form-select-sm" style="font-size: 12px;" onchange="filterAttendanceRecords()">
+                            <option value="">All</option>
                             <option value="Present">✅ Present</option>
                             <option value="Absent">❌ Absent</option>
                             <option value="Late">⏰ Late</option>
                             <option value="Excused">📝 Excused</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Class</label>
-                        <select id="filterClass" class="form-select" onchange="filterAttendanceRecords()">
-                            <option value="">All Classes</option>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">Class</label>
+                        <select id="filterClass" class="form-select form-select-sm" style="font-size: 12px;" onchange="filterAttendanceRecords()">
+                            <option value="">All</option>
                             ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Student</label>
-                        <input type="text" id="filterStudent" class="form-control" placeholder="Student name..." onkeyup="filterAttendanceRecords()">
+                    <div class="col-12 col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">Student</label>
+                        <input type="text" id="filterStudent" class="form-control form-control-sm" style="font-size: 12px;" placeholder="Search..." onkeyup="filterAttendanceRecords()">
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- STATISTICS CARDS -->
-        <div class="row mb-3">
-            <div class="col-md-3">
-                <div class="card bg-success text-white">
-                    <div class="card-body text-center">
-                        <h3 id="presentCount">0</h3>
-                        <p><i class="fas fa-check-circle"></i> Present</p>
-                        <small id="presentPercent">0%</small>
+        <!-- STATISTICS CARDS - 2 PER ROW ON MOBILE -->
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="card bg-success text-white" style="border-radius: 10px;">
+                    <div class="card-body text-center" style="padding: 10px 8px;">
+                        <h3 id="presentCount" style="font-size: 24px; margin: 0;">0</h3>
+                        <p style="margin: 0; font-size: 12px;"><i class="fas fa-check-circle"></i> Present</p>
+                        <small id="presentPercent" style="font-size: 10px;">0%</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card bg-danger text-white">
-                    <div class="card-body text-center">
-                        <h3 id="absentCount">0</h3>
-                        <p><i class="fas fa-times-circle"></i> Absent</p>
-                        <small id="absentPercent">0%</small>
+            <div class="col-6 col-md-3">
+                <div class="card bg-danger text-white" style="border-radius: 10px;">
+                    <div class="card-body text-center" style="padding: 10px 8px;">
+                        <h3 id="absentCount" style="font-size: 24px; margin: 0;">0</h3>
+                        <p style="margin: 0; font-size: 12px;"><i class="fas fa-times-circle"></i> Absent</p>
+                        <small id="absentPercent" style="font-size: 10px;">0%</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card bg-warning text-dark">
-                    <div class="card-body text-center">
-                        <h3 id="lateCount">0</h3>
-                        <p><i class="fas fa-clock"></i> Late</p>
-                        <small id="latePercent">0%</small>
+            <div class="col-6 col-md-3">
+                <div class="card bg-warning text-dark" style="border-radius: 10px;">
+                    <div class="card-body text-center" style="padding: 10px 8px;">
+                        <h3 id="lateCount" style="font-size: 24px; margin: 0;">0</h3>
+                        <p style="margin: 0; font-size: 12px;"><i class="fas fa-clock"></i> Late</p>
+                        <small id="latePercent" style="font-size: 10px;">0%</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card bg-info text-white">
-                    <div class="card-body text-center">
-                        <h3 id="excusedCount">0</h3>
-                        <p><i class="fas fa-comment"></i> Excused</p>
-                        <small id="excusedPercent">0%</small>
+            <div class="col-6 col-md-3">
+                <div class="card bg-info text-white" style="border-radius: 10px;">
+                    <div class="card-body text-center" style="padding: 10px 8px;">
+                        <h3 id="excusedCount" style="font-size: 24px; margin: 0;">0</h3>
+                        <p style="margin: 0; font-size: 12px;"><i class="fas fa-comment"></i> Excused</p>
+                        <small id="excusedPercent" style="font-size: 10px;">0%</small>
                     </div>
                 </div>
             </div>
@@ -13168,32 +13170,32 @@ async function renderAttendance() {
         
         <!-- ATTENDANCE TABLE -->
         <div class="card shadow-sm">
-            <div class="card-header bg-white">
-                <h6 class="mb-0"><i class="fas fa-list"></i> Attendance Records</h6>
+            <div class="card-header bg-white" style="padding: 8px 12px;">
+                <h6 class="mb-0" style="font-size: 14px;"><i class="fas fa-list"></i> Records</h6>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                    <table class="table table-bordered mb-0">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-bordered mb-0" style="font-size: 13px;">
                         <thead class="table-primary sticky-top">
                             <tr>
                                 <th width="30"><input type="checkbox" id="selectAllAttendance"></th>
-                                <th>Student Name</th>
+                                <th>Student</th>
                                 <th>Class</th>
                                 <th>Date</th>
                                 <th>Status</th>
                                 <th>Remarks</th>
-                                <th width="200">Actions</th>
+                                <th width="150">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="attendanceTableBody">
-                            <tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</span>络</tbody>
+                            <tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
         </div>
     `;
 }
-
 // ============================================
 // LOAD ATTENDANCE TABLE - FIXED
 // ============================================
@@ -13465,6 +13467,10 @@ window.showSingleAttendanceModal = async function() {
 // BULK MARK ATTENDANCE MODAL - COMPLETE WORKING
 // ============================================
 
+// ============================================
+// BULK MARK ATTENDANCE MODAL - RESPONSIVE (ALL DEVICES)
+// ============================================
+
 window.showBulkAttendanceModal = async function() {
     await getStudentsForAttendance();
     
@@ -13476,53 +13482,65 @@ window.showBulkAttendanceModal = async function() {
         title: '<i class="fas fa-users"></i> Bulk Mark Attendance',
         html: `
             <div class="text-start">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Select Class *</label>
-                        <select id="bulkClass" class="form-select">
-                            <option value="">-- Select Class --</option>
+                <!-- Class & Date -->
+                <div class="row g-2 mb-3">
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label fw-bold">📚 Class *</label>
+                        <select id="bulkClass" class="form-select form-select-sm">
+                            <option value="">-- Select --</option>
                             ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Date</label>
-                        <input type="date" id="bulkDate" class="form-control" value="${getCurrentDate()}">
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label fw-bold">📅 Date</label>
+                        <input type="date" id="bulkDate" class="form-control form-control-sm" value="${getCurrentDate()}">
                     </div>
                 </div>
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Quick Actions</label>
-                        <div>
-                            <button type="button" class="btn btn-sm btn-success" onclick="setAllStatusTo('Present')">All Present</button>
-                            <button type="button" class="btn btn-sm btn-danger" onclick="setAllStatusTo('Absent')">All Absent</button>
-                            <button type="button" class="btn btn-sm btn-warning" onclick="setAllStatusTo('Late')">All Late</button>
-                            <button type="button" class="btn btn-sm btn-info" onclick="setAllStatusTo('Excused')">All Excused</button>
+                
+                <!-- Quick Actions -->
+                <div class="row g-1 mb-3">
+                    <div class="col-12">
+                        <label class="form-label fw-bold">⚡ Quick Actions</label>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="btn btn-sm btn-success flex-fill" onclick="setAllStatusTo('Present')" style="min-width:70px;">✅ Present</button>
+                            <button type="button" class="btn btn-sm btn-danger flex-fill" onclick="setAllStatusTo('Absent')" style="min-width:70px;">❌ Absent</button>
+                            <button type="button" class="btn btn-sm btn-warning flex-fill" onclick="setAllStatusTo('Late')" style="min-width:70px;">⏰ Late</button>
+                            <button type="button" class="btn btn-sm btn-info flex-fill" onclick="setAllStatusTo('Excused')" style="min-width:70px;">📝 Excused</button>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Default Remarks</label>
-                        <input type="text" id="defaultRemarks" class="form-control" placeholder="Optional remark">
+                </div>
+                
+                <!-- Default Remarks -->
+                <div class="row g-2 mb-3">
+                    <div class="col-8 col-sm-8">
+                        <label class="form-label fw-bold">📝 Default Remark</label>
+                        <input type="text" id="defaultRemarks" class="form-control form-control-sm" placeholder="Optional remark">
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">&nbsp;</label>
+                    <div class="col-4 col-sm-4 d-flex align-items-end">
                         <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="applyRemarksToAll()">
-                            <i class="fas fa-copy"></i> Apply Remarks
+                            <i class="fas fa-copy"></i> Apply
                         </button>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <div id="bulkStudentsList" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #f9f9f9;">
-                        <p class="text-muted text-center">Select a class to load students</p>
+                
+                <!-- Students List -->
+                <div class="mb-2">
+                    <div id="bulkStudentsList" style="max-height: 350px; overflow-y: auto; border: 1px solid #ddd; padding: 8px; border-radius: 5px; background: #f9f9f9;">
+                        <p class="text-muted text-center small">Select a class to load students</p>
                     </div>
                 </div>
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> Students already marked for this date will be skipped automatically.
+                
+                <!-- Warning -->
+                <div class="alert alert-warning small mb-0" style="padding: 6px 10px; font-size: 11px;">
+                    <i class="fas fa-exclamation-triangle"></i> Already marked students are <strong>locked</strong> and will be skipped.
                 </div>
             </div>
         `,
-        width: '900px',
+        width: '95%',
+        maxWidth: '800px',
         showCancelButton: true,
         confirmButtonText: '<i class="fas fa-save"></i> Save All',
+        cancelButtonText: 'Cancel',
         didOpen: () => {
             const classSelect = document.getElementById('bulkClass');
             const studentsDiv = document.getElementById('bulkStudentsList');
@@ -13530,19 +13548,20 @@ window.showBulkAttendanceModal = async function() {
             classSelect.onchange = async () => {
                 const className = classSelect.value;
                 if (!className) {
-                    studentsDiv.innerHTML = '<p class="text-muted text-center">Select a class to load students</p>';
+                    studentsDiv.innerHTML = '<p class="text-muted text-center small">Select a class to load students</p>';
                     return;
                 }
                 
-                studentsDiv.innerHTML = '<p class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading students...</p>';
+                studentsDiv.innerHTML = '<p class="text-center small"><i class="fas fa-spinner fa-spin"></i> Loading students...</p>';
                 
                 const { data: students, error } = await sb
                     .from('students')
                     .select('*')
-                    .eq('class', className);
+                    .eq('class', className)
+                    .order('name', { ascending: true });
                 
                 if (error || !students || students.length === 0) {
-                    studentsDiv.innerHTML = '<p class="text-danger text-center">No students found</p>';
+                    studentsDiv.innerHTML = '<p class="text-danger text-center small">No students found</p>';
                     return;
                 }
                 
@@ -13557,55 +13576,72 @@ window.showBulkAttendanceModal = async function() {
                 }
                 
                 let html = `
-                    <table class="table table-bordered table-sm">
-                        <thead class="table-light">
-                            <tr>
-                                <th width="30"><input type="checkbox" id="selectAllBulk" checked></th>
-                                <th>#</th>
-                                <th>Student Name</th>
-                                <th>Admission No</th>
-                                <th>Stream</th>
-                                <th>Status</th>
-                                <th>Remarks</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                    <div class="table-responsive" style="border-radius: 4px;">
+                        <table class="table table-bordered table-sm mb-0" style="font-size: 13px; min-width: 500px;">
+                            <thead class="table-light" style="position: sticky; top: 0; z-index: 5;">
+                                <tr>
+                                    <th style="width: 32px;"><input type="checkbox" id="selectAllBulk" checked></th>
+                                    <th style="width: 28px;">#</th>
+                                    <th style="min-width: 90px;">Student</th>
+                                    <th style="width: 60px;">Adm</th>
+                                    <th style="width: 55px;">Status</th>
+                                    <th style="min-width: 80px;">Remark</th>
+                                </tr>
+                            </thead>
+                            <tbody>
                 `;
                 
                 for (let i = 0; i < students.length; i++) {
                     const s = students[i];
                     const hasExisting = existingMap[s.id];
                     const disabledAttr = hasExisting ? 'disabled' : '';
-                    const disabledText = hasExisting ? ` <small class="text-danger">(Already: ${hasExisting})</small>` : '';
+                    const statusText = hasExisting ? `🔒 ${hasExisting}` : '';
                     
                     html += `
                         <tr>
-                            <td class="text-center"><input type="checkbox" class="bulkStudentCheck" data-id="${s.id}" ${disabledAttr} ${!hasExisting ? 'checked' : ''}></td>
-                            <td class="text-center">${i + 1}${disabledText}</td>
-                            <td><strong>${escapeHtml(s.name)}</strong>${disabledText}</span></td>
-                            <td>${s.admission_no || '-'}</td>
-                            <td>${s.stream || '-'}</td>
-                            <td>
-                                <select class="form-select form-select-sm bulkStatus" data-student="${s.id}" style="width: 130px;" ${disabledAttr}>
-                                    <option value="Present">✅ Present</option>
-                                    <option value="Absent">❌ Absent</option>
-                                    <option value="Late">⏰ Late</option>
-                                    <option value="Excused">📝 Excused</option>
+                            <td class="text-center" style="padding: 4px 2px;">
+                                <input type="checkbox" class="bulkStudentCheck" data-id="${s.id}" ${disabledAttr} ${!hasExisting ? 'checked' : ''}>
+                            </td>
+                            <td class="text-center" style="padding: 4px 2px; font-size: 11px;">${i + 1}</td>
+                            <td style="padding: 4px 4px; font-size: 12px;">
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <strong style="font-size: 12px;">${escapeHtml(s.name)}</strong>
+                                    ${hasExisting ? `<span class="badge bg-secondary" style="font-size: 9px;">${statusText}</span>` : ''}
+                                </div>
+                                <div style="font-size: 9px; color: #999;">${s.admission_no || '-'} | ${s.stream || '-'}</div>
+                            </td>
+                            <td style="padding: 4px 2px; font-size: 11px; text-align: center;">${s.admission_no ? s.admission_no.substring(0, 6) : '-'}</td>
+                            <td style="padding: 4px 2px; min-width: 65px;">
+                                <select class="form-select form-select-sm bulkStatus" data-student="${s.id}" ${disabledAttr} style="font-size: 11px; padding: 2px 18px 2px 6px; min-width: 55px;">
+                                    <option value="Present">✅ P</option>
+                                    <option value="Absent">❌ A</option>
+                                    <option value="Late">⏰ L</option>
+                                    <option value="Excused">📝 E</option>
                                 </select>
-                             </span></td>
-                            <td>
-                                <input type="text" class="form-control form-control-sm bulkRemark" data-student="${s.id}" placeholder="Remarks" style="width: 140px;" ${disabledAttr}>
-                             </span></td>
+                            </td>
+                            <td style="padding: 4px 2px;">
+                                <input type="text" class="form-control form-control-sm bulkRemark" data-student="${s.id}" placeholder="..." ${disabledAttr} style="font-size: 11px; padding: 2px 4px; min-width: 60px;">
+                            </td>
                         </tr>
                     `;
                 }
                 
-                html += `</tbody></table>`;
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-1 text-muted small" style="font-size: 10px;">
+                        💡 Tap status: P=Present, A=Absent, L=Late, E=Excused &nbsp;|&nbsp; 🔒 = Already marked
+                    </div>
+                `;
                 studentsDiv.innerHTML = html;
                 
-                document.getElementById('selectAllBulk').onclick = () => {
-                    document.querySelectorAll('.bulkStudentCheck:not([disabled])').forEach(cb => cb.checked = event.target.checked);
-                };
+                const selectAll = document.getElementById('selectAllBulk');
+                if (selectAll) {
+                    selectAll.onclick = () => {
+                        document.querySelectorAll('.bulkStudentCheck:not([disabled])').forEach(cb => cb.checked = selectAll.checked);
+                    };
+                }
             };
         },
         preConfirm: () => {
@@ -13617,15 +13653,15 @@ window.showBulkAttendanceModal = async function() {
             
             const checkboxes = document.querySelectorAll('.bulkStudentCheck:checked:not([disabled])');
             if (checkboxes.length === 0) {
-                Swal.showValidationMessage('No new students to mark. All students may already have attendance for this date.');
+                Swal.showValidationMessage('No new students to mark. All may already have attendance.');
                 return false;
             }
             
             const studentsData = [];
             for (const cb of checkboxes) {
                 const studentId = cb.dataset.id;
-                const statusSelect = document.querySelector(`.bulkStatus[data-student="${studentId}"]`);
-                const remarkInput = document.querySelector(`.bulkRemark[data-student="${studentId}"]`);
+                const statusSelect = document.querySelector(`.bulkStatus[data-student="${studentId}"]:not([disabled])`);
+                const remarkInput = document.querySelector(`.bulkRemark[data-student="${studentId}"]:not([disabled])`);
                 studentsData.push({
                     student_id: studentId,
                     status: statusSelect ? statusSelect.value : 'Present',
@@ -13670,7 +13706,10 @@ window.showBulkAttendanceModal = async function() {
     });
 };
 
-// Bulk modal helper functions
+// ============================================
+// BULK MODAL HELPER FUNCTIONS
+// ============================================
+
 window.setAllStatusTo = function(status) {
     document.querySelectorAll('.bulkStatus:not([disabled])').forEach(select => select.value = status);
 };
@@ -13679,7 +13718,6 @@ window.applyRemarksToAll = function() {
     const defaultRemark = document.getElementById('defaultRemarks')?.value || '';
     document.querySelectorAll('.bulkRemark:not([disabled])').forEach(input => input.value = defaultRemark);
 };
-
 // ============================================
 // PRINT ATTENDANCE REPORT - COMPLETE WORKING
 // ============================================
