@@ -6165,117 +6165,466 @@ async function editBatchStudent(studentId) {
 // SAVE BATCH MARKS
 // ============================================
 
+// ============================================
+// SAVE BATCH MARKS - WITH COMPLETE NOTIFICATIONS
+// ============================================
+
 window.saveBatchMarks = async function() {
     if (!batchState.students.length) {
         Swal.fire('Error', 'No data to save', 'error');
         return;
     }
     
-    Swal.fire({ title: 'Saving marks...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    // Show saving notification on the batch table
+    showBatchInlineNotification('⏳ Saving marks... Please wait.', 'info', 0);
     
-    let saved = 0, errors = 0;
+    let saved = 0, updated = 0, errors = 0;
     
-    for (const student of batchState.students) {
-        if (currentLevel === 'olevel') {
-            const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]:not([disabled])`);
-            const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]:not([disabled])`);
-            const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]:not([disabled])`);
-            const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]:not([disabled])`);
-            const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]:not([disabled])`);
-            
-            if (u1Input && u2Input && u3Input && examInput) {
-                const u1 = parseFloat(u1Input.value) || 0;
-                const u2 = parseFloat(u2Input.value) || 0;
-                const u3 = parseFloat(u3Input.value) || 0;
-                const exam80 = parseFloat(examInput.value) || 0;
-                const initials = initialsInput?.value || '';
+    try {
+        for (const student of batchState.students) {
+            if (currentLevel === 'olevel') {
+                const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]:not([disabled])`);
+                const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]:not([disabled])`);
+                const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]:not([disabled])`);
+                const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]:not([disabled])`);
+                const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]:not([disabled])`);
                 
-                const unitAvg = (u1 + u2 + u3) / 3;
-                const total20 = unitAvg;
-                const total100 = total20 + exam80;
-                
-                const key = `${student.id}_${batchState.subject}`;
-                const existingMark = batchState.marksMap[key];
-                
-                // Skip if mark already exists (to prevent overwriting)
-                if (existingMark) continue;
-                
-                const markData = {
-                    student_id: student.id,
-                    subject: batchState.subject,
-                    subject_type: 'principal',
-                    exam: batchState.exam,
-                    year: batchState.year,
-                    marks_obtained: total100,
-                    max_marks: 100,
-                    level: currentLevel,
-                    unit1: u1,
-                    unit2: u2,
-                    unit3: u3,
-                    exam_80: exam80,
-                    teacher_initials: initials,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                };
-                
-                try {
-                    if (total100 > 0 || u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0) {
-                        const { error } = await sb.from('marks').insert([markData]);
-                        if (error) throw error;
-                        saved++;
-                    }
-                } catch (error) {
-                    console.error('Save error:', error);
-                    errors++;
-                }
-            }
-        } else {
-            for (const subject of batchState.subjects) {
-                const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]:not([disabled])`);
-                
-                if (input) {
-                    const marksObtained = parseFloat(input.value) || 0;
-                    const key = `${student.id}_${subject.name}`;
+                if (u1Input && u2Input && u3Input && examInput) {
+                    const u1 = parseFloat(u1Input.value) || 0;
+                    const u2 = parseFloat(u2Input.value) || 0;
+                    const u3 = parseFloat(u3Input.value) || 0;
+                    const exam80 = parseFloat(examInput.value) || 0;
+                    const initials = initialsInput?.value || '';
+                    
+                    const unitAvg = (u1 + u2 + u3) / 3;
+                    const total20 = unitAvg;
+                    const total100 = total20 + exam80;
+                    
+                    const key = `${student.id}_${batchState.subject}`;
                     const existingMark = batchState.marksMap[key];
                     
-                    // Skip if mark already exists
-                    if (existingMark) continue;
+                    const hasData = (u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0);
+                    if (!hasData) continue;
                     
-                    const isSubsidiary = subject.category === 'Subsidiary';
+                    let error;
                     
-                    const markData = {
-                        student_id: student.id,
-                        subject: subject.name,
-                        subject_type: isSubsidiary ? 'subsidiary' : 'principal',
-                        exam: batchState.exam,
-                        year: batchState.year,
-                        marks_obtained: marksObtained,
-                        max_marks: 100,
-                        level: currentLevel,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    };
+                    if (existingMark) {
+                        const { error: updateError } = await sb
+                            .from('marks')
+                            .update({
+                                unit1: u1,
+                                unit2: u2,
+                                unit3: u3,
+                                exam_80: exam80,
+                                teacher_initials: initials,
+                                marks_obtained: total100,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('id', existingMark.id);
+                        error = updateError;
+                        if (!error) updated++;
+                    } else {
+                        const markData = {
+                            student_id: student.id,
+                            subject: batchState.subject,
+                            subject_type: 'principal',
+                            exam: batchState.exam,
+                            year: batchState.year,
+                            marks_obtained: total100,
+                            max_marks: 100,
+                            level: currentLevel,
+                            unit1: u1,
+                            unit2: u2,
+                            unit3: u3,
+                            exam_80: exam80,
+                            teacher_initials: initials,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        };
+                        const { error: insertError } = await sb.from('marks').insert([markData]);
+                        error = insertError;
+                        if (!error) saved++;
+                    }
                     
-                    try {
-                        if (marksObtained > 0) {
-                            const { error } = await sb.from('marks').insert([markData]);
-                            if (error) throw error;
-                            saved++;
-                        }
-                    } catch (error) {
+                    if (error) {
                         console.error('Save error:', error);
                         errors++;
                     }
                 }
+            } else {
+                for (const subject of batchState.subjects) {
+                    const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]:not([disabled])`);
+                    
+                    if (input) {
+                        const marksObtained = parseFloat(input.value) || 0;
+                        const key = `${student.id}_${subject.name}`;
+                        const existingMark = batchState.marksMap[key];
+                        const isSubsidiary = subject.category === 'Subsidiary';
+                        
+                        if (marksObtained === 0 && !existingMark) continue;
+                        
+                        let error;
+                        
+                        if (existingMark) {
+                            const { error: updateError } = await sb
+                                .from('marks')
+                                .update({
+                                    marks_obtained: marksObtained,
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('id', existingMark.id);
+                            error = updateError;
+                            if (!error) updated++;
+                        } else if (marksObtained > 0) {
+                            const markData = {
+                                student_id: student.id,
+                                subject: subject.name,
+                                subject_type: isSubsidiary ? 'subsidiary' : 'principal',
+                                exam: batchState.exam,
+                                year: batchState.year,
+                                marks_obtained: marksObtained,
+                                max_marks: 100,
+                                level: currentLevel,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString()
+                            };
+                            const { error: insertError } = await sb.from('marks').insert([markData]);
+                            error = insertError;
+                            if (!error) saved++;
+                        }
+                        
+                        if (error) {
+                            console.error('Save error:', error);
+                            errors++;
+                        }
+                    }
+                }
             }
         }
+    } catch (error) {
+        console.error('Fatal save error:', error);
+        errors++;
     }
     
-    Swal.fire('Complete!', `✅ Saved: ${saved} new marks | ❌ Errors: ${errors}`, errors ? 'warning' : 'success');
+    // Remove saving notification
+    const savingNotif = document.getElementById('batchInlineNotification');
+    if (savingNotif) savingNotif.remove();
+    
+    // ============================================
+    // SHOW SUCCESS NOTIFICATION ON THE BATCH TABLE
+    // ============================================
+    
+    if (saved > 0 || updated > 0) {
+        // ✅ Show success on the batch table
+        showBatchInlineNotification(
+            `
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div style="font-size: 20px;">✅</div>
+                    <div>
+                        <strong>Marks Saved Successfully!</strong>
+                        <div style="font-size: 13px; margin-top: 2px;">
+                            🆕 New: <strong>${saved}</strong> &nbsp;|&nbsp; 🔄 Updated: <strong>${updated}</strong>
+                            ${errors > 0 ? `&nbsp;|&nbsp; ❌ Errors: <strong style="color: #dc3545;">${errors}</strong>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `,
+            'success',
+            5000
+        );
+        
+        // Also show top right notification
+        showTopRightNotification(
+            '✅ Marks Saved!',
+            `New: ${saved} | Updated: ${updated}`,
+            'success',
+            4000
+        );
+        
+        // Play success sound
+        playSaveSound();
+        
+        // Show celebration for successful saves
+        if (errors === 0 && (saved > 0 || updated > 0)) {
+            showCelebration();
+        }
+        
+    } else if (errors > 0) {
+        // ⚠️ Show warning on the batch table
+        showBatchInlineNotification(
+            `
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div style="font-size: 20px;">⚠️</div>
+                    <div>
+                        <strong>Save Completed with Errors</strong>
+                        <div style="font-size: 13px; margin-top: 2px;">
+                            ✅ New: <strong>${saved}</strong> &nbsp;|&nbsp; 🔄 Updated: <strong>${updated}</strong>
+                            &nbsp;|&nbsp; ❌ Errors: <strong style="color: #dc3545;">${errors}</strong>
+                        </div>
+                    </div>
+                </div>
+            `,
+            'warning',
+            5000
+        );
+        
+        showTopRightNotification(
+            '⚠️ Save with Errors',
+            `Errors: ${errors}`,
+            'warning',
+            4000
+        );
+        
+    } else {
+        // ℹ️ No changes
+        showBatchInlineNotification(
+            `
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div style="font-size: 20px;">ℹ️</div>
+                    <div>
+                        <strong>No Changes</strong>
+                        <div style="font-size: 13px; margin-top: 2px;">No marks to save. Please enter some data first.</div>
+                    </div>
+                </div>
+            `,
+            'info',
+            3000
+        );
+    }
     
     await loadBatchMarks();
     await loadMarksTable();
 };
+
+// ============================================
+// INLINE NOTIFICATION ON BATCH TABLE
+// ============================================
+
+function showBatchInlineNotification(message, type = 'success', duration = 4000) {
+    // Remove existing
+    const existing = document.getElementById('batchInlineNotification');
+    if (existing) existing.remove();
+    
+    const container = document.getElementById('batchMarksContainer');
+    if (!container) return;
+    
+    const cardBody = container.querySelector('.card-body');
+    if (!cardBody) return;
+    
+    const colors = {
+        success: { bg: '#d4edda', border: '#28a745', text: '#155724', icon: 'fa-check-circle' },
+        error: { bg: '#f8d7da', border: '#dc3545', text: '#721c24', icon: 'fa-times-circle' },
+        warning: { bg: '#fff3cd', border: '#ffc107', text: '#856404', icon: 'fa-exclamation-triangle' },
+        info: { bg: '#d1ecf1', border: '#17a2b8', text: '#0c5460', icon: 'fa-info-circle' }
+    };
+    
+    const color = colors[type] || colors.success;
+    
+    const notification = document.createElement('div');
+    notification.id = 'batchInlineNotification';
+    notification.style.cssText = `
+        margin-bottom: 15px;
+        padding: 15px 20px;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        animation: slideDown 0.4s ease;
+        background: ${color.bg};
+        border: 2px solid ${color.border};
+        color: ${color.text};
+        position: relative;
+        z-index: 10;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    `;
+    
+    notification.innerHTML = `
+        <div style="flex: 1;">${message}</div>
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: ${color.text}; padding: 0 5px; opacity: 0.6;">
+            &times;
+        </button>
+    `;
+    
+    cardBody.insertBefore(notification, cardBody.firstChild);
+    
+    if (duration > 0) {
+        setTimeout(() => {
+            const el = document.getElementById('batchInlineNotification');
+            if (el) {
+                el.style.animation = 'slideUp 0.3s ease';
+                setTimeout(() => el.remove(), 300);
+            }
+        }, duration);
+    }
+}
+
+// ============================================
+// TOP RIGHT NOTIFICATION
+// ============================================
+
+function showTopRightNotification(title, message, type = 'success', duration = 4000) {
+    const existing = document.querySelector('.top-right-notification');
+    if (existing) existing.remove();
+    
+    const colors = {
+        success: { bg: '#28a745', icon: 'fa-check-circle' },
+        error: { bg: '#dc3545', icon: 'fa-times-circle' },
+        warning: { bg: '#ffc107', icon: 'fa-exclamation-triangle' },
+        info: { bg: '#17a2b8', icon: 'fa-info-circle' }
+    };
+    
+    const color = colors[type] || colors.info;
+    
+    const notification = document.createElement('div');
+    notification.className = 'top-right-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        padding: 18px 22px;
+        max-width: 380px;
+        min-width: 280px;
+        animation: slideInRight 0.5s ease;
+        border-left: 5px solid ${color.bg};
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    `;
+    
+    notification.innerHTML = `
+        <div style="flex-shrink: 0; width: 36px; height: 36px; background: ${color.bg}; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px;">
+            <i class="fas ${color.icon}"></i>
+        </div>
+        <div style="flex: 1;">
+            <div style="font-weight: 700; font-size: 15px; color: #333;">${title}</div>
+            <div style="font-size: 13px; color: #666; margin-top: 2px;">${message}</div>
+        </div>
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #999; padding: 0 3px;">
+            &times;
+        </button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    if (duration > 0) {
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }
+        }, duration);
+    }
+}
+
+// ============================================
+// CELEBRATION EFFECT
+// ============================================
+
+function showCelebration() {
+    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#f0932b', '#6c5ce7'];
+    const container = document.getElementById('batchMarksContainer');
+    if (!container) return;
+    
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 99998;
+    `;
+    document.body.appendChild(canvas);
+    
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    let particles = [];
+    for (let i = 0; i < 60; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height - canvas.height,
+            size: Math.random() * 8 + 3,
+            speedX: (Math.random() - 0.5) * 8,
+            speedY: Math.random() * 10 + 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            rotation: Math.random() * 360,
+            rotationSpeed: (Math.random() - 0.5) * 10,
+            opacity: 1
+        });
+    }
+    
+    let frame = 0;
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = false;
+        
+        for (const p of particles) {
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.rotation += p.rotationSpeed;
+            p.speedY += 0.2;
+            
+            if (p.y < canvas.height + 50) {
+                alive = true;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.globalAlpha = p.opacity;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+                ctx.restore();
+            }
+        }
+        
+        if (alive && frame < 100) {
+            frame++;
+            requestAnimationFrame(animate);
+        } else {
+            canvas.remove();
+        }
+    }
+    animate();
+}
+
+// ============================================
+// SOUND NOTIFICATION
+// ============================================
+
+function playSaveSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.frequency.value = 880;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.15;
+        
+        oscillator.start();
+        
+        setTimeout(() => {
+            oscillator.frequency.value = 1100;
+        }, 150);
+        
+        setTimeout(() => {
+            oscillator.stop();
+        }, 300);
+    } catch(e) {
+        // Silent fail
+    }
+}
 
 // ============================================
 // EXPORT BATCH MARKS
