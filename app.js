@@ -14872,6 +14872,10 @@ window.generateReport = async function() {
 // GENERATE BULK REPORTS
 // ============================================
 
+// ============================================
+// GENERATE BULK REPORTS - FIXED FOR LARGE DATA
+// ============================================
+
 window.generateBulkReports = async function() {
     const className = document.getElementById('bulkClass').value;
     const stream = document.getElementById('bulkStream').value;
@@ -14955,24 +14959,7 @@ window.generateBulkReports = async function() {
             return;
         }
         
-        let allReportsHtml = '';
-        let reportCount = 0;
-        
-        for (const report of allReports) {
-            const { student, marks, classTeacher } = report;
-            
-            if (currentLevel === 'olevel') {
-                allReportsHtml += generateOlevelReportHTML(student, marks, exam, year, classTeacher, true);
-            } else {
-                allReportsHtml += generateAlevelReportHTML(student, marks, exam, year, classTeacher, true);
-            }
-            
-            reportCount++;
-            if (reportCount < allReports.length) {
-                allReportsHtml += '<div style="page-break-before: always;"></div>';
-            }
-        }
-        
+        // ✅ Write the HTML structure first
         printWindow.document.write(`
             <!DOCTYPE html>
             <html>
@@ -14987,6 +14974,7 @@ window.generateBulkReports = async function() {
                     .report-container { margin: 0 auto; max-width: 1000px; }
                     .text-danger { color: #dc3545; }
                     .text-success { color: #28a745; }
+                    .page-break { page-break-after: always; }
                 </style>
             </head>
             <body>
@@ -15000,7 +14988,7 @@ window.generateBulkReports = async function() {
                         ❌ Close
                     </button>
                 </div>
-                ${allReportsHtml}
+                <div id="reportsContainer"></div>
                 <div class="no-print" style="text-align: center; margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                     <p>End of Reports - ${allReports.length} Reports Generated</p>
                     <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px;">
@@ -15011,7 +14999,43 @@ window.generateBulkReports = async function() {
             </html>
         `);
         
+        // ✅ Close the document to prevent issues
         printWindow.document.close();
+        
+        // ✅ Get the container
+        const container = printWindow.document.getElementById('reportsContainer');
+        let reportCount = 0;
+        
+        // ✅ Add reports one by one using DOM methods (prevents string length issues)
+        for (const report of allReports) {
+            const { student, marks, classTeacher } = report;
+            
+            let reportHtml;
+            if (currentLevel === 'olevel') {
+                reportHtml = generateOlevelReportHTML(student, marks, exam, year, classTeacher, true);
+            } else {
+                reportHtml = generateAlevelReportHTML(student, marks, exam, year, classTeacher, true);
+            }
+            
+            // ✅ Create a wrapper div for each report
+            const wrapper = printWindow.document.createElement('div');
+            wrapper.innerHTML = reportHtml;
+            
+            // ✅ Add page break after each report (except last)
+            if (reportCount < allReports.length - 1) {
+                const breakDiv = printWindow.document.createElement('div');
+                breakDiv.className = 'page-break';
+                wrapper.appendChild(breakDiv);
+            }
+            
+            container.appendChild(wrapper);
+            reportCount++;
+            
+            // ✅ Update progress for large batches
+            if (reportCount % 5 === 0) {
+                console.log(`Added ${reportCount}/${allReports.length} reports to print window`);
+            }
+        }
         
         Swal.fire({
             title: '✅ Success!',
@@ -15028,7 +15052,6 @@ window.generateBulkReports = async function() {
         Swal.fire('Error', 'Failed to generate bulk reports: ' + error.message, 'error');
     }
 };
-
 // ============================================
 // PRINT REPORT CARD
 // ============================================
