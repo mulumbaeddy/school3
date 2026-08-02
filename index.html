@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Ugandan School System - Complete Management System</title>
+    <title>Ugandan School System - Complete Management</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -34,14 +34,143 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', sans-serif; background: #f0f2f5; }
         
-        /* Login Styles */
-        .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #01605a 0%, #ff862d 100%); padding: 20px; }
-        .login-card { background: white; border-radius: 20px; padding: 40px; width: 100%; max-width: 450px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); text-align: center; }
-        .login-card i { font-size: 60px; color: #ff862d; margin-bottom: 20px; }
-        .input-group { position: relative; margin-bottom: 20px; }
-        .input-group i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d; z-index: 1; }
-        .input-group input { width: 100%; padding: 14px 15px 14px 45px; border: 2px solid #e9ecef; border-radius: 10px; }
-        .btn-login { width: 100%; padding: 14px; background: linear-gradient(135deg, #01605a, #ff862d); color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; }
+        /* ---------- ENHANCED LOGIN STYLES ---------- */
+        .login-container { 
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: linear-gradient(135deg, #01605a 0%, #ff862d 100%); 
+            padding: 20px; 
+        }
+        .login-card { 
+            background: white; 
+            border-radius: 24px; 
+            padding: 45px 40px 40px; 
+            width: 100%; 
+            max-width: 440px; 
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15); 
+            text-align: center; 
+            transition: transform 0.3s ease;
+        }
+        .login-card:hover { transform: translateY(-3px); }
+        .login-card .brand-icon { 
+            font-size: 60px; 
+            color: #ff862d; 
+            margin-bottom: 16px;
+            background: #fff6ed;
+            width: 80px;
+            height: 80px;
+            line-height: 80px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .login-card h2 {
+            font-weight: 700;
+            color: #01605a;
+            font-size: 1.6rem;
+            margin-bottom: 4px;
+        }
+        .login-card .sub {
+            color: #6a7b8c;
+            font-size: 0.95rem;
+            margin-bottom: 28px;
+        }
+        
+        /* Input group with enhanced styling */
+        .input-group { 
+            position: relative; 
+            margin-bottom: 18px; 
+        }
+        .input-group .input-icon { 
+            position: absolute; 
+            left: 14px; 
+            top: 50%; 
+            transform: translateY(-50%); 
+            color: #9aabb8; 
+            z-index: 2; 
+            font-size: 16px;
+            transition: color 0.3s ease;
+        }
+        .input-group input { 
+            width: 100%; 
+            padding: 14px 48px 14px 44px; 
+            border: 2px solid #e6edf4; 
+            border-radius: 12px; 
+            font-size: 15px;
+            background: #fafcff;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+        }
+        .input-group input::placeholder { color: #b0c0ce; font-weight: 400; }
+        .input-group input:focus {
+            border-color: #01605a;
+            outline: none;
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(1, 96, 90, 0.10);
+        }
+        .input-group input:focus + .input-icon,
+        .input-group input:focus ~ .input-icon {
+            color: #01605a;
+        }
+        
+        /* ===== PERFECT PASSWORD TOGGLE - NO MOVEMENT ===== */
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #9aabb8;
+            z-index: 3;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            transition: color 0.3s ease, background 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        .toggle-password:hover {
+            color: #01605a;
+            background: rgba(1, 96, 90, 0.08);
+        }
+        /* Active state - changes color when password is visible */
+        .toggle-password.active {
+            color: #ff862d;
+            background: rgba(255, 134, 45, 0.12);
+        }
+        .toggle-password:focus {
+            outline: none;
+        }
+        .toggle-password i {
+            font-size: 19px;
+            pointer-events: none;
+            transition: none; /* No movement */
+        }
+        
+        .btn-login { 
+            width: 100%; 
+            padding: 15px; 
+            background: linear-gradient(135deg, #01605a, #ff862d); 
+            color: white; 
+            border: none; 
+            border-radius: 12px; 
+            font-weight: 600; 
+            font-size: 16px;
+            cursor: pointer; 
+            transition: all 0.3s ease;
+            margin-top: 4px;
+        }
+        .btn-login:hover { 
+            opacity: 0.92; 
+            transform: scale(1.01); 
+            box-shadow: 0 8px 20px rgba(1, 96, 90, 0.25);
+        }
+        .btn-login:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
         
         /* App Container */
         .app-container { display: flex; min-height: 100vh; }
@@ -91,10 +220,7 @@
             background: rgba(0,0,0,0.5);
             z-index: 999;
         }
-        
-        .mobile-overlay.active {
-            display: block;
-        }
+        .mobile-overlay.active { display: block; }
         
         /* Stat Cards */
         .stat-card { background: white; border-radius: 15px; padding: 20px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #ff862d; cursor: pointer; transition: all 0.3s; margin-bottom: 20px; }
@@ -168,84 +294,69 @@
         
         /* Responsive */
         @media (max-width: 768px) {
-            .sidebar {
-                left: -280px;
-            }
-            .sidebar.mobile-open {
-                left: 0;
-            }
-            .main-content {
-                margin-left: 0;
-            }
-            .mobile-menu-toggle {
-                display: flex;
-            }
-            .top-bar {
-                margin-top: 50px;
-            }
+            .sidebar { left: -280px; }
+            .sidebar.mobile-open { left: 0; }
+            .main-content { margin-left: 0; }
+            .mobile-menu-toggle { display: flex; }
+            .top-bar { margin-top: 50px; }
+            
+            .login-card { padding: 30px 22px; }
+            .login-card h2 { font-size: 1.3rem; }
+            .login-card .brand-icon { width: 64px; height: 64px; font-size: 48px; line-height: 64px; }
+            .input-group input { padding: 12px 44px 12px 40px; font-size: 14px; }
+            .toggle-password { right: 10px; padding: 4px 6px; font-size: 16px; }
+            .toggle-password i { font-size: 16px; }
         }
 
-        /* Add to your existing CSS - Fix sidebar overlay issue */
-@media (max-width: 768px) {
-    /* Sidebar should be above everything */
-    .sidebar {
-        z-index: 1000 !important;
-    }
-    
-    /* Mobile menu toggle button */
-    .mobile-menu-toggle {
-        z-index: 1001 !important;
-    }
-    
-    /* Mobile overlay */
-    .mobile-overlay {
-        z-index: 999 !important;
-    }
-    
-    /* Main content should be below sidebar when open */
-    .main-content {
-        position: relative;
-        z-index: 1;
-    }
-    
-    /* Tables should not overlap sidebar */
-    .table-responsive,
-    .data-table,
-    .card {
-        position: relative;
-        z-index: 1;
-    }
-    
-    /* When sidebar is open, prevent interaction with main content */
-    .sidebar.mobile-open ~ .main-content {
-        pointer-events: none;
-        opacity: 0.5;
-    }
-    
-    /* But overlay should be clickable */
-    .mobile-overlay.active {
-        pointer-events: auto;
-    }
-}
+        @media (max-width: 480px) {
+            .login-card { padding: 24px 18px; border-radius: 18px; }
+            .login-card .brand-icon { width: 56px; height: 56px; font-size: 40px; line-height: 56px; }
+            .input-group input { padding: 10px 38px 10px 36px; font-size: 13px; }
+            .toggle-password { right: 8px; padding: 4px 6px; font-size: 14px; }
+            .toggle-password i { font-size: 14px; }
+            .btn-login { font-size: 14px; padding: 13px; }
+        }
+
+        /* Fix sidebar overlay issue */
+        @media (max-width: 768px) {
+            .sidebar { z-index: 1000 !important; }
+            .mobile-menu-toggle { z-index: 1001 !important; }
+            .mobile-overlay { z-index: 999 !important; }
+            .main-content { position: relative; z-index: 1; }
+            .table-responsive, .data-table, .card { position: relative; z-index: 1; }
+            .sidebar.mobile-open ~ .main-content { pointer-events: none; opacity: 0.5; }
+            .mobile-overlay.active { pointer-events: auto; }
+        }
     </style>
 </head>
 <body>
 
-<!-- Login Screen -->
+<!-- ========== ENHANCED LOGIN SCREEN ========== -->
 <div id="loginScreen" class="login-container">
     <div class="login-card">
-        <i class="fas fa-graduation-cap"></i>
-        <h2 class="mb-3">Ugandan Secondary School System</h2>
-        <p class="text-muted mb-4">Complete Management System</p>
+        <div class="brand-icon"><i class="fas fa-graduation-cap"></i></div>
+        <h2>Ugandan School System</h2>
+        <p class="sub">Complete Management System</p>
         <form id="loginForm">
-            <div class="input-group"><input type="email" id="email" placeholder="Email Address" required></div>
-            <div class="input-group"><input type="password" id="password" placeholder="Password" required></div>
-            <button type="submit" class="btn-login" id="loginBtn">Login</button>
+            <div class="input-group">
+                <i class="fas fa-envelope input-icon"></i>
+                <input type="email" id="email" placeholder="Email Address" required>
+            </div>
+            <div class="input-group">
+                <i class="fas fa-lock input-icon"></i>
+                <input type="password" id="password" placeholder="Password" required>
+                <button type="button" class="toggle-password" id="togglePasswordBtn" aria-label="Toggle password visibility">
+                    <i class="fas fa-eye" id="passwordToggleIcon"></i>
+                </button>
+            </div>
+            <button type="submit" class="btn-login" id="loginBtn">
+                <i class="fas fa-arrow-right-to-bracket me-2"></i> Login
+            </button>
         </form>
     </div>
 </div>
 
-<!-- Main App -->
+<!-- ========== MAIN APP ========== -->
 <div id="mainApp" style="display: none;">
     <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="mobileMenuToggleBtn">
@@ -281,6 +392,7 @@
     </div>
 </div>
 
+<!-- ========== ALL MODALS ========== -->
 <!-- Student Modal -->
 <div class="modal fade" id="studentModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -473,14 +585,58 @@
 </div>
 
 <script>
-    // Mobile menu toggle functionality
+    // ============================================================
+    // PERFECT PASSWORD TOGGLE - NO MOVEMENT, ONLY ICON + COLOR
+    // ============================================================
+    (function() {
+        const toggleBtn = document.getElementById('togglePasswordBtn');
+        const passwordInput = document.getElementById('password');
+        const toggleIcon = document.getElementById('passwordToggleIcon');
+
+        if (toggleBtn && passwordInput && toggleIcon) {
+            toggleBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const isPassword = passwordInput.getAttribute('type') === 'password';
+                const newType = isPassword ? 'text' : 'password';
+                passwordInput.setAttribute('type', newType);
+                
+                // Only change icon and color - NO MOVEMENT
+                toggleIcon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+                this.classList.toggle('active');
+            });
+
+            // Keyboard support
+            toggleBtn.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.click();
+                }
+            });
+
+            // Focus state styling for inputs
+            passwordInput.addEventListener('focus', function() {
+                this.closest('.input-group').querySelector('.input-icon').style.color = '#01605a';
+                this.style.borderColor = '#01605a';
+            });
+            passwordInput.addEventListener('blur', function() {
+                const icon = this.closest('.input-group').querySelector('.input-icon');
+                if (icon) icon.style.color = '#9aabb8';
+                this.style.borderColor = '#e6edf4';
+            });
+        }
+    })();
+
+    // ============================================================
+    // MOBILE MENU TOGGLE (unchanged)
+    // ============================================================
     document.addEventListener('DOMContentLoaded', function() {
         const toggleBtn = document.getElementById('mobileMenuToggleBtn');
         const overlay = document.getElementById('mobileOverlay');
         const sidebar = document.getElementById('sidebar');
         
         if (toggleBtn && sidebar) {
-            // Open/close menu when button is clicked
             toggleBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 sidebar.classList.toggle('mobile-open');
@@ -488,7 +644,6 @@
                 document.body.style.overflow = sidebar.classList.contains('mobile-open') ? 'hidden' : '';
             });
             
-            // Close menu when clicking overlay
             if (overlay) {
                 overlay.addEventListener('click', function() {
                     sidebar.classList.remove('mobile-open');

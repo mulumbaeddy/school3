@@ -764,16 +764,81 @@ async function loadPage(page) {
 }
 
 // ==================== DASHBOARD - PROFESSIONAL & RESPONSIVE ====================
+// ============================================
+// GET ALL MARKS - WITH PAGINATION (NO 1000 LIMIT)
+// ============================================
+
+async function getMarks() {
+    try {
+        let allMarks = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const { data, error } = await sb
+                .from('marks')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                allMarks = allMarks.concat(data);
+                page++;
+                if (data.length < pageSize) {
+                    hasMore = false;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
+        
+        console.log(`✅ Total marks loaded: ${allMarks.length}`);
+        return allMarks;
+    } catch (error) {
+        console.error('Error loading marks:', error);
+        return [];
+    }
+}
+
+// ============================================
+// GET SCHOOL SETTINGS
+// ============================================
+
+async function getSchoolSettings() {
+    try {
+        const { data, error } = await sb
+            .from('school_settings')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        
+        if (error) throw error;
+        return data || {};
+    } catch (error) {
+        console.error('Error loading school settings:', error);
+        return {};
+    }
+}
+
+// ============================================
+// RENDER DASHBOARD - COMPLETE
+// ============================================
+
 async function renderDashboard() {
     // Load all data in parallel for better performance
-    const [studentsData, teachersData, subjectsData, marksData, booksData, paymentsData, attendanceData] = await Promise.all([
+    const [studentsData, teachersData, subjectsData, marksData, booksData, paymentsData, attendanceData, schoolSettings] = await Promise.all([
         getStudents(),
         getTeachers(),
         getSubjects(),
-        getMarks(),
+        getMarks(),      // ✅ Now loads ALL marks (no 1000 limit)
         getBooks(),
         getPayments(),
-        getAttendance()
+        getAttendance(),
+        getSchoolSettings()
     ]);
     
     // Calculate statistics
@@ -786,6 +851,9 @@ async function renderDashboard() {
     
     // Get recent payments (last 5)
     const recentPayments = [...paymentsData].sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date)).slice(0, 5);
+    
+    // Get school logo
+    const schoolLogo = schoolSettings?.school_logo || '';
     
     // Role badge color mapping
     const roleBadgeColors = {
@@ -878,8 +946,8 @@ async function renderDashboard() {
             icon: "fa-chart-line",
             bg: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
             label: "Marks Records",
-            value: marksData.length,
-            extra: "Entries Recorded"
+            value: marksData.length,  // ✅ Now shows actual count
+            extra: `${marksData.length} Entries Recorded`
         },
         payments: { 
             roles: ['superadmin', 'admin', 'accountant'], 
@@ -976,12 +1044,25 @@ async function renderDashboard() {
         </button>
     `).join('');
     
+    // School logo watermark
+    const logoWatermark = schoolLogo ? `
+        <div class="logo-watermark">
+            <img src="${schoolLogo}" alt="School Logo">
+        </div>
+    ` : '';
+    
     return `
-        <div class="dashboard-container">
+        <div class="dashboard-container" style="position: relative; overflow: hidden; min-height: 100vh;">
+            <!-- School Logo Watermark -->
+            ${logoWatermark}
+            
             <!-- Welcome Section -->
             <div class="welcome-section">
                 <div class="welcome-avatar">
-                    <i class="fas fa-user-graduate"></i>
+                    ${schoolLogo ? 
+                        `<img src="${schoolLogo}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">` : 
+                        `<i class="fas fa-user-graduate"></i>`
+                    }
                 </div>
                 <div class="welcome-info">
                     <h2>Welcome back, ${escapeHtml(currentUser.name)}!</h2>
@@ -1044,13 +1125,61 @@ async function renderDashboard() {
         </div>
         
         <style>
+            /* School Logo Watermark - Responsive */
+            .logo-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                pointer-events: none;
+                z-index: 0;
+                opacity: 0.06;
+                transition: all 0.3s ease;
+            }
+            
+            .logo-watermark img {
+                width: 400px;
+                height: 400px;
+                object-fit: contain;
+                filter: grayscale(100%);
+            }
+            
+            @media (min-width: 1400px) {
+                .logo-watermark img { width: 500px; height: 500px; }
+                .logo-watermark { opacity: 0.08; }
+            }
+            @media (max-width: 1399px) and (min-width: 992px) {
+                .logo-watermark img { width: 400px; height: 400px; }
+                .logo-watermark { opacity: 0.07; }
+            }
+            @media (max-width: 991px) and (min-width: 768px) {
+                .logo-watermark img { width: 300px; height: 300px; }
+                .logo-watermark { opacity: 0.06; }
+            }
+            @media (max-width: 767px) and (min-width: 480px) {
+                .logo-watermark img { width: 200px; height: 200px; }
+                .logo-watermark { opacity: 0.05; }
+            }
+            @media (max-width: 479px) {
+                .logo-watermark img { width: 150px; height: 150px; }
+                .logo-watermark { opacity: 0.04; }
+            }
+            
+            .welcome-section,
+            .stats-grid,
+            .dashboard-bottom {
+                position: relative;
+                z-index: 1;
+            }
+            
+            /* Dashboard Styles */
             .dashboard-container {
                 padding: 20px;
                 max-width: 1400px;
                 margin: 0 auto;
+                min-height: 100vh;
             }
             
-            /* Welcome Section */
             .welcome-section {
                 background: white;
                 border-radius: 20px;
@@ -1063,6 +1192,8 @@ async function renderDashboard() {
                 gap: 20px;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.05);
                 border: 1px solid #eef2f6;
+                position: relative;
+                z-index: 1;
             }
             
             .welcome-avatar {
@@ -1073,11 +1204,19 @@ async function renderDashboard() {
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                overflow: hidden;
+                flex-shrink: 0;
             }
             
             .welcome-avatar i {
                 font-size: 32px;
                 color: white;
+            }
+            
+            .welcome-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
             }
             
             .welcome-info h2 {
@@ -1089,6 +1228,7 @@ async function renderDashboard() {
             .welcome-badges {
                 display: flex;
                 gap: 10px;
+                flex-wrap: wrap;
             }
             
             .role-badge {
@@ -1098,7 +1238,6 @@ async function renderDashboard() {
                 font-weight: 600;
                 color: white;
             }
-            
             .role-badge.superadmin { background: #dc3545; }
             .role-badge.admin { background: #0d6efd; }
             .role-badge.teacher { background: #0dcaf0; color: #000; }
@@ -1145,12 +1284,13 @@ async function renderDashboard() {
             .welcome-btn.btn-warning { background: #ffc107; color: #000; }
             .welcome-btn.btn-warning:hover { background: #e0a800; transform: translateY(-2px); }
             
-            /* Stats Grid - Responsive */
             .stats-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                 gap: 20px;
                 margin-bottom: 30px;
+                position: relative;
+                z-index: 1;
             }
             
             .stat-card {
@@ -1181,6 +1321,7 @@ async function renderDashboard() {
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                flex-shrink: 0;
             }
             
             .stat-icon i {
@@ -1190,6 +1331,7 @@ async function renderDashboard() {
             
             .stat-content {
                 flex: 1;
+                min-width: 0;
             }
             
             .stat-value {
@@ -1212,11 +1354,12 @@ async function renderDashboard() {
                 margin-top: 4px;
             }
             
-            /* Bottom Section */
             .dashboard-bottom {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
                 gap: 25px;
+                position: relative;
+                z-index: 1;
             }
             
             .recent-payments-card,
@@ -1353,64 +1496,22 @@ async function renderDashboard() {
                 color: #2c3e50;
             }
             
-            /* Mobile Responsive */
             @media (max-width: 768px) {
-                .dashboard-container {
-                    padding: 15px;
-                }
-                
-                .welcome-section {
-                    flex-direction: column;
-                    text-align: center;
-                    padding: 20px;
-                }
-                
-                .welcome-actions {
-                    justify-content: center;
-                }
-                
-                .stats-grid {
-                    grid-template-columns: 1fr;
-                    gap: 15px;
-                }
-                
-                .dashboard-bottom {
-                    grid-template-columns: 1fr;
-                }
-                
-                .actions-grid {
-                    grid-template-columns: 1fr;
-                }
-                
-                .stat-card-inner {
-                    flex-direction: column;
-                    text-align: center;
-                }
-                
-                .stat-value {
-                    font-size: 24px;
-                }
+                .dashboard-container { padding: 15px; }
+                .welcome-section { flex-direction: column; text-align: center; padding: 20px; }
+                .welcome-actions { justify-content: center; }
+                .stats-grid { grid-template-columns: 1fr; gap: 15px; }
+                .dashboard-bottom { grid-template-columns: 1fr; }
+                .actions-grid { grid-template-columns: 1fr; }
+                .stat-card-inner { flex-direction: column; text-align: center; }
+                .stat-value { font-size: 24px; }
             }
             
             @media (max-width: 480px) {
-                .welcome-btn {
-                    padding: 8px 16px;
-                    font-size: 12px;
-                }
-                
-                .welcome-info h2 {
-                    font-size: 18px;
-                }
-                
-                .payment-item {
-                    flex-direction: column;
-                    text-align: center;
-                    gap: 8px;
-                }
-                
-                .payment-info {
-                    align-items: center;
-                }
+                .welcome-btn { padding: 8px 16px; font-size: 12px; }
+                .welcome-info h2 { font-size: 18px; }
+                .payment-item { flex-direction: column; text-align: center; gap: 8px; }
+                .payment-info { align-items: center; }
             }
         </style>
     `;
@@ -4966,12 +5067,12 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 // ============================================
-// MARKS MODULE - WITH DYNAMIC SUBJECTS FROM DATABASE
+// MARKS MODULE - U1/U2/U3 SYSTEM (OPTIMIZED)
 // U1, U2, U3 each out of 20 with validation
 // TEACHERS: Can ADD marks but CANNOT EDIT marks
 // GRADE COLORS: From olevel_grades table
 // ALL BUTTONS REMAIN VISIBLE
-// BATCH ENTRY: Existing marks show padlocks for teachers
+// FAST FILTERS & PROPER DELETE
 // ============================================
 
 // ============================================
@@ -5022,8 +5123,33 @@ function getCurrentYear() {
     return new Date().getFullYear().toString();
 }
 
+function getValue(input) {
+    if (!input) return 0;
+    if (input.value === '' || input.value === null || input.value === undefined) {
+        return 0;
+    }
+    return parseFloat(input.value) || 0;
+}
+
 // ============================================
-// VALIDATION FUNCTION - Prevents values > max
+// DEBOUNCE FUNCTION - For fast filtering
+// ============================================
+
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+// Create debounced filter
+const debouncedFilterMarks = debounce(function() {
+    applyMarksFilters();
+}, 300);
+
+// ============================================
+// VALIDATION FUNCTION
 // ============================================
 
 function validateUnitInput(input, maxValue) {
@@ -5054,6 +5180,72 @@ function validateUnitInput(input, maxValue) {
     if (value < 0) {
         input.value = 0;
     }
+}
+
+// ============================================
+// APPLY FILTERS - FAST & RELIABLE
+// ============================================
+
+function applyMarksFilters() {
+    const studentFilter = document.getElementById('filterStudent')?.value?.toLowerCase() || '';
+    const subjectFilter = document.getElementById('filterSubject')?.value?.toLowerCase() || '';
+    const classFilter = document.getElementById('filterClass')?.value || '';
+    const streamFilter = document.getElementById('filterStream')?.value || '';
+    const yearFilter = document.getElementById('filterYear')?.value || '';
+    
+    const rows = document.querySelectorAll('#marksTableBody tr');
+    let visibleCount = 0;
+    const total = rows.length;
+    
+    rows.forEach(row => {
+        if (row.cells && row.cells.length > 1 && !row.innerHTML.includes('No marks found')) {
+            let show = true;
+            
+            if (studentFilter) {
+                const student = row.dataset.student || '';
+                if (!student.includes(studentFilter)) show = false;
+            }
+            if (subjectFilter) {
+                const subject = row.dataset.subject || '';
+                if (!subject.includes(subjectFilter)) show = false;
+            }
+            if (classFilter) {
+                const classData = row.dataset.class || '';
+                if (classData !== classFilter) show = false;
+            }
+            if (streamFilter) {
+                const streamData = row.dataset.stream || '';
+                if (streamData.toLowerCase() !== streamFilter.toLowerCase()) show = false;
+            }
+            if (yearFilter) {
+                const yearData = row.dataset.year || '';
+                if (!yearData.includes(yearFilter)) show = false;
+            }
+            
+            row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        }
+    });
+    
+    const countEl = document.getElementById('filteredRowCount');
+    if (countEl) {
+        if (visibleCount === 0) {
+            countEl.textContent = 'No matching records';
+        } else if (visibleCount === total) {
+            countEl.textContent = `Total: ${total} records`;
+        } else {
+            countEl.textContent = `Showing ${visibleCount} of ${total} records`;
+        }
+    }
+}
+
+function clearMarksFilters() {
+    document.getElementById('filterStudent').value = '';
+    document.getElementById('filterSubject').value = '';
+    document.getElementById('filterClass').value = '';
+    document.getElementById('filterStream').value = '';
+    document.getElementById('filterYear').value = '';
+    applyMarksFilters();
 }
 
 // ============================================
@@ -5105,13 +5297,7 @@ async function loadSubjectsFromDB() {
             console.warn("No subsidiary subjects found, using defaults");
         }
         
-        console.log(`📚 FINAL SUMMARY:`);
-        console.log(`   O-Level: ${dbOlevelSubjects.length} subjects`);
-        console.log(`   A-Level Principal: ${dbAlevelPrincipalSubjects.length} subjects`);
-        console.log(`   A-Level Subsidiary: ${dbAlevelSubsidiarySubjects.length} subjects`);
-        
         return true;
-        
     } catch (error) {
         console.error('Error loading subjects:', error);
         dbOlevelSubjects = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology'];
@@ -5122,7 +5308,7 @@ async function loadSubjectsFromDB() {
 }
 
 // ============================================
-// LOAD GRADING RULES FROM SETTINGS
+// LOAD GRADING RULES
 // ============================================
 
 async function loadGradingRules() {
@@ -5210,8 +5396,7 @@ function calculateGrade(percentage, isSubsidiary = false) {
 }
 
 // ============================================
-// O-LEVEL GRADE DESCRIPTOR (U1, U2, U3 out of 20)
-// Uses colors from olevel_grades table
+// O-LEVEL GRADE DESCRIPTOR
 // ============================================
 
 function getOlevelGradeDescriptor(total100) {
@@ -5240,28 +5425,71 @@ function getOlevelGradeDescriptor(total100) {
 // LOAD ALL MARKS DATA
 // ============================================
 
+// ============================================
+// LOAD ALL MARKS DATA - WITH PAGINATION (NO 1000 LIMIT)
+// ============================================
+
 async function loadAllMarks() {
     try {
         await loadGradingRules();
         
-        const [marksRes, studentsRes] = await Promise.all([
-            sb.from('marks').select('*').eq('level', currentLevel).order('created_at', { ascending: false }),
-            sb.from('students').select('*').in('class', currentLevel === 'olevel' ? ['S.1', 'S.2', 'S.3', 'S.4'] : ['S.5', 'S.6'])
-        ]);
+        // ✅ Load students first
+        const studentsRes = await sb
+            .from('students')
+            .select('*')
+            .in('class', currentLevel === 'olevel' ? ['S.1', 'S.2', 'S.3', 'S.4'] : ['S.5', 'S.6'])
+            .order('name');
         
-        if (marksRes.error) throw marksRes.error;
         if (studentsRes.error) throw studentsRes.error;
-        
-        allMarksList = marksRes.data || [];
         allStudentsList = studentsRes.data || [];
         
+        // ✅ Load ALL marks with pagination
+        let allMarks = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const { data, error } = await sb
+                .from('marks')
+                .select('*')
+                .eq('level', currentLevel)
+                .order('created_at', { ascending: false })
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                allMarks = allMarks.concat(data);
+                page++;
+                if (data.length < pageSize) {
+                    hasMore = false;
+                }
+                console.log(`📥 Loaded ${allMarks.length} marks so far...`);
+            } else {
+                hasMore = false;
+            }
+        }
+        
+        allMarksList = allMarks;
+        
+        // ✅ Add student names to marks for delete function
+        for (const mark of allMarksList) {
+            const student = allStudentsList.find(s => s.id === mark.student_id);
+            if (student) {
+                mark.student_name = student.name;
+            } else {
+                mark.student_name = 'Unknown';
+            }
+        }
+        
+        console.log(`✅ Loaded ${allMarksList.length} marks and ${allStudentsList.length} students`);
         return true;
     } catch (error) {
         console.error('Error loading data:', error);
         return false;
     }
 }
-
 // ============================================
 // GET CLASS AND STREAM OPTIONS
 // ============================================
@@ -5275,6 +5503,191 @@ function getStreamOptions() {
 }
 
 // ============================================
+// RENDER TABLE HEADER
+// ============================================
+
+function renderTableHeader() {
+    if (currentLevel === 'olevel') {
+        return `
+            <tr>
+                <th width="30"><input type="checkbox" id="selectAllMarks"></th>
+                <th width="200">Student Details</th>
+                <th width="70">Class</th>
+                <th width="70">Stream</th>
+                <th width="120">Subject</th>
+                <th width="90">Exam</th>
+                <th width="70">Year</th>
+                <th width="70">U1</th>
+                <th width="70">U2</th>
+                <th width="70">U3</th>
+                <th width="80">Exam/80</th>
+                <th width="80">Total/100</th>
+                <th width="60">Grade</th>
+                <th width="80">Initials</th>
+                <th width="80">Actions</th>
+            </tr>
+        `;
+    } else {
+        return `
+            <tr>
+                <th width="30"><input type="checkbox" id="selectAllMarks"></th>
+                <th width="200">Student Details</th>
+                <th width="70">Class</th>
+                <th width="70">Stream</th>
+                <th width="100">Combination</th>
+                <th width="120">Subject</th>
+                <th width="100">Subject Type</th>
+                <th width="90">Exam</th>
+                <th width="70">Year</th>
+                <th width="80">Marks</th>
+                <th width="70">%</th>
+                <th width="60">Grade</th>
+                <th width="60">Points</th>
+                <th width="80">Actions</th>
+            </tr>
+        `;
+    }
+}
+
+// ============================================
+// LOAD MARKS TABLE - WITH DATA ATTRIBUTES FOR FILTERS
+// ============================================
+
+async function loadMarksTable() {
+    const tbody = document.getElementById('marksTableBody');
+    if (!tbody) {
+        console.error('Table body not found!');
+        return;
+    }
+    
+    await loadAllMarks();
+    
+    const filteredMarks = allMarksList.filter(m => m.level === currentLevel);
+    
+    if (filteredMarks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4">No marks found for ${currentLevel}. Use batch entry above.</td></tr>`;
+        const countEl = document.getElementById('filteredRowCount');
+        if (countEl) countEl.textContent = 'No records';
+        return;
+    }
+    
+    let html = '';
+    let rowCount = 0;
+    
+    for (const mark of filteredMarks) {
+        const student = allStudentsList.find(s => s.id === mark.student_id);
+        if (!student) continue;
+        
+        rowCount++;
+        const streamValue = student.stream || '';
+        
+        if (currentLevel === 'olevel') {
+            const u1 = mark.unit1 || 0;
+            const u2 = mark.unit2 || 0;
+            const u3 = mark.unit3 || 0;
+            const exam80 = mark.exam_80 || 0;
+            const initials = mark.teacher_initials || '';
+            
+            const unitAvg = (u1 + u2 + u3) / 3;
+            const total20 = unitAvg;
+            let total100 = total20 + exam80;
+            total100 = Math.min(100, Math.max(0, total100));
+            
+            const gradeInfo = getOlevelGradeDescriptor(total100);
+            
+            html += `
+                <tr data-student="${escapeHtml(student.name).toLowerCase()}" 
+                    data-class="${student.class}" 
+                    data-stream="${streamValue.toLowerCase()}" 
+                    data-subject="${escapeHtml(mark.subject).toLowerCase()}" 
+                    data-year="${mark.year}">
+                    <td class="text-center"><input type="checkbox" class="markCheck" data-id="${mark.id}"></td>
+                    <td><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
+                    <td class="text-center">${student.class}</td>
+                    <td class="text-center">${streamValue || '-'}</td>
+                    <td><strong>${escapeHtml(mark.subject)}</strong></td>
+                    <td class="text-center">${mark.exam}</td>
+                    <td class="text-center">${mark.year}</td>
+                    <td class="text-center">${u1.toFixed(1)}</td>
+                    <td class="text-center">${u2.toFixed(1)}</td>
+                    <td class="text-center">${u3.toFixed(1)}</td>
+                    <td class="text-center">${exam80}</td>
+                    <td class="text-center"><strong>${total100.toFixed(1)}</strong></td>
+                    <td class="text-center" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
+                        ${gradeInfo.grade}
+                    </td>
+                    <td class="text-center">${escapeHtml(initials) || '-'}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteMark('${mark.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        } else {
+            const percentage = (mark.marks_obtained / mark.max_marks) * 100;
+            const isSubsidiary = mark.subject_type === 'subsidiary' || dbAlevelSubsidiarySubjects?.includes(mark.subject);
+            const grade = calculateGrade(percentage, isSubsidiary);
+            
+            html += `
+                <tr data-student="${escapeHtml(student.name).toLowerCase()}" 
+                    data-class="${student.class}" 
+                    data-stream="${streamValue.toLowerCase()}" 
+                    data-subject="${escapeHtml(mark.subject).toLowerCase()}" 
+                    data-year="${mark.year}">
+                    <td class="text-center"><input type="checkbox" class="markCheck" data-id="${mark.id}"></td>
+                    <td><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
+                    <td class="text-center">${student.class}</td>
+                    <td class="text-center">${streamValue || '-'}</td>
+                    <td class="text-center">${student.combination || '-'}</td>
+                    <td><strong>${escapeHtml(mark.subject)}</strong></td>
+                    <td class="text-center">${mark.subject_type || 'principal'}</td>
+                    <td class="text-center">${mark.exam}</td>
+                    <td class="text-center">${mark.year}</td>
+                    <td class="text-center"><strong>${mark.marks_obtained}</strong></td>
+                    <td class="text-center">${percentage.toFixed(1)}%</td>
+                    <td class="text-center" style="background: ${grade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
+                        ${grade.grade}
+                    </td>
+                    <td class="text-center"><strong>${grade.points}</strong></td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteMark('${mark.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+    
+    tbody.innerHTML = html;
+    
+    const countEl = document.getElementById('filteredRowCount');
+    if (countEl) {
+        countEl.textContent = `Total: ${rowCount} records`;
+    }
+    
+    const selectAll = document.getElementById('selectAllMarks');
+    if (selectAll) {
+        selectAll.onclick = function() {
+            const allRows = document.querySelectorAll('#marksTableBody tr');
+            allRows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const cb = row.querySelector('.markCheck');
+                    if (cb) cb.checked = selectAll.checked;
+                }
+            });
+        };
+    }
+}
+
+// ============================================
 // RENDER MARKS PAGE
 // ============================================
 
@@ -5282,7 +5695,7 @@ async function renderMarks() {
     await loadSubjectsFromDB();
     await loadGradingRules();
     
-    const levelName = currentLevel === 'olevel' ? 'O-Level (U1+U2+U3 out of 20 + Exam/80)' : 'A-Level';
+    const levelName = currentLevel === 'olevel' ? 'O-Level (U1+U2+U3 + Exam/80)' : 'A-Level';
     const classOptions = getClassOptions();
     const streamOptionsList = getStreamOptions();
     const isOlevel = currentLevel === 'olevel';
@@ -5377,7 +5790,6 @@ async function renderMarks() {
                     </div>
                 </div>
             </div>
-            
         </div>
         
         <!-- Action Buttons -->
@@ -5398,31 +5810,46 @@ async function renderMarks() {
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
                     </div>
-                    <div class="col-md-4">
-                        <input type="text" id="markSearch" class="form-control" placeholder="🔍 Search marks..." onkeyup="filterMarksTable()">
-                    </div>
                 </div>
             </div>
         </div>
         
-        <!-- Filters -->
+        <!-- FAST FILTERS - With Class & Stream -->
         <div class="card shadow-sm mb-3">
-            <div class="card-body">
-                <div class="row">
+            <div class="card-body" style="padding: 10px 15px;">
+                <div class="row g-2">
                     <div class="col-md-3">
-                        <input type="text" id="filterStudent" class="form-control" placeholder="Filter by student" onkeyup="filterMarksTable()">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📚 Class</label>
+                        <select id="filterClass" class="form-select form-select-sm" onchange="applyMarksFilters()">
+                            <option value="">All Classes</option>
+                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
                     </div>
-                    <div class="col-md-3">
-                        <input type="text" id="filterSubject" class="form-control" placeholder="Filter by subject" onkeyup="filterMarksTable()">
-                    </div>
-                    <div class="col-md-3">
-                        <select id="filterExam" class="form-select" onchange="filterMarksTable()">
-                            <option value="">All Exams</option>
-                            ${EXAM_OPTIONS.map(e => `<option value="${e}">${e}</option>`).join('')}
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">🌊 Stream</label>
+                        <select id="filterStream" class="form-select form-select-sm" onchange="applyMarksFilters()">
+                            <option value="">All Streams</option>
+                            ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <input type="text" id="filterYear" class="form-control" placeholder="Filter by year" onkeyup="filterMarksTable()">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">👨‍🎓 Student</label>
+                        <input type="text" id="filterStudent" class="form-control form-control-sm" placeholder="Search student..." onkeyup="debouncedFilterMarks()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📖 Subject</label>
+                        <input type="text" id="filterSubject" class="form-control form-control-sm" placeholder="Search subject..." onkeyup="debouncedFilterMarks()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📅 Year</label>
+                        <input type="text" id="filterYear" class="form-control form-control-sm" placeholder="Year..." onkeyup="debouncedFilterMarks()">
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-12 text-end">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="clearMarksFilters()" style="font-size: 12px;">
+                            <i class="fas fa-eraser"></i> Clear All Filters
+                        </button>
                     </div>
                 </div>
             </div>
@@ -5430,8 +5857,9 @@ async function renderMarks() {
         
         <!-- Marks Table -->
         <div class="card shadow-sm">
-            <div class="card-header bg-white">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center" style="padding: 8px 12px;">
                 <h6 class="mb-0"><i class="fas fa-table"></i> Marks Records</h6>
+                <small id="filteredRowCount" class="text-muted"></small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
@@ -5440,7 +5868,7 @@ async function renderMarks() {
                             ${renderTableHeader()}
                         </thead>
                         <tbody id="marksTableBody">
-                            <tr><td colspan="${isOlevel ? 14 : 14}" class="text-center py-4">
+                            <tr><td colspan="${isOlevel ? 15 : 14}" class="text-center py-4">
                                 <i class="fas fa-spinner fa-spin"></i> Loading marks...
                             </tr>
                         </tbody>
@@ -5452,233 +5880,151 @@ async function renderMarks() {
 }
 
 // ============================================
-// CLOSE BATCH MARKS TABLE
+// FIXED DELETE MARK - Shows Student Name
 // ============================================
 
-window.closeBatchMarks = function() {
-    const container = document.getElementById('batchMarksContainer');
-    if (container) {
-        container.style.display = 'none';
+window.deleteMark = async function(id) {
+    // TEACHER CHECK
+    if (currentUserRole === 'teacher') {
+        Swal.fire({
+            icon: 'error',
+            title: '⛔ Access Denied',
+            text: 'Teachers are not allowed to delete marks. Only Admins can delete marks.',
+            timer: 3000,
+            showConfirmButton: false
+        });
+        return;
     }
     
-    batchState = {
-        class: '',
-        stream: '',
-        subject: '',
-        exam: 'Term 1',
-        year: new Date().getFullYear().toString(),
-        students: [],
-        subjects: [],
-        marksMap: {}
-    };
+    const mark = allMarksList.find(m => m.id === id);
+    if (!mark) return;
+
+    // Get student name from allStudentsList
+    const student = allStudentsList.find(s => s.id === mark.student_id);
+    const studentName = student ? student.name : 'Unknown';
+
+    const confirmDelete = await Swal.fire({
+        title: 'Delete Mark?',
+        html: `<p>Are you sure you want to delete this mark record?</p>
+               <p><strong>Student:</strong> ${escapeHtml(studentName)}</p>
+               <p><strong>Subject:</strong> ${escapeHtml(mark.subject)}</p>
+               <p><strong>Exam:</strong> ${mark.exam} ${mark.year}</p>
+               <p class="text-danger">⚠️ This action cannot be undone!</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Continue',
+        cancelButtonText: 'Cancel'
+    });
+    if (!confirmDelete.isConfirmed) return;
+
+    const authorized = await verifyAdminOrSuperAdminPassword('deleting this mark');
+    if (!authorized) {
+        Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
+        return;
+    }
+
+    Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
-    console.log("Batch marks table closed");
+    try {
+        const { error } = await sb.from('marks').delete().eq('id', id);
+        if (error) throw error;
+        Swal.fire('Deleted!', 'Mark record has been deleted.', 'success');
+        await loadMarksTable();
+    } catch (error) {
+        Swal.fire('Error!', error.message, 'error');
+    }
 };
 
 // ============================================
-// REFRESH SUBJECTS
+// FIXED BULK DELETE MARKS
 // ============================================
 
-window.refreshSubjectsForMarks = async function() {
-    Swal.fire({ title: 'Reloading subjects from database...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+window.bulkDeleteMarks = async function() {
+    if (currentUserRole === 'teacher') {
+        Swal.fire({
+            icon: 'error',
+            title: '⛔ Access Denied',
+            text: 'Teachers are not allowed to delete marks. Only Admins can delete marks.',
+            timer: 3000,
+            showConfirmButton: false
+        });
+        return;
+    }
     
-    await loadSubjectsFromDB();
+    const checkboxes = document.querySelectorAll('.markCheck:checked');
+    const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
     
-    Swal.close();
-    Swal.fire({
-        title: '✅ Subjects Reloaded!',
-        html: `
-            <div class="text-start">
-                <strong>O-Level:</strong> ${dbOlevelSubjects.length} subjects<br>
-                <strong>A-Level Principal:</strong> ${dbAlevelPrincipalSubjects.length} subjects<br>
-                <strong>A-Level Subsidiary:</strong> ${dbAlevelSubsidiarySubjects.length} subjects
-            </div>
-        `,
-        icon: 'success',
-        timer: 2000
+    if (ids.length === 0) {
+        Swal.fire('Error', 'No marks selected. Please check the boxes of marks you want to delete.', 'error');
+        return;
+    }
+
+    const confirmDelete = await Swal.fire({
+        title: `Delete ${ids.length} mark records?`,
+        html: `<p>You are about to delete <strong>${ids.length}</strong> mark records.</p>
+               <p class="text-danger">⚠️ THIS ACTION CANNOT BE UNDONE!</p>
+               <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization (Admin or Super Admin) will be required.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, Continue',
+        cancelButtonText: 'Cancel'
+    });
+    if (!confirmDelete.isConfirmed) return;
+
+    const authorized = await verifyAdminOrSuperAdminPassword('deleting marks');
+    if (!authorized) {
+        Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
+        return;
+    }
+
+    const finalConfirm = await Swal.fire({
+        title: '🔴 FINAL CONFIRMATION',
+        html: `<p>Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> mark records.</p>`,
+        input: 'text',
+        inputPlaceholder: 'Type DELETE here',
+        showCancelButton: true,
+        confirmButtonText: 'Permanently Delete',
+        confirmButtonColor: '#d33',
+        preConfirm: (inputValue) => {
+            if (inputValue !== 'DELETE') {
+                Swal.showValidationMessage('Please type "DELETE" to confirm');
+                return false;
+            }
+            return true;
+        }
+    });
+    if (!finalConfirm.isConfirmed) return;
+
+    Swal.fire({ 
+        title: 'Deleting...', 
+        text: `Deleting ${ids.length} record(s)...`,
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
     });
     
-    await loadPage('marks');
+    try {
+        const { error } = await sb
+            .from('marks')
+            .delete()
+            .in('id', ids);
+        
+        if (error) throw error;
+        
+        Swal.fire({
+            title: 'Deleted!', 
+            text: `${ids.length} mark records deleted successfully.`,
+            icon: 'success'
+        });
+        
+        await loadMarksTable();
+        
+    } catch (error) {
+        console.error('Bulk delete error:', error);
+        Swal.fire('Error!', error.message, 'error');
+    }
 };
-
-// ============================================
-// RENDER TABLE HEADER
-// ============================================
-
-function renderTableHeader() {
-    if (currentLevel === 'olevel') {
-        return `
-            <tr>
-                <th width="30"><input type="checkbox" id="selectAllMarks"></th>
-                <th width="200">Student Details</th>
-                <th width="70">Class</th>
-                <th width="70">Stream</th>
-                <th width="120">Subject</th>
-                <th width="90">Exam</th>
-                <th width="70">Year</th>
-                <th width="70">U1</th>
-                <th width="70">U2</th>
-                <th width="70">U3</th>
-                <th width="80">Exam/80</th>
-                <th width="80">Total/100</th>
-                <th width="60">Grade</th>
-                <th width="80">Initials</th>
-                <th width="80">Actions</th>
-            </tr>
-        `;
-    } else {
-        return `
-            <tr>
-                <th width="30"><input type="checkbox" id="selectAllMarks"></th>
-                <th width="200">Student Details</th>
-                <th width="70">Class</th>
-                <th width="70">Stream</th>
-                <th width="100">Combination</th>
-                <th width="120">Subject</th>
-                <th width="100">Subject Type</th>
-                <th width="90">Exam</th>
-                <th width="70">Year</th>
-                <th width="80">Marks</th>
-                <th width="70">%</th>
-                <th width="60">Grade</th>
-                <th width="60">Points</th>
-                <th width="80">Actions</th>
-            </tr>
-        `;
-    }
-}
-
-// ============================================
-// LOAD MARKS TABLE - ALL BUTTONS VISIBLE
-// ============================================
-
-async function loadMarksTable() {
-    const tbody = document.getElementById('marksTableBody');
-    if (!tbody) {
-        console.error('Table body not found!');
-        return;
-    }
-    
-    console.log('1. Loading all marks...');
-    await loadAllMarks();
-    
-    console.log('2. Total marks in allMarksList:', allMarksList.length);
-    console.log('3. Current level:', currentLevel);
-    
-    const filteredMarks = allMarksList.filter(m => m.level === currentLevel);
-    console.log('4. Marks filtered by level:', filteredMarks.length);
-    
-    if (filteredMarks.length === 0) {
-        console.log('5. No marks found for level:', currentLevel);
-        tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4">No marks found for ${currentLevel}. Use batch entry above.</td></tr>`;
-        return;
-    }
-    
-    console.log('6. First mark sample:', filteredMarks[0]);
-    
-    let html = '';
-    let rowCount = 0;
-    
-    for (const mark of filteredMarks) {
-        const student = allStudentsList.find(s => s.id === mark.student_id);
-        if (!student) {
-            console.warn('Student not found for mark:', mark.id, mark.student_id);
-            continue;
-        }
-        
-        rowCount++;
-        
-        if (currentLevel === 'olevel') {
-            console.log(`7. Processing row ${rowCount}: ${student.name}`);
-            
-            const u1 = mark.unit1 || 0;
-            const u2 = mark.unit2 || 0;
-            const u3 = mark.unit3 || 0;
-            const exam80 = mark.exam_80 || 0;
-            const initials = mark.teacher_initials || '';
-            
-            const unitAvg = (u1 + u2 + u3) / 3;
-            const total20 = unitAvg;
-            let total100 = total20 + exam80;
-            total100 = Math.min(100, Math.max(0, total100));
-            
-            const gradeInfo = getOlevelGradeDescriptor(total100);
-            
-            html += `
-                <tr>
-                    <td class="text-center"><input type="checkbox" class="markCheck" data-id="${mark.id}"></td>
-                    <td><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
-                    <td class="text-center">${student.class}</td>
-                    <td class="text-center">${student.stream || '-'}</td>
-                    <td><strong>${escapeHtml(mark.subject)}</strong></td>
-                    <td class="text-center">${mark.exam}</td>
-                    <td class="text-center">${mark.year}</td>
-                    <td class="text-center">${u1.toFixed(1)}</td>
-                    <td class="text-center">${u2.toFixed(1)}</td>
-                    <td class="text-center">${u3.toFixed(1)}</td>
-                    <td class="text-center">${exam80}</td>
-                    <td class="text-center"><strong>${total100.toFixed(1)}</strong></td>
-                    <td class="text-center" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
-                        ${gradeInfo.grade}
-                    </td>
-                    <td class="text-center">${escapeHtml(initials) || '-'}</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteMark('${mark.id}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        } else {
-            // A-Level display
-            const percentage = (mark.marks_obtained / mark.max_marks) * 100;
-            const isSubsidiary = mark.subject_type === 'subsidiary' || dbAlevelSubsidiarySubjects?.includes(mark.subject);
-            const grade = calculateGrade(percentage, isSubsidiary);
-            
-            html += `
-                <tr>
-                    <td class="text-center"><input type="checkbox" class="markCheck" data-id="${mark.id}"></td>
-                    <td><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
-                    <td class="text-center">${student.class}</td>
-                    <td class="text-center">${student.stream || '-'}</td>
-                    <td class="text-center">${student.combination || '-'}</td>
-                    <td><strong>${escapeHtml(mark.subject)}</strong></td>
-                    <td class="text-center">${mark.subject_type || 'principal'}</td>
-                    <td class="text-center">${mark.exam}</td>
-                    <td class="text-center">${mark.year}</td>
-                    <td class="text-center"><strong>${mark.marks_obtained}</strong></td>
-                    <td class="text-center">${percentage.toFixed(1)}%</td>
-                    <td class="text-center" style="background: ${grade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
-                        ${grade.grade}
-                    </td>
-                    <td class="text-center"><strong>${grade.points}</strong></td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteMark('${mark.id}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }
-    }
-    
-    console.log('8. Generated HTML rows:', rowCount);
-    tbody.innerHTML = html;
-    console.log('9. Table updated successfully');
-    
-    const selectAll = document.getElementById('selectAllMarks');
-    if (selectAll) {
-        selectAll.onclick = () => {
-            document.querySelectorAll('.markCheck').forEach(cb => cb.checked = selectAll.checked);
-        };
-    }
-}
 
 // ============================================
 // LOAD BATCH MARKS
@@ -5743,18 +6089,13 @@ window.loadBatchMarks = async function() {
             renderOlevelBatchTable();
         } else {
             const allSubjects = [];
-            
             for (const sub of dbAlevelPrincipalSubjects) {
                 allSubjects.push({ name: sub, category: 'Principal' });
             }
-            
             for (const sub of dbAlevelSubsidiarySubjects) {
                 allSubjects.push({ name: sub, category: 'Subsidiary' });
             }
-            
             batchState.subjects = allSubjects;
-            console.log(`Total subjects loaded for batch: ${batchState.subjects.length}`);
-            
             renderAlevelBatchTable();
         }
         
@@ -5767,7 +6108,7 @@ window.loadBatchMarks = async function() {
 };
 
 // ============================================
-// RENDER O-LEVEL BATCH TABLE - WITH PADLOCKS FOR TEACHERS
+// RENDER O-LEVEL BATCH TABLE
 // ============================================
 
 function renderOlevelBatchTable() {
@@ -5805,7 +6146,6 @@ function renderOlevelBatchTable() {
         const initials = existingMark?.teacher_initials || '';
         const hasExistingMark = !!existingMark;
         
-        // TEACHERS: Disable inputs if mark already exists
         const isTeacher = currentUserRole === 'teacher';
         const isDisabled = isTeacher && hasExistingMark;
         
@@ -5813,7 +6153,6 @@ function renderOlevelBatchTable() {
         const total20 = unitAvg;
         let total100 = total20 + exam80;
         total100 = Math.min(100, Math.max(0, total100));
-        
         const gradeInfo = getOlevelGradeDescriptor(total100);
         
         html += `
@@ -5878,7 +6217,6 @@ function renderOlevelBatchTable() {
     
     bodyRow.innerHTML = html;
     
-    // Only add event listeners for enabled inputs (non-disabled)
     document.querySelectorAll('.u1-input:not([disabled]), .u2-input:not([disabled]), .u3-input:not([disabled]), .exam-input:not([disabled])').forEach(input => {
         input.addEventListener('input', function() {
             const studentId = this.dataset.student;
@@ -5901,7 +6239,6 @@ function recalculateOlevelRow(studentId) {
     const total20 = unitAvg;
     let total100 = total20 + exam80;
     total100 = Math.min(100, Math.max(0, total100));
-    
     const gradeInfo = getOlevelGradeDescriptor(total100);
     
     const total20Cell = document.querySelector(`.total20-cell[data-student="${studentId}"]`);
@@ -5922,7 +6259,7 @@ function recalculateOlevelRow(studentId) {
 }
 
 // ============================================
-// RENDER A-LEVEL BATCH TABLE - WITH PADLOCKS FOR TEACHERS
+// RENDER A-LEVEL BATCH TABLE
 // ============================================
 
 function renderAlevelBatchTable() {
@@ -5972,7 +6309,6 @@ function renderAlevelBatchTable() {
                 hasExistingMarks = true;
             }
             
-            // TEACHERS: Disable input if mark already exists
             const isTeacher = currentUserRole === 'teacher';
             const isDisabled = isTeacher && !!existingMark;
             
@@ -6007,13 +6343,8 @@ function renderAlevelBatchTable() {
     
     bodyRow.innerHTML = html;
     
-    // Only add event listeners for enabled inputs
     document.querySelectorAll('.batch-mark-input:not([disabled])').forEach(input => {
         input.addEventListener('input', function() { updateAlevelBatchTotals(); });
-    });
-    
-    document.querySelectorAll('.edit-batch-row').forEach(btn => {
-        btn.addEventListener('click', () => editBatchStudent(btn.dataset.student));
     });
 }
 
@@ -6077,96 +6408,7 @@ function updateAlevelBatchTotals() {
 }
 
 // ============================================
-// EDIT BATCH STUDENT (A-Level only) - TEACHERS BLOCKED
-// ============================================
-
-async function editBatchStudent(studentId) {
-    // ONLY block teachers - Admins and Super Admins can edit
-    if (currentUserRole === 'teacher') {
-        Swal.fire({
-            icon: 'error',
-            title: 'Access Denied',
-            text: 'Teachers are not allowed to edit marks. Only Admins can edit marks.',
-            timer: 3000
-        });
-        return;
-    }
-    
-    const student = batchState.students.find(s => s.id === studentId);
-    if (!student) return;
-    
-    let marksHtml = '';
-    for (const subject of batchState.subjects) {
-        const key = `${student.id}_${subject.name}`;
-        const existingMark = batchState.marksMap[key];
-        const safeName = subject.name.replace(/[^a-zA-Z]/g, '_');
-        const isSubsidiary = subject.category === 'Subsidiary';
-        
-        marksHtml += `<div class="row mb-3 p-2 border-bottom">
-            <div class="col-md-6"><strong>${escapeHtml(subject.name)}</strong> ${isSubsidiary ? '<span class="badge bg-secondary">Subsidiary</span>' : '<span class="badge bg-primary">Principal</span>'}</div>
-            <div class="col-md-4"><input type="number" id="edit_mark_${safeName}" class="form-control" value="${existingMark ? existingMark.marks_obtained || 0 : 0}" min="0" max="100" step="0.5"></div>
-            <div class="col-md-2"><span id="edit_grade_${safeName}" class="badge" style="background:#6c757d">-</span></div>
-        </div>`;
-    }
-    
-    Swal.fire({
-        title: `✏️ Edit Marks - ${student.name}`,
-        html: `<div style="max-height:500px;overflow-y:auto;">${marksHtml}</div>`,
-        width: '700px',
-        showCancelButton: true,
-        confirmButtonText: 'Save Changes',
-        didOpen: () => {
-            for (const subject of batchState.subjects) {
-                const safeName = subject.name.replace(/[^a-zA-Z]/g, '_');
-                const markInput = document.getElementById(`edit_mark_${safeName}`);
-                const gradeSpan = document.getElementById(`edit_grade_${safeName}`);
-                const isSubsidiary = subject.category === 'Subsidiary';
-                if (markInput) {
-                    markInput.oninput = () => {
-                        const marks = parseFloat(markInput.value) || 0;
-                        const gi = calculateGrade(marks, isSubsidiary);
-                        if (gradeSpan) { gradeSpan.innerHTML = `${gi.grade} (${gi.points} pts)`; gradeSpan.style.background = gi.color; }
-                    };
-                    markInput.oninput();
-                }
-            }
-        }
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            let saved = 0;
-            for (const subject of batchState.subjects) {
-                const safeName = subject.name.replace(/[^a-zA-Z]/g, '_');
-                const marksObtained = parseFloat(document.getElementById(`edit_mark_${safeName}`)?.value) || 0;
-                const isSubsidiary = subject.category === 'Subsidiary';
-                
-                const { error } = await sb.from('marks').upsert({
-                    student_id: student.id,
-                    subject: subject.name,
-                    subject_type: isSubsidiary ? 'subsidiary' : 'principal',
-                    exam: batchState.exam,
-                    year: batchState.year,
-                    marks_obtained: marksObtained,
-                    max_marks: 100,
-                    level: currentLevel,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'student_id, subject, exam, year' });
-                
-                if (!error) saved++;
-            }
-            Swal.fire('Success', `✅ ${saved} marks updated!`, 'success');
-            await loadBatchMarks();
-            await loadMarksTable();
-        }
-    });
-}
-
-// ============================================
-// SAVE BATCH MARKS
-// ============================================
-
-// ============================================
-// SAVE BATCH MARKS - WITH COMPLETE NOTIFICATIONS
+// SAVE BATCH MARKS - WITH NOTIFICATIONS
 // ============================================
 
 window.saveBatchMarks = async function() {
@@ -6175,37 +6417,35 @@ window.saveBatchMarks = async function() {
         return;
     }
     
-    // Show saving notification on the batch table
     showBatchInlineNotification('⏳ Saving marks... Please wait.', 'info', 0);
     
     let saved = 0, updated = 0, errors = 0;
     
-    try {
-        for (const student of batchState.students) {
-            if (currentLevel === 'olevel') {
-                const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]:not([disabled])`);
-                const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]:not([disabled])`);
-                const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]:not([disabled])`);
-                const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]:not([disabled])`);
-                const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]:not([disabled])`);
+    for (const student of batchState.students) {
+        if (currentLevel === 'olevel') {
+            const u1Input = document.querySelector(`.u1-input[data-student="${student.id}"]:not([disabled])`);
+            const u2Input = document.querySelector(`.u2-input[data-student="${student.id}"]:not([disabled])`);
+            const u3Input = document.querySelector(`.u3-input[data-student="${student.id}"]:not([disabled])`);
+            const examInput = document.querySelector(`.exam-input[data-student="${student.id}"]:not([disabled])`);
+            const initialsInput = document.querySelector(`.initials-input[data-student="${student.id}"]:not([disabled])`);
+            
+            if (u1Input && u2Input && u3Input && examInput) {
+                const u1 = parseFloat(u1Input.value) || 0;
+                const u2 = parseFloat(u2Input.value) || 0;
+                const u3 = parseFloat(u3Input.value) || 0;
+                const exam80 = parseFloat(examInput.value) || 0;
+                const initials = initialsInput?.value || '';
                 
-                if (u1Input && u2Input && u3Input && examInput) {
-                    const u1 = parseFloat(u1Input.value) || 0;
-                    const u2 = parseFloat(u2Input.value) || 0;
-                    const u3 = parseFloat(u3Input.value) || 0;
-                    const exam80 = parseFloat(examInput.value) || 0;
-                    const initials = initialsInput?.value || '';
-                    
-                    const unitAvg = (u1 + u2 + u3) / 3;
-                    const total20 = unitAvg;
-                    const total100 = total20 + exam80;
-                    
-                    const key = `${student.id}_${batchState.subject}`;
-                    const existingMark = batchState.marksMap[key];
-                    
-                    const hasData = (u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0);
-                    if (!hasData) continue;
-                    
+                const unitAvg = (u1 + u2 + u3) / 3;
+                const total20 = unitAvg;
+                const total100 = total20 + exam80;
+                
+                const key = `${student.id}_${batchState.subject}`;
+                const existingMark = batchState.marksMap[key];
+                const hasData = (u1 > 0 || u2 > 0 || u3 > 0 || exam80 > 0);
+                if (!hasData) continue;
+                
+                try {
                     let error;
                     
                     if (existingMark) {
@@ -6250,19 +6490,24 @@ window.saveBatchMarks = async function() {
                         console.error('Save error:', error);
                         errors++;
                     }
+                } catch (error) {
+                    console.error('Save error:', error);
+                    errors++;
                 }
-            } else {
-                for (const subject of batchState.subjects) {
-                    const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]:not([disabled])`);
+            }
+        } else {
+            for (const subject of batchState.subjects) {
+                const input = document.querySelector(`.batch-mark-input[data-student="${student.id}"][data-subject="${subject.name}"]:not([disabled])`);
+                
+                if (input) {
+                    const marksObtained = parseFloat(input.value) || 0;
+                    const key = `${student.id}_${subject.name}`;
+                    const existingMark = batchState.marksMap[key];
+                    const isSubsidiary = subject.category === 'Subsidiary';
                     
-                    if (input) {
-                        const marksObtained = parseFloat(input.value) || 0;
-                        const key = `${student.id}_${subject.name}`;
-                        const existingMark = batchState.marksMap[key];
-                        const isSubsidiary = subject.category === 'Subsidiary';
-                        
-                        if (marksObtained === 0 && !existingMark) continue;
-                        
+                    if (marksObtained === 0 && !existingMark) continue;
+                    
+                    try {
                         let error;
                         
                         if (existingMark) {
@@ -6297,96 +6542,61 @@ window.saveBatchMarks = async function() {
                             console.error('Save error:', error);
                             errors++;
                         }
+                    } catch (error) {
+                        console.error('Save error:', error);
+                        errors++;
                     }
                 }
             }
         }
-    } catch (error) {
-        console.error('Fatal save error:', error);
-        errors++;
     }
     
-    // Remove saving notification
     const savingNotif = document.getElementById('batchInlineNotification');
     if (savingNotif) savingNotif.remove();
     
-    // ============================================
-    // SHOW SUCCESS NOTIFICATION ON THE BATCH TABLE
-    // ============================================
-    
     if (saved > 0 || updated > 0) {
-        // ✅ Show success on the batch table
         showBatchInlineNotification(
-            `
-                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                    <div style="font-size: 20px;">✅</div>
-                    <div>
-                        <strong>Marks Saved Successfully!</strong>
-                        <div style="font-size: 13px; margin-top: 2px;">
-                            🆕 New: <strong>${saved}</strong> &nbsp;|&nbsp; 🔄 Updated: <strong>${updated}</strong>
-                            ${errors > 0 ? `&nbsp;|&nbsp; ❌ Errors: <strong style="color: #dc3545;">${errors}</strong>` : ''}
-                        </div>
+            `<div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <div style="font-size: 20px;">✅</div>
+                <div>
+                    <strong>Marks Saved Successfully!</strong>
+                    <div style="font-size: 13px; margin-top: 2px;">
+                        🆕 New: <strong>${saved}</strong> &nbsp;|&nbsp; 🔄 Updated: <strong>${updated}</strong>
+                        ${errors > 0 ? `&nbsp;|&nbsp; ❌ Errors: <strong style="color: #dc3545;">${errors}</strong>` : ''}
                     </div>
                 </div>
-            `,
+            </div>`,
             'success',
             5000
         );
-        
-        // Also show top right notification
-        showTopRightNotification(
-            '✅ Marks Saved!',
-            `New: ${saved} | Updated: ${updated}`,
-            'success',
-            4000
-        );
-        
-        // Play success sound
+        showTopRightNotification('✅ Marks Saved!', `New: ${saved} | Updated: ${updated}`, 'success', 4000);
         playSaveSound();
-        
-        // Show celebration for successful saves
-        if (errors === 0 && (saved > 0 || updated > 0)) {
-            showCelebration();
-        }
-        
+        if (errors === 0 && (saved > 0 || updated > 0)) showCelebration();
     } else if (errors > 0) {
-        // ⚠️ Show warning on the batch table
         showBatchInlineNotification(
-            `
-                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                    <div style="font-size: 20px;">⚠️</div>
-                    <div>
-                        <strong>Save Completed with Errors</strong>
-                        <div style="font-size: 13px; margin-top: 2px;">
-                            ✅ New: <strong>${saved}</strong> &nbsp;|&nbsp; 🔄 Updated: <strong>${updated}</strong>
-                            &nbsp;|&nbsp; ❌ Errors: <strong style="color: #dc3545;">${errors}</strong>
-                        </div>
+            `<div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <div style="font-size: 20px;">⚠️</div>
+                <div>
+                    <strong>Save Completed with Errors</strong>
+                    <div style="font-size: 13px; margin-top: 2px;">
+                        ✅ New: <strong>${saved}</strong> &nbsp;|&nbsp; 🔄 Updated: <strong>${updated}</strong>
+                        &nbsp;|&nbsp; ❌ Errors: <strong style="color: #dc3545;">${errors}</strong>
                     </div>
                 </div>
-            `,
+            </div>`,
             'warning',
             5000
         );
-        
-        showTopRightNotification(
-            '⚠️ Save with Errors',
-            `Errors: ${errors}`,
-            'warning',
-            4000
-        );
-        
+        showTopRightNotification('⚠️ Save with Errors', `Errors: ${errors}`, 'warning', 4000);
     } else {
-        // ℹ️ No changes
         showBatchInlineNotification(
-            `
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <div style="font-size: 20px;">ℹ️</div>
-                    <div>
-                        <strong>No Changes</strong>
-                        <div style="font-size: 13px; margin-top: 2px;">No marks to save. Please enter some data first.</div>
-                    </div>
+            `<div style="display: flex; align-items: center; gap: 15px;">
+                <div style="font-size: 20px;">ℹ️</div>
+                <div>
+                    <strong>No Changes</strong>
+                    <div style="font-size: 13px; margin-top: 2px;">No marks to save. Please enter some data first.</div>
                 </div>
-            `,
+            </div>`,
             'info',
             3000
         );
@@ -6397,11 +6607,10 @@ window.saveBatchMarks = async function() {
 };
 
 // ============================================
-// INLINE NOTIFICATION ON BATCH TABLE
+// NOTIFICATION FUNCTIONS (Inline, Top Right, Sound, Celebration)
 // ============================================
 
 function showBatchInlineNotification(message, type = 'success', duration = 4000) {
-    // Remove existing
     const existing = document.getElementById('batchInlineNotification');
     if (existing) existing.remove();
     
@@ -6412,10 +6621,10 @@ function showBatchInlineNotification(message, type = 'success', duration = 4000)
     if (!cardBody) return;
     
     const colors = {
-        success: { bg: '#d4edda', border: '#28a745', text: '#155724', icon: 'fa-check-circle' },
-        error: { bg: '#f8d7da', border: '#dc3545', text: '#721c24', icon: 'fa-times-circle' },
-        warning: { bg: '#fff3cd', border: '#ffc107', text: '#856404', icon: 'fa-exclamation-triangle' },
-        info: { bg: '#d1ecf1', border: '#17a2b8', text: '#0c5460', icon: 'fa-info-circle' }
+        success: { bg: '#d4edda', border: '#28a745', text: '#155724' },
+        error: { bg: '#f8d7da', border: '#dc3545', text: '#721c24' },
+        warning: { bg: '#fff3cd', border: '#ffc107', text: '#856404' },
+        info: { bg: '#d1ecf1', border: '#17a2b8', text: '#0c5460' }
     };
     
     const color = colors[type] || colors.success;
@@ -6428,9 +6637,6 @@ function showBatchInlineNotification(message, type = 'success', duration = 4000)
         border-radius: 10px;
         font-size: 15px;
         font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 15px;
         animation: slideDown 0.4s ease;
         background: ${color.bg};
         border: 2px solid ${color.border};
@@ -6441,10 +6647,12 @@ function showBatchInlineNotification(message, type = 'success', duration = 4000)
     `;
     
     notification.innerHTML = `
-        <div style="flex: 1;">${message}</div>
-        <button onclick="this.parentElement.remove()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: ${color.text}; padding: 0 5px; opacity: 0.6;">
-            &times;
-        </button>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="flex: 1;">${message}</div>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; font-size: 22px; cursor: pointer; color: ${color.text}; padding: 0 8px; opacity: 0.6;">
+                &times;
+            </button>
+        </div>
     `;
     
     cardBody.insertBefore(notification, cardBody.firstChild);
@@ -6459,10 +6667,6 @@ function showBatchInlineNotification(message, type = 'success', duration = 4000)
         }, duration);
     }
 }
-
-// ============================================
-// TOP RIGHT NOTIFICATION
-// ============================================
 
 function showTopRightNotification(title, message, type = 'success', duration = 4000) {
     const existing = document.querySelector('.top-right-notification');
@@ -6522,14 +6726,8 @@ function showTopRightNotification(title, message, type = 'success', duration = 4
     }
 }
 
-// ============================================
-// CELEBRATION EFFECT
-// ============================================
-
 function showCelebration() {
     const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#f0932b', '#6c5ce7'];
-    const container = document.getElementById('batchMarksContainer');
-    if (!container) return;
     
     const canvas = document.createElement('canvas');
     canvas.style.cssText = `
@@ -6595,10 +6793,6 @@ function showCelebration() {
     animate();
 }
 
-// ============================================
-// SOUND NOTIFICATION
-// ============================================
-
 function playSaveSound() {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -6621,55 +6815,8 @@ function playSaveSound() {
         setTimeout(() => {
             oscillator.stop();
         }, 300);
-    } catch(e) {
-        // Silent fail
-    }
+    } catch(e) {}
 }
-
-// ============================================
-// EXPORT BATCH MARKS
-// ============================================
-
-window.exportBatchMarks = function() {
-    if (!batchState.students.length) {
-        Swal.fire('Error', 'No data to export', 'error');
-        return;
-    }
-    
-    const exportData = batchState.students.map(student => {
-        const row = { 'Student Name': student.name, 'Admission No': student.admission_no || '-', 'Class': student.class, 'Stream': student.stream || '-' };
-        
-        if (currentLevel === 'olevel') {
-            const key = `${student.id}_${batchState.subject}`;
-            const mark = batchState.marksMap[key];
-            row['Subject'] = batchState.subject;
-            row['CA Score'] = mark?.ca_score || 0;
-            row['Exam Score'] = mark?.exam_score || 0;
-            const final = ((row['CA Score'] * 0.2) + (row['Exam Score'] * 0.8)).toFixed(1);
-            row['Final Score'] = final;
-            const grade = calculateGrade(parseFloat(final), false);
-            row['Grade'] = grade.grade;
-            row['Points'] = grade.points;
-        } else {
-            for (const subject of batchState.subjects) {
-                const key = `${student.id}_${subject.name}`;
-                const mark = batchState.marksMap[key];
-                row[subject.name] = mark?.marks_obtained || '';
-                if (mark?.marks_obtained) {
-                    const grade = calculateGrade(mark.marks_obtained, subject.category === 'Subsidiary');
-                    row[`${subject.name}_Grade`] = `${grade.grade} (${grade.points} pts)`;
-                }
-            }
-        }
-        return row;
-    });
-    
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${batchState.class}_${batchState.exam}`);
-    XLSX.writeFile(wb, `${currentLevel}_${batchState.class}_Marks.xlsx`);
-    Swal.fire('Exported!', 'Batch marks exported', 'success');
-};
 
 // ============================================
 // ADD SINGLE MARK MODAL
@@ -6706,6 +6853,7 @@ window.openAddMarkModal = async function() {
     }
     
     if (isOlevel) {
+        // O-Level single mark modal
         Swal.fire({
             title: '<i class="fas fa-plus-circle"></i> Add Single Mark - O-Level',
             html: `
@@ -6886,7 +7034,6 @@ window.openAddMarkModal = async function() {
         }).then(async (result) => {
             if (result.value) {
                 Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                
                 try {
                     const { data: existing } = await sb
                         .from('marks')
@@ -6921,11 +7068,8 @@ window.openAddMarkModal = async function() {
                     }
                     
                     if (error) throw error;
-                    
                     Swal.fire('Success!', 'Mark added successfully.', 'success');
                     await loadMarksTable();
-                    await refreshMarksTable();
-                    
                 } catch (error) {
                     console.error('Save error:', error);
                     Swal.fire('Error!', error.message, 'error');
@@ -6933,6 +7077,7 @@ window.openAddMarkModal = async function() {
             }
         });
     } else {
+        // A-Level single mark modal
         Swal.fire({
             title: 'Add Single Mark - A-Level',
             html: `
@@ -6950,7 +7095,6 @@ window.openAddMarkModal = async function() {
                 const studentId = document.getElementById('markStudent').value;
                 const subject = document.getElementById('markSubject').value;
                 if (!studentId || !subject) return Swal.showValidationMessage('Please select student and subject');
-                
                 const isSubsidiary = dbAlevelSubsidiarySubjects.includes(subject);
                 return { 
                     student_id: studentId, 
@@ -6977,11 +7121,9 @@ window.openAddMarkModal = async function() {
 
 // ============================================
 // EDIT MARK - TEACHERS CANNOT EDIT
-// Admins and Super Admins can edit freely
 // ============================================
 
 window.editMark = async function(id) {
-    // ONLY block teachers - Admins and Super Admins can edit
     if (currentUserRole === 'teacher') {
         Swal.fire({
             icon: 'error',
@@ -7016,6 +7158,7 @@ window.editMark = async function(id) {
     }
     
     if (isOlevel) {
+        // O-Level edit modal
         Swal.fire({
             title: '<i class="fas fa-edit"></i> Edit Mark - O-Level',
             html: `
@@ -7184,7 +7327,6 @@ window.editMark = async function(id) {
         }).then(async (result) => {
             if (result.value) {
                 Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                
                 try {
                     const { error } = await sb
                         .from('marks')
@@ -7203,19 +7345,16 @@ window.editMark = async function(id) {
                         .eq('id', id);
                     
                     if (error) throw error;
-                    
                     Swal.fire('Success!', 'Mark updated successfully.', 'success');
                     await loadMarksTable();
-                    await refreshMarksTable();
-                    
                 } catch (error) {
                     console.error('Update error:', error);
                     Swal.fire('Error!', error.message, 'error');
                 }
             }
         });
-        
     } else {
+        // A-Level edit modal
         Swal.fire({
             title: 'Edit Mark - A-Level',
             html: `
@@ -7342,137 +7481,6 @@ async function verifyAdminOrSuperAdminPassword(action = 'this action') {
 }
 
 // ============================================
-// DELETE MARK
-// ============================================
-
-window.deleteMark = async function(id) {
-    const mark = allMarksList.find(m => m.id === id);
-    if (!mark) return;
-
-    const confirmDelete = await Swal.fire({
-        title: 'Delete Mark?',
-        html: `<p>Are you sure you want to delete this mark record?</p>
-               <p><strong>Student:</strong> ${escapeHtml(mark.student_name || 'Unknown')}</p>
-               <p><strong>Subject:</strong> ${escapeHtml(mark.subject)}</p>
-               <p><strong>Exam:</strong> ${mark.exam} ${mark.year}</p>
-               <p class="text-danger">⚠️ This action cannot be undone!</p>
-               <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization (Admin or Super Admin) will be required.</p>`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Continue',
-        cancelButtonText: 'Cancel'
-    });
-    if (!confirmDelete.isConfirmed) return;
-
-    const authorized = await verifyAdminOrSuperAdminPassword('deleting this mark');
-    if (!authorized) {
-        Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
-        return;
-    }
-
-    const finalConfirm = await Swal.fire({
-        title: '🔴 Final Confirmation',
-        html: `<p>Authorization successful. Are you absolutely sure you want to delete this mark?</p>`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Delete Permanently',
-        cancelButtonText: 'Cancel'
-    });
-    if (!finalConfirm.isConfirmed) return;
-
-    Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
-    try {
-        const { error } = await sb.from('marks').delete().eq('id', id);
-        if (error) throw error;
-        Swal.fire('Deleted!', 'Mark record has been deleted.', 'success');
-        await loadMarksTable();
-    } catch (error) {
-        Swal.fire('Error!', error.message, 'error');
-    }
-};
-
-// ============================================
-// BULK DELETE MARKS
-// ============================================
-
-window.bulkDeleteMarks = async function() {
-    const checkboxes = document.querySelectorAll('.markCheck:checked');
-    const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
-    
-    if (ids.length === 0) {
-        Swal.fire('Error', 'No marks selected', 'error');
-        return;
-    }
-
-    const confirmDelete = await Swal.fire({
-        title: `Delete ${ids.length} mark records?`,
-        html: `<p>You are about to delete <strong>${ids.length}</strong> mark records.</p>
-               <p class="text-danger">⚠️ THIS ACTION CANNOT BE UNDONE!</p>
-               <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Authorization (Admin or Super Admin) will be required.</p>`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, Continue',
-        cancelButtonText: 'Cancel'
-    });
-    if (!confirmDelete.isConfirmed) return;
-
-    const authorized = await verifyAdminOrSuperAdminPassword('deleting marks');
-    if (!authorized) {
-        Swal.fire('Authorization Failed', 'Delete operation cancelled.', 'error');
-        return;
-    }
-
-    const finalConfirm = await Swal.fire({
-        title: '🔴 FINAL CONFIRMATION',
-        html: `<p>Authorization successful. Type <strong style="color: red;">"DELETE"</strong> to permanently delete <strong>${ids.length}</strong> mark records.</p>`,
-        input: 'text',
-        inputPlaceholder: 'Type DELETE here',
-        showCancelButton: true,
-        confirmButtonText: 'Permanently Delete',
-        confirmButtonColor: '#d33',
-        preConfirm: (inputValue) => {
-            if (inputValue !== 'DELETE') {
-                Swal.showValidationMessage('Please type "DELETE" to confirm');
-                return false;
-            }
-            return true;
-        }
-    });
-    if (!finalConfirm.isConfirmed) return;
-
-    Swal.fire({ 
-        title: 'Deleting...', 
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
-    });
-    
-    try {
-        const { error } = await sb
-            .from('marks')
-            .delete()
-            .in('id', ids);
-        
-        if (error) throw error;
-        
-        Swal.fire({
-            title: 'Deleted!', 
-            text: `${ids.length} mark records deleted successfully.`,
-            icon: 'success'
-        });
-        
-        await loadMarksTable();
-        
-    } catch (error) {
-        console.error('Bulk delete error:', error);
-        Swal.fire('Error!', error.message, 'error');
-    }
-};
-
-// ============================================
 // EXPORT ALL MARKS
 // ============================================
 
@@ -7516,22 +7524,70 @@ window.exportAllMarks = async function() {
 };
 
 // ============================================
-// FILTER MARKS TABLE
+// EXPORT BATCH MARKS
 // ============================================
 
-window.filterMarksTable = function() {
-    const search = document.getElementById('markSearch')?.value.toLowerCase() || '';
-    const studentFilter = document.getElementById('filterStudent')?.value.toLowerCase() || '';
-    const subjectFilter = document.getElementById('filterSubject')?.value.toLowerCase() || '';
-    const examFilter = document.getElementById('filterExam')?.value;
-    const yearFilter = document.getElementById('filterYear')?.value;
+window.exportBatchMarks = function() {
+    if (!batchState.students.length) {
+        Swal.fire('Error', 'No data to export', 'error');
+        return;
+    }
     
-    document.querySelectorAll('#marksTableBody tr').forEach(row => {
-        if (row.cells?.length > 1) {
-            const text = row.innerText.toLowerCase();
-            row.style.display = (search && !text.includes(search)) || (studentFilter && !text.includes(studentFilter)) || (subjectFilter && !text.includes(subjectFilter)) || (examFilter && !text.includes(examFilter.toLowerCase())) || (yearFilter && !text.includes(yearFilter)) ? 'none' : '';
+    const exportData = batchState.students.map(student => {
+        const row = { 'Student Name': student.name, 'Admission No': student.admission_no || '-', 'Class': student.class, 'Stream': student.stream || '-' };
+        
+        if (currentLevel === 'olevel') {
+            const key = `${student.id}_${batchState.subject}`;
+            const mark = batchState.marksMap[key];
+            row['Subject'] = batchState.subject;
+            row['CA Score'] = mark?.ca_score || 0;
+            row['Exam Score'] = mark?.exam_score || 0;
+            const final = ((row['CA Score'] * 0.2) + (row['Exam Score'] * 0.8)).toFixed(1);
+            row['Final Score'] = final;
+            const grade = calculateGrade(parseFloat(final), false);
+            row['Grade'] = grade.grade;
+            row['Points'] = grade.points;
+        } else {
+            for (const subject of batchState.subjects) {
+                const key = `${student.id}_${subject.name}`;
+                const mark = batchState.marksMap[key];
+                row[subject.name] = mark?.marks_obtained || '';
+                if (mark?.marks_obtained) {
+                    const grade = calculateGrade(mark.marks_obtained, subject.category === 'Subsidiary');
+                    row[`${subject.name}_Grade`] = `${grade.grade} (${grade.points} pts)`;
+                }
+            }
         }
+        return row;
     });
+    
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${batchState.class}_${batchState.exam}`);
+    XLSX.writeFile(wb, `${currentLevel}_${batchState.class}_Marks.xlsx`);
+    Swal.fire('Exported!', 'Batch marks exported', 'success');
+};
+
+// ============================================
+// CLOSE BATCH MARKS
+// ============================================
+
+window.closeBatchMarks = function() {
+    const container = document.getElementById('batchMarksContainer');
+    if (container) {
+        container.style.display = 'none';
+    }
+    
+    batchState = {
+        class: '',
+        stream: '',
+        subject: '',
+        exam: 'Term 1',
+        year: new Date().getFullYear().toString(),
+        students: [],
+        subjects: [],
+        marksMap: {}
+    };
 };
 
 // ============================================
@@ -7543,6 +7599,29 @@ window.refreshMarksTable = async function() {
     await loadMarksTable();
     Swal.close();
     Swal.fire('Refreshed!', 'Marks table updated.', 'success');
+};
+
+// ============================================
+// REFRESH SUBJECTS
+// ============================================
+
+window.refreshSubjectsForMarks = async function() {
+    Swal.fire({ title: 'Reloading subjects from database...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    await loadSubjectsFromDB();
+    Swal.close();
+    Swal.fire({
+        title: '✅ Subjects Reloaded!',
+        html: `
+            <div class="text-start">
+                <strong>O-Level:</strong> ${dbOlevelSubjects.length} subjects<br>
+                <strong>A-Level Principal:</strong> ${dbAlevelPrincipalSubjects.length} subjects<br>
+                <strong>A-Level Subsidiary:</strong> ${dbAlevelSubsidiarySubjects.length} subjects
+            </div>
+        `,
+        icon: 'success',
+        timer: 2000
+    });
+    await loadPage('marks');
 };
 
 // ============================================
@@ -7562,8 +7641,28 @@ window.refreshMarksTable = async function() {
     console.log('✅ Teachers: CAN ADD marks but CANNOT EDIT marks');
     console.log('✅ ALL BUTTONS VISIBLE for all users');
     console.log('✅ Batch Entry: Padlocks 🔒 shown for existing marks (Teachers)');
+    console.log('✅ FAST FILTERS: Class, Stream, Student, Subject, Year');
+    console.log('✅ DELETE: Shows student name properly');
+    console.log('✅ BULK DELETE: Only deletes checked/visible rows');
 })();
 
+// Make functions globally accessible
+window.applyMarksFilters = applyMarksFilters;
+window.clearMarksFilters = clearMarksFilters;
+window.debouncedFilterMarks = debouncedFilterMarks;
+window.loadMarksTable = loadMarksTable;
+window.renderMarks = renderMarks;
+window.loadBatchMarks = loadBatchMarks;
+window.saveBatchMarks = saveBatchMarks;
+window.openAddMarkModal = openAddMarkModal;
+window.editMark = editMark;
+window.deleteMark = deleteMark;
+window.bulkDeleteMarks = bulkDeleteMarks;
+window.closeBatchMarks = closeBatchMarks;
+window.exportBatchMarks = exportBatchMarks;
+window.exportAllMarks = exportAllMarks;
+window.refreshMarksTable = refreshMarksTable;
+window.refreshSubjectsForMarks = refreshSubjectsForMarks;
 // ==================== TEACHERS MODULE ====================
 // ============================================
 // TEACHERS MODULE - USING SWEETALERT2 (No Bootstrap Modal)
