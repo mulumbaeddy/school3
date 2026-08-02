@@ -831,6 +831,7 @@ async function getSchoolSettings() {
 // ============================================
 // COMPLETE MASTERPIECE DASHBOARD
 // With Performance Filters: Year, Term, Student, Subject
+// With Top Performers: Class & Stream Filters
 // ============================================
 
 async function renderDashboard() {
@@ -1090,6 +1091,10 @@ async function renderDashboard() {
                 }
             }
             
+            // Get unique classes and streams for top performers
+            const uniqueClasses = [...new Set(studentsData.map(s => s.class))].filter(Boolean).sort();
+            const uniqueStreams = [...new Set(studentsData.map(s => s.stream))].filter(Boolean).sort();
+            
             // Calculate grade distribution
             const gradeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
             let totalScores = 0, passCount = 0, distinctionCount = 0;
@@ -1131,6 +1136,7 @@ async function renderDashboard() {
                             name: studentName, 
                             scores: [], 
                             class: mark.student_class || 'Unknown',
+                            stream: mark.student_stream || 'Unknown',
                             admission: mark.student_admission || '-'
                         };
                     }
@@ -1154,6 +1160,7 @@ async function renderDashboard() {
                         average: data.scores.reduce((a, b) => a + b, 0) / data.scores.length,
                         count: data.scores.length,
                         class: data.class,
+                        stream: data.stream,
                         admission: data.admission
                     }))
                     .sort((a, b) => b.average - a.average)
@@ -1177,6 +1184,8 @@ async function renderDashboard() {
                     uniqueTerms,
                     uniqueSubjects,
                     uniqueStudents,
+                    uniqueClasses,
+                    uniqueStreams,
                     currentLevel
                 };
                 
@@ -1195,7 +1204,9 @@ async function renderDashboard() {
                     uniqueYears,
                     uniqueTerms,
                     uniqueSubjects,
-                    uniqueStudents
+                    uniqueStudents,
+                    uniqueClasses,
+                    uniqueStreams
                 );
             } else {
                 analyticsHtml = `
@@ -1306,7 +1317,17 @@ async function renderDashboard() {
         </div>
         
         <style>
-            /* School Logo Watermark - Responsive */
+            /* ========================================== */
+            /* BASE DASHBOARD STYLES                      */
+            /* ========================================== */
+            .dashboard-container {
+                padding: 20px;
+                max-width: 1400px;
+                margin: 0 auto;
+                min-height: 100vh;
+            }
+            
+            /* Logo Watermark */
             .logo-watermark {
                 position: fixed;
                 top: 50%;
@@ -1351,14 +1372,7 @@ async function renderDashboard() {
                 z-index: 1;
             }
             
-            /* Dashboard Styles */
-            .dashboard-container {
-                padding: 20px;
-                max-width: 1400px;
-                margin: 0 auto;
-                min-height: 100vh;
-            }
-            
+            /* Welcome Section */
             .welcome-section {
                 background: white;
                 border-radius: 20px;
@@ -1374,7 +1388,6 @@ async function renderDashboard() {
                 position: relative;
                 z-index: 1;
             }
-            
             .welcome-avatar {
                 width: 70px;
                 height: 70px;
@@ -1388,7 +1401,6 @@ async function renderDashboard() {
             }
             .welcome-avatar i { font-size: 32px; color: white; }
             .welcome-avatar img { width: 100%; height: 100%; object-fit: cover; }
-            
             .welcome-info h2 {
                 margin: 0 0 8px 0;
                 font-size: 22px;
@@ -1403,7 +1415,6 @@ async function renderDashboard() {
             .role-badge.librarian { background: #212529; }
             .role-badge.secretary { background: #198754; }
             .level-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #6c757d; color: white; }
-            
             .welcome-actions { display: flex; gap: 12px; flex-wrap: wrap; }
             .welcome-btn {
                 padding: 10px 20px;
@@ -1427,6 +1438,7 @@ async function renderDashboard() {
             .welcome-btn.btn-warning { background: #ffc107; color: #000; }
             .welcome-btn.btn-warning:hover { background: #e0a800; transform: translateY(-2px); }
             
+            /* Stats Grid */
             .stats-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1453,6 +1465,7 @@ async function renderDashboard() {
             .stat-label { margin: 5px 0 0; font-size: 14px; color: #6c757d; }
             .stat-extra { font-size: 11px; color: #95a5a6; display: block; margin-top: 4px; }
             
+            /* Bottom Section */
             .dashboard-bottom {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -1523,7 +1536,7 @@ async function renderDashboard() {
             .action-btn span { font-size: 13px; font-weight: 500; color: #2c3e50; }
             
             /* ========================================== */
-            /* ANALYTICS STYLES */
+            /* ANALYTICS STYLES                          */
             /* ========================================== */
             .analytics-section {
                 background: white;
@@ -1576,10 +1589,12 @@ async function renderDashboard() {
             .stat-value.text-success { color:#28a745; }
             .stat-value.text-danger { color:#dc3545; }
             
+            /* Heatmap */
             .heatmap-legend { display:flex; justify-content:center; gap:20px; margin-top:15px; flex-wrap:wrap; }
             .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; color:#6c757d; }
             .legend-color { width:20px; height:20px; border-radius:4px; display:inline-block; }
             
+            /* Comparative */
             .comparative-controls { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
             .comparative-controls select { min-width:130px; }
             .comparative-stats { background:#f8f9fa; border-radius:12px; padding:15px; border:1px solid #eef2f6; min-height:100px; }
@@ -1587,11 +1602,13 @@ async function renderDashboard() {
             .stat-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #eef2f6; }
             .stat-row:last-child { border-bottom:none; }
             
+            /* Trends */
             .trend-item { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eef2f6; }
             .trend-item:last-child { border-bottom:none; }
             .trend-label { font-weight:500; color:#6c757d; }
             .trend-value { font-weight:700; color:#2c3e50; }
             
+            /* Top Performers */
             .performer-item { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #eef2f6; }
             .performer-item:last-child { border-bottom:none; }
             
@@ -1634,6 +1651,44 @@ async function renderDashboard() {
                 outline: none;
             }
             
+            /* Performer Filters */
+            .performer-filters {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 10px;
+                margin-bottom: 10px;
+                border: 1px solid #eef2f6;
+            }
+            .performer-filters .filter-group {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                margin-bottom: 8px;
+            }
+            .performer-filters .filter-group:last-child {
+                margin-bottom: 0;
+            }
+            .performer-filters .filter-group label {
+                font-size: 10px;
+                font-weight: 600;
+                color: #6c757d;
+                margin: 0;
+            }
+            .performer-filters .filter-group select {
+                padding: 4px 8px;
+                border-radius: 6px;
+                border: 1px solid #ddd;
+                font-size: 12px;
+                background: white;
+            }
+            .performer-filters .filter-group select:focus {
+                border-color: #01605a;
+                outline: none;
+            }
+            
+            /* ========================================== */
+            /* RESPONSIVE STYLES                         */
+            /* ========================================== */
             @media (max-width: 768px) {
                 .dashboard-container { padding: 15px; }
                 .welcome-section { flex-direction: column; text-align: center; padding: 20px; }
@@ -1664,13 +1719,17 @@ async function renderDashboard() {
 // ============================================
 // GENERATE MASTERPIECE ANALYTICS HTML
 // ============================================
-function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerformers, avgScore, passRate, distinctionRate, bestSubject, worstSubject, totalMarks, marksData, studentsData, uniqueYears, uniqueTerms, uniqueSubjects, uniqueStudents) {
+function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerformers, avgScore, passRate, distinctionRate, bestSubject, worstSubject, totalMarks, marksData, studentsData, uniqueYears, uniqueTerms, uniqueSubjects, uniqueStudents, uniqueClasses, uniqueStreams) {
     
     // Build filter options
     const yearOptions = uniqueYears.map(y => `<option value="${y}">${y}</option>`).join('');
     const termOptions = uniqueTerms.map(t => `<option value="${t}">${t}</option>`).join('');
     const subjectOptions = uniqueSubjects.map(s => `<option value="${s}">${s}</option>`).join('');
     const studentOptions = uniqueStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.class})</option>`).join('');
+    
+    // Build performer filter options
+    const classOptions = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+    const streamOptions = uniqueStreams.map(s => `<option value="${s}">${s}</option>`).join('');
     
     return `
         <div class="analytics-section">
@@ -1767,7 +1826,7 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
             </div>
             
             <!-- ========================================== -->
-            <!-- STUDENT PROGRESS TAB                       -->
+            <!-- STUDENT PROGRESS TAB WITH TOP PERFORMERS  -->
             <!-- ========================================== -->
             <div class="analytics-panel" id="panel-progress">
                 <div class="row">
@@ -1781,7 +1840,30 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
                     </div>
                     <div class="col-md-4">
                         <div class="chart-card">
-                            <h6>🏆 Top Performers</h6>
+                            <h6 id="performerTitle">🏆 Top Performers</h6>
+                            <!-- TOP PERFORMER FILTERS -->
+                            <div class="performer-filters">
+                                <div class="filter-group">
+                                    <label>📚 Class</label>
+                                    <select id="performerClass" class="form-select form-select-sm" onchange="updateTopPerformers()">
+                                        <option value="">All Classes</option>
+                                        ${classOptions}
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label>🌊 Stream</label>
+                                    <select id="performerStream" class="form-select form-select-sm" onchange="updateTopPerformers()">
+                                        <option value="">All Streams</option>
+                                        ${streamOptions}
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label>&nbsp;</label>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="resetPerformerFilters()">
+                                        <i class="fas fa-undo"></i> Reset
+                                    </button>
+                                </div>
+                            </div>
                             <div id="topPerformersList" style="max-height:280px;overflow-y:auto;">
                                 ${renderTopPerformersHTML(topPerformers)}
                             </div>
@@ -1929,15 +2011,19 @@ function renderSubjectBarsHTML(subjectScores) {
 
 function renderTopPerformersHTML(performers) {
     if (!performers || performers.length === 0) {
-        return '<div class="text-center text-muted py-4">No performer data available</div>';
+        return '<div class="text-center text-muted py-4">No performer data available for the selected filters</div>';
     }
     return performers.map((p, i) => {
+        const rankColors = ['#f1c40f', '#bdc3c7', '#e67e22', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a'];
+        const rankTextColors = ['#000', '#000', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff'];
         return `
             <div class="performer-item">
-                <div style="width:26px;height:26px;background:${i===0?'#f1c40f':i===1?'#bdc3c7':i===2?'#e67e22':'#01605a'};color:${i===0?'#000':'white'};border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${i+1}</div>
+                <div style="width:26px;height:26px;background:${rankColors[i]};color:${rankTextColors[i]};border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${i+1}</div>
                 <div style="flex:1;">
                     <div style="font-weight:600;font-size:13px;">${escapeHtml(p.name)}</div>
-                    <div style="font-size:10px;color:#6c757d;">${p.class || 'N/A'} | ${p.count} subjects</div>
+                    <div style="font-size:10px;color:#6c757d;">
+                        ${p.class || 'N/A'} ${p.stream ? '- ' + p.stream : ''} | ${p.count} subjects
+                    </div>
                 </div>
                 <div style="font-weight:700;color:#01605a;">${p.average.toFixed(1)}%</div>
             </div>
@@ -2231,6 +2317,88 @@ window.resetPerformanceFilters = function() {
     document.getElementById('perfSubject').value = '';
     document.getElementById('perfStudent').value = '';
     applyPerformanceFilters();
+};
+
+// ============================================
+// TOP PERFORMER FILTER FUNCTIONS
+// ============================================
+
+window.updateTopPerformers = function() {
+    const data = window._analyticsData;
+    if (!data) return;
+    
+    const selectedClass = document.getElementById('performerClass')?.value;
+    const selectedStream = document.getElementById('performerStream')?.value;
+    
+    // Filter students by class and stream
+    let filteredStudents = data.studentsData;
+    
+    if (selectedClass) {
+        filteredStudents = filteredStudents.filter(s => s.class === selectedClass);
+    }
+    if (selectedStream) {
+        filteredStudents = filteredStudents.filter(s => s.stream === selectedStream);
+    }
+    
+    // Get student IDs from filtered students
+    const filteredStudentIds = new Set(filteredStudents.map(s => s.id));
+    
+    // Filter marks by these students
+    let filteredMarks = data.marksData.filter(m => filteredStudentIds.has(m.student_id));
+    
+    // Calculate top performers from filtered data
+    const studentScores = {};
+    for (const mark of filteredMarks) {
+        let percentage = 0;
+        if (currentLevel === 'olevel') {
+            percentage = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
+        } else {
+            percentage = (mark.marks_obtained / mark.max_marks) * 100;
+        }
+        
+        const studentName = mark.student_name || 'Unknown';
+        if (!studentScores[studentName]) {
+            studentScores[studentName] = { 
+                name: studentName, 
+                scores: [], 
+                class: mark.student_class || 'Unknown',
+                stream: mark.student_stream || 'Unknown',
+                admission: mark.student_admission || '-'
+            };
+        }
+        studentScores[studentName].scores.push(percentage);
+    }
+    
+    const performers = Object.entries(studentScores)
+        .map(([name, data]) => ({
+            name: name,
+            average: data.scores.reduce((a, b) => a + b, 0) / data.scores.length,
+            count: data.scores.length,
+            class: data.class,
+            stream: data.stream,
+            admission: data.admission
+        }))
+        .sort((a, b) => b.average - a.average)
+        .slice(0, 10);
+    
+    // Update the UI
+    const container = document.getElementById('topPerformersList');
+    if (container) {
+        container.innerHTML = renderTopPerformersHTML(performers);
+    }
+    
+    // Update the title with filter info
+    let filterText = '🏆 Top Performers';
+    if (selectedClass) filterText += ` - ${selectedClass}`;
+    if (selectedStream) filterText += ` (${selectedStream})`;
+    const titleEl = document.getElementById('performerTitle');
+    if (titleEl) titleEl.textContent = filterText;
+};
+
+window.resetPerformerFilters = function() {
+    document.getElementById('performerClass').value = '';
+    document.getElementById('performerStream').value = '';
+    updateTopPerformers();
 };
 
 // ============================================
