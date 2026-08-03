@@ -2577,8 +2577,11 @@ document.addEventListener('click', function(e) {
 // Populate comparative dropdowns on initial load
 setTimeout(populateComparativeDropdowns, 500);
 // ============================================
-// COMPLETE STUDENT MANAGEMENT - FULLY WORKING
-// With Bulk Upload - Table stays visible
+// COMPLETE STUDENT MANAGEMENT - MASTERPIECE
+// With Class Statistics Dashboard
+// Fixed: Select All only checks VISIBLE rows
+// Fixed: House Filter properly filters by house name
+// NEW: View Student Details with Marks History
 // ============================================
 
 const olevelClasses = ['S.1', 'S.2', 'S.3', 'S.4'];
@@ -2586,31 +2589,30 @@ const alevelClasses = ['S.5', 'S.6'];
 const olevelStreams = ['A', 'B', 'C', 'D'];
 const alevelStreams = ['Arts', 'Sciences'];
 
-// Initialize Supabase
-async function initSupabase() {
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
+// ============================================
+// HOUSES DATA - Loaded from Settings Module
+// ============================================
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+async function loadHousesList() {
+    try {
+        const { data, error } = await sb
+            .from('houses')
+            .select('id, name, color')
+            .order('name', { ascending: true });
+        
+        if (error) throw error;
+        housesList = data || [];
+        return housesList;
+    } catch (error) {
+        console.error('Error loading houses:', error);
+        housesList = [];
+        return [];
+    }
 }
 
 // ============================================
-// REPLACE THIS ENTIRE FUNCTION
+// ADMISSION NUMBER GENERATION
 // ============================================
-
-// OLD CODE - DELETE THIS:
-// function generateAdmissionNo() {
-//     const year = new Date().getFullYear();
-//     const prefix = currentLevel === 'olevel' ? 'O' : 'A';
-//     const count = students.length + 1;
-//     return `${prefix}/${year}/${String(count).padStart(4, '0')}`;
-// }
-
-// NEW CODE - PASTE THIS:
 let admissionNumberCache = new Set();
 
 function generateRandomChars(length) {
@@ -2661,6 +2663,85 @@ async function generateAdmissionNo() {
     const fallback = Date.now().toString(36).toUpperCase();
     return `${prefix}/${year}/${fallback.slice(0, 4)}-${fallback.slice(4, 8)}`;
 }
+
+// ============================================
+// GET STUDENT MARKS - WITH FILTERS
+// ============================================
+
+async function getStudentMarks(studentId, year = null, exam = null) {
+    try {
+        let query = sb
+            .from('marks')
+            .select('*')
+            .eq('student_id', studentId)
+            .order('year', { ascending: false })
+            .order('exam', { ascending: true });
+        
+        if (year) {
+            query = query.eq('year', year);
+        }
+        if (exam) {
+            query = query.eq('exam', exam);
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error loading student marks:', error);
+        return [];
+    }
+}
+
+// ============================================
+// GET UNIQUE YEARS AND EXAMS FOR STUDENT
+// ============================================
+
+async function getStudentMarkFilters(studentId) {
+    try {
+        const { data, error } = await sb
+            .from('marks')
+            .select('year, exam')
+            .eq('student_id', studentId);
+        
+        if (error) throw error;
+        
+        const years = [...new Set(data.map(m => m.year))].filter(Boolean).sort().reverse();
+        const exams = [...new Set(data.map(m => m.exam))].filter(Boolean);
+        
+        return { years, exams };
+    } catch (error) {
+        console.error('Error loading student mark filters:', error);
+        return { years: [], exams: [] };
+    }
+}
+
+// ============================================
+// O-LEVEL GRADE DESCRIPTOR
+// ============================================
+
+function getOlevelGradeDescriptor(total100) {
+    total100 = Math.min(100, Math.max(0, total100));
+    if (total100 >= 85) return { grade: 'A', descriptor: 'Exceptional', color: '#2ecc71' };
+    if (total100 >= 70) return { grade: 'B', descriptor: 'Outstanding', color: '#3498db' };
+    if (total100 >= 60) return { grade: 'C', descriptor: 'Satisfactory', color: '#f39c12' };
+    if (total100 >= 40) return { grade: 'D', descriptor: 'Basic', color: '#e67e22' };
+    return { grade: 'E', descriptor: 'Elementary', color: '#e74c3c' };
+}
+
+// ============================================
+// A-LEVEL GRADE CALCULATOR
+// ============================================
+
+function calculateGrade(percentage, subjectName = '') {
+    if (percentage >= 80) return { grade: 'A', points: 5, color: '#27ae60', remark: 'Exceptional' };
+    if (percentage >= 70) return { grade: 'B', points: 4, color: '#2ecc71', remark: 'Outstanding' };
+    if (percentage >= 60) return { grade: 'C', points: 3, color: '#f39c12', remark: 'Satisfactory' };
+    if (percentage >= 50) return { grade: 'D', points: 2, color: '#e67e22', remark: 'Basic' };
+    return { grade: 'E', points: 1, color: '#e74c3c', remark: 'Elementary' };
+}
+
 // ============================================
 // DATABASE FUNCTIONS
 // ============================================
@@ -2683,18 +2764,6 @@ async function getStudents() {
     }
 }
 
-// ============================================
-// REPLACE THIS ENTIRE FUNCTION
-// ============================================
-
-// OLD CODE - DELETE THIS:
-// async function addStudent(studentData) {
-//     const { data, error } = await sb.from('students').insert([studentData]).select();
-//     if (error) throw error;
-//     return data[0];
-// }
-
-// NEW CODE - PASTE THIS:
 async function addStudent(studentData) {
     const uniqueAdmissionNo = await generateAdmissionNo();
     studentData.admission_no = uniqueAdmissionNo;
@@ -2735,37 +2804,241 @@ async function deleteStudent(id) {
 }
 
 // ============================================
-// RENDER STUDENTS PAGE (KEPT ORIGINAL)
+// PERMISSION CHECK FUNCTIONS
+// ============================================
+
+function canAddStudent() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
+function canEditStudent() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
+function canDeleteStudent() {
+    if (currentUserRole === 'superadmin') return 'superadmin';
+    if (currentUserRole === 'admin') return 'admin';
+    return false;
+}
+
+function canUseBulkUpload() {
+    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
+}
+
+// ============================================
+// VERIFY SUPER ADMIN PASSWORD
+// ============================================
+
+async function verifySuperAdminPasswordForStudent() {
+    return new Promise((resolve) => {
+        Swal.fire({
+            title: '🔐 Super Admin Authorization Required',
+            html: `
+                <div class="text-start">
+                    <div class="alert alert-danger mb-3">
+                        <i class="fas fa-shield-alt"></i> 
+                        <strong>Authorization Required!</strong><br>
+                        This action requires Super Administrator approval.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Super Admin Password</label>
+                        <input type="password" id="superAdminPassword" class="form-control" 
+                               placeholder="Enter Super Admin password" autocomplete="off">
+                        <small class="text-muted">A Super Admin must authorize this action.</small>
+                    </div>
+                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
+                    </div>
+                </div>
+            `,
+            width: '450px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+            confirmButtonColor: '#d33',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const passwordInput = document.getElementById('superAdminPassword');
+                if (passwordInput) {
+                    passwordInput.focus();
+                    passwordInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            Swal.clickConfirm();
+                        }
+                    });
+                }
+            },
+            preConfirm: async () => {
+                const password = document.getElementById('superAdminPassword')?.value;
+                
+                if (!password) {
+                    Swal.showValidationMessage('Please enter Super Admin password');
+                    return false;
+                }
+                
+                try {
+                    const { data: superAdminData, error: superAdminError } = await sb
+                        .from('users')
+                        .select('email')
+                        .eq('role', 'superadmin')
+                        .limit(1)
+                        .single();
+                    
+                    if (superAdminError) {
+                        Swal.showValidationMessage('Could not verify Super Admin credentials');
+                        return false;
+                    }
+                    
+                    const { data, error } = await sb.auth.signInWithPassword({
+                        email: superAdminData.email,
+                        password: password
+                    });
+                    
+                    if (error) {
+                        const errorDiv = document.getElementById('passwordError');
+                        if (errorDiv) errorDiv.style.display = 'block';
+                        Swal.showValidationMessage('Incorrect Super Admin password');
+                        return false;
+                    }
+                    
+                    return true;
+                } catch (err) {
+                    Swal.showValidationMessage('Verification failed. Please try again.');
+                    return false;
+                }
+            }
+        }).then((result) => {
+            resolve(result.isConfirmed);
+        });
+    });
+}
+
+// ============================================
+// GET CLASS STATISTICS
+// ============================================
+
+function getClassStatistics() {
+    const classCounts = {};
+    const classColors = {
+        'S.1': '#4facfe',
+        'S.2': '#43e97b',
+        'S.3': '#fa709a',
+        'S.4': '#f093fb',
+        'S.5': '#4facfe',
+        'S.6': '#f093fb'
+    };
+    
+    for (const student of students) {
+        const className = student.class || 'Unknown';
+        if (!classCounts[className]) {
+            classCounts[className] = 0;
+        }
+        classCounts[className]++;
+    }
+    
+    const total = students.length || 1;
+    const result = [];
+    
+    const allClasses = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
+    
+    for (const className of allClasses) {
+        const count = classCounts[className] || 0;
+        const percentage = ((count / total) * 100).toFixed(1);
+        result.push({
+            class: className,
+            count: count,
+            percentage: percentage,
+            color: classColors[className] || '#6c757d'
+        });
+    }
+    
+    if (classCounts['Unknown']) {
+        result.push({
+            class: 'Unknown',
+            count: classCounts['Unknown'],
+            percentage: ((classCounts['Unknown'] / total) * 100).toFixed(1),
+            color: '#6c757d'
+        });
+    }
+    
+    return result;
+}
+
+// ============================================
+// RENDER STUDENTS PAGE WITH FIXED HOUSE FILTER
 // ============================================
 
 async function renderStudents() {
     await getStudents();
+    await loadHousesList();
+    
+    const classStats = getClassStatistics();
+    
+    // Generate house filter options with house ID as value
+    const houseOptions = housesList.map(house => 
+        `<option value="${house.id}">🏠 ${escapeHtml(house.name)}</option>`
+    ).join('');
+    
     return `
-        <div class="card shadow-sm mb-3">
+        <!-- CLASS STATISTICS DASHBOARD -->
+        <div class="class-stats-dashboard">
+            <div class="stats-header">
+                <h5><i class="fas fa-chart-bar"></i> Student Statistics by Class</h5>
+                <span class="total-students">Total: <strong>${students.length}</strong> students</span>
+            </div>
+            <div class="stats-grid">
+                ${classStats.map(stat => `
+                    <div class="stat-card-mini" style="border-left: 4px solid ${stat.color};">
+                        <div class="stat-number">${stat.count}</div>
+                        <div class="stat-label">${stat.class}</div>
+                        <div class="stat-bar" style="width: ${stat.percentage}%; background: ${stat.color};"></div>
+                        <div class="stat-percent">${stat.percentage}%</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        
+        <!-- STUDENTS TABLE -->
+        <div class="card shadow-sm mt-3">
             <div class="card-body">
+                <!-- BUTTONS ROW -->
                 <div class="btn-group flex-wrap gap-1 mb-2">
                     <button class="btn btn-sm btn-primary" onclick="showAddStudentModal()"><i class="fas fa-plus"></i> Add</button>
                     <button class="btn btn-sm btn-info" onclick="showBulkUploadModal()"><i class="fas fa-upload"></i> Bulk CSV</button>
                     <button class="btn btn-sm btn-success" onclick="exportStudents()"><i class="fas fa-download"></i> Excel</button>
-<button class="btn btn-sm btn-info" onclick="printFilteredStudents()"><i class="fas fa-print"></i> Print Filtered</button>                    <button class="btn btn-sm btn-warning" onclick="printStudentsByClass()"><i class="fas fa-print"></i> Print by Class</button>
+                    <button class="btn btn-sm btn-info" onclick="printFilteredStudents()"><i class="fas fa-print"></i> Print Filtered</button>
+                    <button class="btn btn-sm btn-warning" onclick="printStudentsByClass()"><i class="fas fa-print"></i> Print by Class</button>
                     <button class="btn btn-sm btn-secondary" onclick="printStudentIdCards()"><i class="fas fa-id-card"></i> ID Cards</button>
                     <button class="btn btn-sm btn-danger" onclick="bulkDeleteStudents()"><i class="fas fa-trash"></i> Bulk Delete</button>
                     <button class="btn btn-sm btn-dark" onclick="refreshStudents()"><i class="fas fa-sync-alt"></i></button>
                 </div>
-                <input type="text" id="studentSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Search by name, admission..." onkeyup="filterStudents()">
                 
-                <!-- House Filter -->
+                <!-- SEARCH & FILTERS -->
                 <div class="row">
+                    <div class="col-md-4">
+                        <input type="text" id="studentSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Search by name, admission..." onkeyup="filterStudents()">
+                    </div>
                     <div class="col-md-3">
                         <select id="houseFilter" class="form-select form-select-sm" onchange="filterStudents()">
                             <option value="">🏠 All Houses</option>
-                            ${housesList.map(house => `<option value="${house.id}">${escapeHtml(house.name)}</option>`).join('')}
+                            ${houseOptions}
                         </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="classFilter" class="form-select form-select-sm" onchange="filterStudents()">
+                            <option value="">📚 All Classes</option>
+                            ${currentLevel === 'olevel' ? olevelClasses.map(c => `<option value="${c}">${c}</option>`).join('') : alevelClasses.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="clearFilters()">
+                            <i class="fas fa-eraser"></i> Clear Filters
+                        </button>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="card shadow-sm">
+            
+            <!-- TABLE -->
             <div class="card-body p-0">
                 <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
                     <table class="table table-sm table-bordered mb-0">
@@ -2790,14 +3063,110 @@ async function renderStudents() {
                 </div>
             </div>
         </div>
+        
+        <style>
+            .class-stats-dashboard {
+                background: white;
+                border-radius: 16px;
+                padding: 20px 25px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                border: 1px solid #eef2f6;
+            }
+            .stats-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .stats-header h5 {
+                margin: 0;
+                color: #2c3e50;
+                font-weight: 600;
+            }
+            .stats-header h5 i {
+                color: #ff862d;
+            }
+            .total-students {
+                font-size: 14px;
+                color: #6c757d;
+            }
+            .total-students strong {
+                color: #01605a;
+                font-size: 18px;
+            }
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 12px;
+            }
+            .stat-card-mini {
+                background: #f8f9fa;
+                border-radius: 12px;
+                padding: 12px 15px;
+                border-left: 4px solid #01605a;
+                transition: transform 0.2s;
+            }
+            .stat-card-mini:hover {
+                transform: translateY(-2px);
+            }
+            .stat-number {
+                font-size: 28px;
+                font-weight: 700;
+                color: #2c3e50;
+                line-height: 1.2;
+            }
+            .stat-label {
+                font-size: 12px;
+                color: #6c757d;
+                font-weight: 500;
+                margin-top: 2px;
+            }
+            .stat-bar {
+                height: 4px;
+                border-radius: 2px;
+                margin-top: 8px;
+                transition: width 0.5s ease;
+            }
+            .stat-percent {
+                font-size: 10px;
+                color: #6c757d;
+                text-align: right;
+                margin-top: 2px;
+            }
+            @media (max-width: 768px) {
+                .stats-grid {
+                    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+                    gap: 8px;
+                }
+                .stat-number {
+                    font-size: 22px;
+                }
+                .stat-card-mini {
+                    padding: 10px 12px;
+                }
+                .stats-header {
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+            }
+        </style>
     `;
 }
+
+// ============================================
+// LOAD STUDENTS TABLE - FIXED SELECT ALL
+// ============================================
+
 async function loadStudentsTable() {
     await getStudents();
+    await loadHousesList();
+    
     const tbody = document.getElementById('studentsTableBody');
     if (!tbody) return;
     
-    // Load houses for display
     const { data: houses } = await sb.from('houses').select('id, name, color');
     const housesMap = {};
     if (houses) {
@@ -2807,7 +3176,7 @@ async function loadStudentsTable() {
     }
     
     if (!students.length) {
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-3">No students found</span>络';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-3">No students found</td></tr>';
         return;
     }
     
@@ -2815,7 +3184,6 @@ async function loadStudentsTable() {
     for (const s of students) {
         const typeBadge = s.student_type === 'Boarding' ? 'bg-info' : 'bg-success';
         
-        // Get house info
         const house = housesMap[s.house_id];
         const houseHtml = house ? 
             `<span class="badge" style="background: ${house.color}">🏠 ${escapeHtml(house.name)}</span>` : 
@@ -2830,15 +3198,15 @@ async function loadStudentsTable() {
                 <td>${s.stream || '-'}</td>
                 <td>${s.gender || '-'}</td>
                 <td class="text-center"><span class="badge ${typeBadge}">${s.student_type || 'Day'}</span></td>
-                <td class="text-center">${houseHtml}</span></td>
+                <td class="text-center">${houseHtml}</td>
                 ${currentLevel === 'alevel' ? `<td>${s.combination || '-'}</td>` : ''}
                 <td><small>${escapeHtml(s.parent_name || '-')}</small></td>
                 <td>${s.parent_phone || '-'}</td>
                 <td class="text-nowrap">
-                    <button class="btn btn-sm btn-warning py-0 px-1" onclick="editStudent('${s.id}')"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger py-0 px-1" onclick="deleteStudentItem('${s.id}')"><i class="fas fa-trash"></i></button>
-                    <button class="btn btn-sm btn-info py-0 px-1" onclick="viewStudent('${s.id}')"><i class="fas fa-eye"></i></button>
-                 </span></td>
+                    <button class="btn btn-sm btn-info py-0 px-1" onclick="viewStudentDetails('${s.id}')" title="View Details"><i class="fas fa-eye"></i></button>
+                    <button class="btn btn-sm btn-warning py-0 px-1" onclick="editStudent('${s.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger py-0 px-1" onclick="deleteStudentItem('${s.id}')" title="Delete"><i class="fas fa-trash"></i></button>
+                </td>
             </tr>
         `;
     }
@@ -2847,33 +3215,486 @@ async function loadStudentsTable() {
     const selectAll = document.getElementById('selectAllStudents');
     if (selectAll) {
         selectAll.onclick = function() {
-            document.querySelectorAll('.studentCheck').forEach(cb => cb.checked = this.checked);
+            const allRows = document.querySelectorAll('#studentsTableBody tr');
+            allRows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const cb = row.querySelector('.studentCheck');
+                    if (cb) cb.checked = this.checked;
+                }
+            });
         };
     }
 }
+
+// ============================================
+// FILTER STUDENTS - FIXED HOUSE FILTER
+// ============================================
+
 window.filterStudents = function() {
     const search = document.getElementById('studentSearch')?.value.toLowerCase() || '';
     const houseFilter = document.getElementById('houseFilter')?.value;
+    const classFilter = document.getElementById('classFilter')?.value;
     const rows = document.querySelectorAll('#studentsTableBody tr');
+    
+    // Build a map of house IDs to house names for filtering
+    const houseMap = {};
+    housesList.forEach(house => {
+        houseMap[house.id] = house.name.toLowerCase();
+    });
     
     rows.forEach(row => {
         if (row.cells && row.cells.length > 1) {
             const text = row.innerText.toLowerCase();
+            const classCell = row.cells[3]?.innerText || '';
+            
+            // Get house name from the house cell (index 7)
             const houseCell = row.cells[7]?.innerText || '';
             
             let show = true;
+            
+            // Search filter
             if (search && !text.includes(search)) show = false;
-            if (houseFilter && !houseCell.includes(houseFilter)) show = false;
+            
+            // Class filter
+            if (classFilter && !classCell.includes(classFilter)) show = false;
+            
+            // House filter - check by house name, not ID
+            if (houseFilter && show) {
+                // Get the house name from the cell (it has 🏠 HouseName format)
+                const houseName = houseCell.replace('🏠', '').trim().toLowerCase();
+                const selectedHouse = housesList.find(h => h.id === houseFilter);
+                if (selectedHouse) {
+                    const selectedHouseName = selectedHouse.name.toLowerCase();
+                    if (!houseName.includes(selectedHouseName)) {
+                        show = false;
+                    }
+                }
+            }
             
             row.style.display = show ? '' : 'none';
+            
+            if (!show) {
+                const cb = row.querySelector('.studentCheck');
+                if (cb) cb.checked = false;
+            }
         }
     });
+    
+    const selectAll = document.getElementById('selectAllStudents');
+    if (selectAll) {
+        const visibleCheckboxes = document.querySelectorAll('#studentsTableBody tr:not([style*="display: none"]) .studentCheck');
+        const allChecked = Array.from(visibleCheckboxes).every(cb => cb.checked);
+        selectAll.checked = allChecked && visibleCheckboxes.length > 0;
+    }
+};
+
+window.clearFilters = function() {
+    document.getElementById('studentSearch').value = '';
+    document.getElementById('houseFilter').value = '';
+    document.getElementById('classFilter').value = '';
+    filterStudents();
 };
 
 window.refreshStudents = async function() {
     await getStudents();
+    await loadHousesList();
     await loadStudentsTable();
+    const container = document.getElementById('pageContent');
+    if (container) {
+        container.innerHTML = await renderStudents();
+        await loadStudentsTable();
+    }
     Swal.fire('Refreshed', `${students.length} students`, 'success');
+};
+
+// ============================================
+// VIEW STUDENT DETAILS WITH MARKS - ENHANCED
+// ============================================
+
+window.viewStudentDetails = async function(id) {
+    const student = students.find(s => s.id === id);
+    if (!student) {
+        Swal.fire('Error', 'Student not found', 'error');
+        return;
+    }
+    
+    // Get unique years and exams for filters
+    const filters = await getStudentMarkFilters(id);
+    const allMarks = await getStudentMarks(id);
+    
+    // Load house info
+    let houseInfo = 'Not Assigned';
+    let houseColor = '#6c757d';
+    if (student.house_id) {
+        const { data: house } = await sb
+            .from('houses')
+            .select('name, color')
+            .eq('id', student.house_id)
+            .single();
+        if (house) {
+            houseInfo = house.name;
+            houseColor = house.color;
+        }
+    }
+    
+    // Get class teacher
+    let classTeacher = 'Not Assigned';
+    if (student.class) {
+        const classNumber = student.class.replace('S.', '');
+        const streamLower = (student.stream || 'a').toLowerCase();
+        const teacherKey = `teacher_s${classNumber}_${streamLower}`;
+        const { data: settings } = await sb
+            .from('school_settings')
+            .select(teacherKey)
+            .limit(1)
+            .maybeSingle();
+        if (settings && settings[teacherKey]) {
+            classTeacher = settings[teacherKey];
+        }
+    }
+    
+    const isAlevel = student.class === 'S.5' || student.class === 'S.6';
+    
+    // Build filter options
+    const yearOptions = filters.years.map(y => `<option value="${y}">${y}</option>`).join('');
+    const examOptions = filters.exams.map(e => `<option value="${e}">${e}</option>`).join('');
+    
+    // Build marks table HTML
+    let marksHtml = '';
+    if (allMarks.length === 0) {
+        marksHtml = '<div class="text-center text-muted py-3">No marks recorded for this student</div>';
+    } else {
+        // Group marks by year and exam
+        const groupedMarks = {};
+        for (const mark of allMarks) {
+            const key = `${mark.year} - ${mark.exam}`;
+            if (!groupedMarks[key]) groupedMarks[key] = [];
+            groupedMarks[key].push(mark);
+        }
+        
+        marksHtml = `
+            <div id="marksContainer" style="max-height: 350px; overflow-y: auto;">
+                ${Object.entries(groupedMarks).map(([examKey, examMarks]) => {
+                    // Calculate averages for this exam
+                    let totalPercentage = 0;
+                    let subjectCount = 0;
+                    for (const mark of examMarks) {
+                        let pct = 0;
+                        if (currentLevel === 'olevel') {
+                            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
+                        } else {
+                            pct = (mark.marks_obtained / mark.max_marks) * 100;
+                        }
+                        totalPercentage += pct;
+                        subjectCount++;
+                    }
+                    const avgPercentage = subjectCount > 0 ? (totalPercentage / subjectCount) : 0;
+                    const avgGrade = currentLevel === 'olevel' ? getOlevelGradeDescriptor(avgPercentage) : calculateGrade(avgPercentage);
+                    
+                    return `
+                        <div style="margin-bottom: 15px; border: 1px solid #eef2f6; border-radius: 8px; overflow: hidden;">
+                            <div style="background: linear-gradient(135deg, #01605a, #ff862d); color: white; padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                                <div>
+                                    <strong style="font-size: 14px;">${examKey}</strong>
+                                    <span style="font-size: 11px; opacity: 0.8; margin-left: 10px;">${subjectCount} subjects</span>
+                                </div>
+                                <div>
+                                    <span style="font-size: 12px; background: rgba(255,255,255,0.2); padding: 2px 12px; border-radius: 12px;">
+                                        Avg: ${avgPercentage.toFixed(1)}% | Grade: <strong>${avgGrade.grade}</strong>
+                                    </span>
+                                </div>
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                <thead>
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: left;">Subject</th>
+                                        ${currentLevel === 'olevel' ? `
+                                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">CA /20</th>
+                                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Exam /80</th>
+                                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Total /100</th>
+                                        ` : `
+                                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Marks</th>
+                                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">%</th>
+                                        `}
+                                        <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Grade</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${examMarks.map(mark => {
+                                        let percentage, grade, gradeColor;
+                                        if (currentLevel === 'olevel') {
+                                            const ca = mark.ca_score || 0;
+                                            const exam80 = mark.exam_80 || 0;
+                                            percentage = Math.min(100, Math.max(0, ca + exam80));
+                                            const gradeInfo = getOlevelGradeDescriptor(percentage);
+                                            grade = gradeInfo.grade;
+                                            gradeColor = gradeInfo.color;
+                                            return `
+                                                <tr>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>${escapeHtml(mark.subject)}</strong></td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${ca.toFixed(1)}</td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${exam80}</td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><strong>${percentage.toFixed(1)}</strong></td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+                                                        <span style="background: ${gradeColor}; color: white; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: 13px;">${grade}</span>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        } else {
+                                            const maxMarks = mark.max_marks || 100;
+                                            const obtained = mark.marks_obtained || 0;
+                                            percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
+                                            const gradeInfo = calculateGrade(percentage, mark.subject);
+                                            return `
+                                                <tr>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>${escapeHtml(mark.subject)}</strong></td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${obtained}</td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${percentage.toFixed(1)}%</td>
+                                                    <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+                                                        <span style="background: ${gradeInfo.color}; color: white; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: 13px;">${gradeInfo.grade}</span>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+    
+    // Build the full details modal with filters
+    Swal.fire({
+        title: `
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #01605a, #ff862d); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-user-graduate" style="font-size: 30px; color: white;"></i>
+                </div>
+                <div style="text-align: left;">
+                    <div style="font-size: 20px; font-weight: 700; color: #2c3e50;">${escapeHtml(student.name)}</div>
+                    <div style="font-size: 13px; color: #6c757d;">${student.admission_no || 'No Admission No'}</div>
+                </div>
+            </div>
+        `,
+        html: `
+            <div class="text-start" style="max-width: 750px;">
+                <!-- Student Information Cards -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #01605a;">
+                        <div style="font-size: 11px; color: #6c757d;">Class</div>
+                        <div style="font-weight: 600; font-size: 15px;">${student.class} ${student.stream ? '- ' + student.stream : ''}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #ff862d;">
+                        <div style="font-size: 11px; color: #6c757d;">Student Type</div>
+                        <div style="font-weight: 600; font-size: 15px;">${student.student_type || 'Day'}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
+                        <div style="font-size: 11px; color: #6c757d;">Gender</div>
+                        <div style="font-weight: 600; font-size: 15px;">${student.gender || '-'}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid ${houseColor};">
+                        <div style="font-size: 11px; color: #6c757d;">🏠 House</div>
+                        <div style="font-weight: 600; font-size: 15px;">${houseInfo}</div>
+                    </div>
+                    ${isAlevel ? `
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #6c5ce7;">
+                        <div style="font-size: 11px; color: #6c757d;">Combination</div>
+                        <div style="font-weight: 600; font-size: 15px;">${student.combination || '-'}</div>
+                    </div>
+                    ` : ''}
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                        <div style="font-size: 11px; color: #6c757d;">Class Teacher</div>
+                        <div style="font-weight: 600; font-size: 15px;">${escapeHtml(classTeacher)}</div>
+                    </div>
+                </div>
+                
+                <!-- Parent Information -->
+                <div style="background: #f0f8ff; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-weight: 600; color: #01605a; margin-bottom: 8px;"><i class="fas fa-parent"></i> Parent/Guardian</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 13px;">
+                        <div><strong>Name:</strong> ${escapeHtml(student.parent_name || '-')}</div>
+                        <div><strong>Phone:</strong> ${student.parent_phone || '-'}</div>
+                        <div><strong>Email:</strong> ${student.parent_email || '-'}</div>
+                        <div><strong>Address:</strong> ${escapeHtml(student.address || '-')}</div>
+                    </div>
+                </div>
+                
+                <!-- Marks Section -->
+                <div style="border-top: 2px solid #eef2f6; padding-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                        <h6 style="margin: 0; color: #01605a;"><i class="fas fa-chart-line"></i> Academic Performance</h6>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            ${filters.years.length > 0 ? `
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span style="font-size: 11px; color: #6c757d;">Year:</span>
+                                <select id="filterYear" class="form-select form-select-sm" style="width: auto; padding: 2px 8px; font-size: 11px;" onchange="filterStudentMarks('${id}')">
+                                    <option value="">All</option>
+                                    ${yearOptions}
+                                </select>
+                            </div>
+                            ` : ''}
+                            ${filters.exams.length > 0 ? `
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span style="font-size: 11px; color: #6c757d;">Exam:</span>
+                                <select id="filterExam" class="form-select form-select-sm" style="width: auto; padding: 2px 8px; font-size: 11px;" onchange="filterStudentMarks('${id}')">
+                                    <option value="">All</option>
+                                    ${examOptions}
+                                </select>
+                            </div>
+                            ` : ''}
+                            <span class="badge bg-primary">${allMarks.length} records</span>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="resetStudentMarksFilter('${id}')" style="padding: 2px 8px; font-size: 11px;">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="studentMarksContainer">
+                        ${marksHtml}
+                    </div>
+                </div>
+            </div>
+        `,
+        width: '800px',
+        showCloseButton: true,
+        showCancelButton: false,
+        confirmButtonText: '<i class="fas fa-times"></i> Close',
+        customClass: {
+            popup: 'student-details-modal'
+        }
+    });
+};
+
+// ============================================
+// FILTER STUDENT MARKS
+// ============================================
+
+window.filterStudentMarks = async function(studentId) {
+    const year = document.getElementById('filterYear')?.value;
+    const exam = document.getElementById('filterExam')?.value;
+    
+    const filteredMarks = await getStudentMarks(studentId, year, exam);
+    
+    const container = document.getElementById('studentMarksContainer');
+    if (!container) return;
+    
+    if (filteredMarks.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-3">No marks match the selected filters</div>';
+        return;
+    }
+    
+    // Group marks by year and exam
+    const groupedMarks = {};
+    for (const mark of filteredMarks) {
+        const key = `${mark.year} - ${mark.exam}`;
+        if (!groupedMarks[key]) groupedMarks[key] = [];
+        groupedMarks[key].push(mark);
+    }
+    
+    let html = `<div style="max-height: 350px; overflow-y: auto;">`;
+    
+    for (const [examKey, examMarks] of Object.entries(groupedMarks)) {
+        let totalPercentage = 0;
+        let subjectCount = 0;
+        for (const mark of examMarks) {
+            let pct = 0;
+            if (currentLevel === 'olevel') {
+                pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
+            } else {
+                pct = (mark.marks_obtained / mark.max_marks) * 100;
+            }
+            totalPercentage += pct;
+            subjectCount++;
+        }
+        const avgPercentage = subjectCount > 0 ? (totalPercentage / subjectCount) : 0;
+        const avgGrade = currentLevel === 'olevel' ? getOlevelGradeDescriptor(avgPercentage) : calculateGrade(avgPercentage);
+        
+        html += `
+            <div style="margin-bottom: 15px; border: 1px solid #eef2f6; border-radius: 8px; overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #01605a, #ff862d); color: white; padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <strong style="font-size: 14px;">${examKey}</strong>
+                        <span style="font-size: 11px; opacity: 0.8; margin-left: 10px;">${subjectCount} subjects</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 12px; background: rgba(255,255,255,0.2); padding: 2px 12px; border-radius: 12px;">
+                            Avg: ${avgPercentage.toFixed(1)}% | Grade: <strong>${avgGrade.grade}</strong>
+                        </span>
+                    </div>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: left;">Subject</th>
+                            ${currentLevel === 'olevel' ? `
+                                <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">CA /20</th>
+                                <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Exam /80</th>
+                                <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Total /100</th>
+                            ` : `
+                                <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Marks</th>
+                                <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">%</th>
+                            `}
+                            <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${examMarks.map(mark => {
+                            let percentage, grade, gradeColor;
+                            if (currentLevel === 'olevel') {
+                                const ca = mark.ca_score || 0;
+                                const exam80 = mark.exam_80 || 0;
+                                percentage = Math.min(100, Math.max(0, ca + exam80));
+                                const gradeInfo = getOlevelGradeDescriptor(percentage);
+                                grade = gradeInfo.grade;
+                                gradeColor = gradeInfo.color;
+                                return `
+                                    <tr>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>${escapeHtml(mark.subject)}</strong></td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${ca.toFixed(1)}</td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${exam80}</td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><strong>${percentage.toFixed(1)}</strong></td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+                                            <span style="background: ${gradeColor}; color: white; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: 13px;">${grade}</span>
+                                        </td>
+                                    </tr>
+                                `;
+                            } else {
+                                const maxMarks = mark.max_marks || 100;
+                                const obtained = mark.marks_obtained || 0;
+                                percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
+                                const gradeInfo = calculateGrade(percentage, mark.subject);
+                                return `
+                                    <tr>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>${escapeHtml(mark.subject)}</strong></td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${obtained}</td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">${percentage.toFixed(1)}%</td>
+                                        <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+                                            <span style="background: ${gradeInfo.color}; color: white; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: 13px;">${gradeInfo.grade}</span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+    
+    html += `</div>`;
+    container.innerHTML = html;
+};
+
+// ============================================
+// RESET STUDENT MARKS FILTER
+// ============================================
+
+window.resetStudentMarksFilter = async function(studentId) {
+    document.getElementById('filterYear').value = '';
+    document.getElementById('filterExam').value = '';
+    await filterStudentMarks(studentId);
 };
 
 // ============================================
@@ -2881,11 +3702,22 @@ window.refreshStudents = async function() {
 // ============================================
 
 window.showAddStudentModal = async function() {
+    if (!canAddStudent()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to add students.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can add students.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
     const isAlevel = currentLevel === 'alevel';
     const availableClasses = isAlevel ? alevelClasses : olevelClasses;
     const availableStreams = isAlevel ? alevelStreams : olevelStreams;
     
-    // Load houses from database
     const { data: houses, error: housesError } = await sb
         .from('houses')
         .select('id, name, color')
@@ -2897,7 +3729,6 @@ window.showAddStudentModal = async function() {
     
     const housesList = houses || [];
     
-    // Generate house options HTML with color styling
     const houseOptionsHtml = housesList.map(house => `
         <option value="${house.id}" style="color: ${house.color}; font-weight: 500;">
             🏠 ${escapeHtml(house.name)}
@@ -2979,7 +3810,6 @@ window.showAddStudentModal = async function() {
         showCancelButton: true,
         confirmButtonText: 'Add Student',
         didOpen: async () => {
-            // Generate preview admission number
             const preview = await generateAdmissionNo();
             const admField = document.getElementById('addAdm');
             if (admField) admField.value = preview;
@@ -3028,366 +3858,19 @@ window.showAddStudentModal = async function() {
             }
         }
     });
-
-    
 };
 
 // ============================================
-// BULK UPLOAD - FULLY WORKING
-// ============================================
-// ============================================
-// EXCEL BULK UPLOAD - WORKING VERSION
-// ============================================
-
-window.showBulkUploadModal = function() {
-    const isAlevel = currentLevel === 'alevel';
-    
-    Swal.fire({
-        title: '<i class="fas fa-upload"></i> Bulk Upload Students (Excel)',
-        html: `
-            <div class="text-start">
-                <div class="alert alert-info small p-2 mb-3">
-                    <i class="fas fa-info-circle"></i> <strong>Instructions:</strong><br>
-                    1. Click "Download Template" below<br>
-                    2. Fill in student data (Name and Class are required)<br>
-                    3. Save as Excel file (.xlsx)<br>
-                    4. Select and upload the file
-                </div>
-                
-                <button class="btn btn-info btn-sm w-100 mb-3" onclick="downloadExcelTemplate()">
-                    <i class="fas fa-download"></i> Download Excel Template
-                </button>
-                
-                <div class="mb-3">
-                    <label class="fw-bold">Select Excel File</label>
-                    <input type="file" id="bulkExcelFile" accept=".xlsx, .xls" class="form-control">
-                </div>
-            </div>
-        `,
-        width: '550px',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-upload"></i> Upload',
-        preConfirm: () => {
-            const file = document.getElementById('bulkExcelFile')?.files[0];
-            if (!file) {
-                Swal.showValidationMessage('Please select an Excel file');
-                return false;
-            }
-            return file;
-        }
-    }).then(async (result) => {
-        if (result.value) {
-            await processExcelUpload(result.value);
-        }
-    });
-};
-
-// ============================================
-// DOWNLOAD EXCEL TEMPLATE
-// ============================================
-
-window.downloadExcelTemplate = function() {
-    const isAlevel = currentLevel === 'alevel';
-    
-    // Prepare data for template
-    const headers = [
-        'Name', 'Class', 'Stream', 'Gender', 'Student Type', 
-        'House', 'Parent Name', 'Parent Phone', 'Parent Email', 'Address'
-    ];
-    
-    if (isAlevel) {
-        headers.splice(6, 0, 'Combination');
-    }
-    
-    const sampleData = [
-        [
-            'John Doe',
-            isAlevel ? 'S.5' : 'S.3',
-            isAlevel ? 'Sciences' : 'A',
-            'Male',
-            'Day',
-            isAlevel ? 'PCM' : '',
-            'Red House',
-            'Mr. Doe',
-            '0772123456',
-            'john@email.com',
-            'Kampala'
-        ],
-        [
-            'Jane Smith',
-            isAlevel ? 'S.6' : 'S.4',
-            isAlevel ? 'Arts' : 'B',
-            'Female',
-            'Boarding',
-            isAlevel ? 'HEG' : '',
-            'Blue House',
-            'Mrs. Smith',
-            '0772987654',
-            'jane@email.com',
-            'Entebbe'
-        ]
-    ];
-    
-    // Create worksheet
-    const wsData = [headers, ...sampleData];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    
-    // Set column widths
-    ws['!cols'] = [
-        { wch: 25 }, // Name
-        { wch: 10 }, // Class
-        { wch: 12 }, // Stream
-        { wch: 8 },  // Gender
-        { wch: 12 }, // Student Type
-        ...(isAlevel ? [{ wch: 12 }] : []), // Combination (if A-Level)
-        { wch: 15 }, // House
-        { wch: 20 }, // Parent Name
-        { wch: 15 }, // Parent Phone
-        { wch: 25 }, // Parent Email
-        { wch: 30 }  // Address
-    ];
-    
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Students Template');
-    
-    // Add instructions sheet
-    const instructionsData = [
-        ['INSTRUCTIONS FOR BULK UPLOAD'],
-        [''],
-        ['Required Fields:', 'Name, Class'],
-        ['Optional Fields:', 'Stream, Gender, Student Type, House, Parent Name, Parent Phone, Parent Email, Address'],
-        ...(isAlevel ? [['For A-Level:', 'Combination is optional (e.g., PCM, HEG, BAM)']] : []),
-        [''],
-        ['Valid Values:'],
-        ['Class (O-Level):', 'S.1, S.2, S.3, S.4'],
-        ['Class (A-Level):', 'S.5, S.6'],
-        ['Gender:', 'Male, Female'],
-        ['Student Type:', 'Day, Boarding'],
-        ['House:', 'Red House, Blue House, Green House, Yellow House (must match existing)'],
-        ...(isAlevel ? [['Combination Examples:', 'PCM (Physics, Chemistry, Math), PCB (Physics, Chemistry, Biology), HEG (History, Economics, Geography)']] : []),
-        [''],
-        ['NOTE: House names must exactly match existing houses in the system!']
-    ];
-    
-    const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
-    wsInstructions['!cols'] = [{ wch: 25 }, { wch: 50 }];
-    XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
-    
-    // Export
-    XLSX.writeFile(wb, `student_template_${currentLevel}.xlsx`);
-    
-    Swal.fire('Template Downloaded', 'Fill the Excel template and upload back', 'success');
-};
-
-// ============================================
-// PROCESS EXCEL UPLOAD
-// ============================================
-
-async function processExcelUpload(file) {
-    Swal.fire({ 
-        title: 'Processing...', 
-        text: 'Reading Excel file...', 
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
-    });
-    
-    const reader = new FileReader();
-    
-    reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
-            
-            console.log("Excel data:", jsonData);
-            
-            if (!jsonData || jsonData.length === 0) {
-                Swal.fire('Error', 'No data found in Excel file', 'error');
-                return;
-            }
-            
-            // Load houses for mapping
-            const { data: houses } = await sb.from('houses').select('id, name');
-            const houseMap = {};
-            if (houses) {
-                houses.forEach(house => {
-                    houseMap[house.name.toLowerCase()] = house.id;
-                });
-            }
-            
-            let successCount = 0;
-            let errorCount = 0;
-            const errors = [];
-            
-            for (let i = 0; i < jsonData.length; i++) {
-                const row = jsonData[i];
-                const rowNum = i + 2; // +2 because Excel starts at row 2
-                
-                try {
-                    // Get values (handle different case variations)
-                    const name = row.Name || row.name || row.NAME || '';
-                    const className = row.Class || row.class || row.CLASS || '';
-                    const stream = row.Stream || row.stream || '';
-                    const gender = row.Gender || row.gender || 'Male';
-                    const studentType = row['Student Type'] || row.student_type || row['Student_Type'] || 'Day';
-                    const house = row.House || row.house || '';
-                    const parentName = row['Parent Name'] || row.parent_name || row['Parent_Name'] || '';
-                    const parentPhone = row['Parent Phone'] || row.parent_phone || row['Parent_Phone'] || '';
-                    const parentEmail = row['Parent Email'] || row.parent_email || row['Parent_Email'] || '';
-                    const address = row.Address || row.address || '';
-                    let combination = row.Combination || row.combination || '';
-                    
-                    // Validate required fields
-                    if (!name) {
-                        errors.push(`Row ${rowNum}: Name is required`);
-                        errorCount++;
-                        continue;
-                    }
-                    if (!className) {
-                        errors.push(`Row ${rowNum}: Class is required`);
-                        errorCount++;
-                        continue;
-                    }
-                    
-                    // Validate class
-                    const validClasses = currentLevel === 'olevel' 
-                        ? ['S.1', 'S.2', 'S.3', 'S.4']
-                        : ['S.5', 'S.6'];
-                    
-                    if (!validClasses.includes(className)) {
-                        errors.push(`Row ${rowNum}: Invalid class "${className}". Valid: ${validClasses.join(', ')}`);
-                        errorCount++;
-                        continue;
-                    }
-                    
-                    // Map house name to ID
-                    let houseId = null;
-                    if (house) {
-                        const houseName = house.toLowerCase();
-                        if (houseMap[houseName]) {
-                            houseId = houseMap[houseName];
-                        } else {
-                            errors.push(`Row ${rowNum}: House "${house}" not found. Available: ${houses?.map(h => h.name).join(', ') || 'None'}`);
-                            errorCount++;
-                            continue;
-                        }
-                    }
-                    
-                    // Generate admission number
-                    const year = new Date().getFullYear();
-                    const prefix = currentLevel === 'olevel' ? 'O' : 'A';
-                    const timestamp = Date.now().toString().slice(-8);
-                    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-                    const admissionNo = `${prefix}/${year}/${timestamp}${random}`;
-                    
-                    // Prepare data for insertion
-                    const studentData = {
-                        admission_no: admissionNo,
-                        name: name,
-                        class: className,
-                        stream: stream || '',
-                        gender: gender === 'Male' ? 'Male' : 'Female',
-                        student_type: studentType === 'Boarding' ? 'Boarding' : 'Day',
-                        house_id: houseId,
-                        parent_name: parentName,
-                        parent_phone: parentPhone,
-                        parent_email: parentEmail,
-                        address: address,
-                        level: currentLevel,
-                        created_at: new Date().toISOString()
-                    };
-                    
-                    // Add combination for A-Level
-                    if (currentLevel === 'alevel' && combination) {
-                        studentData.combination = combination.toUpperCase();
-                    }
-                    
-                    console.log(`Inserting row ${rowNum}:`, studentData);
-                    
-                    // Insert into database
-                    const { error } = await sb.from('students').insert([studentData]);
-                    
-                    if (error) {
-                        console.error("Insert error:", error);
-                        errors.push(`Row ${rowNum}: ${error.message}`);
-                        errorCount++;
-                    } else {
-                        successCount++;
-                    }
-                    
-                } catch (err) {
-                    console.error(`Error processing row ${rowNum}:`, err);
-                    errors.push(`Row ${rowNum}: ${err.message}`);
-                    errorCount++;
-                }
-            }
-            
-            Swal.close();
-            
-            // Show results
-            let message = `<div class="text-start">`;
-            message += `<p><strong>✅ Successfully added:</strong> ${successCount} students</p>`;
-            if (errorCount > 0) {
-                message += `<p><strong>❌ Failed:</strong> ${errorCount} students</p>`;
-                if (errors.length > 0) {
-                    message += `<hr><strong>Errors:</strong><ul>`;
-                    errors.slice(0, 10).forEach(err => {
-                        message += `<li>${escapeHtml(err)}</li>`;
-                    });
-                    if (errors.length > 10) {
-                        message += `<li>... and ${errors.length - 10} more errors</li>`;
-                    }
-                    message += `</ul>`;
-                }
-            }
-            message += `</div>`;
-            
-            Swal.fire({
-                title: 'Upload Complete',
-                html: message,
-                icon: errorCount > 0 ? 'warning' : 'success',
-                width: '600px'
-            });
-            
-            // Refresh the students table
-            if (typeof refreshStudents === 'function') {
-                await refreshStudents();
-            } else if (typeof loadStudentsTable === 'function') {
-                await loadStudentsTable();
-            }
-            
-        } catch (error) {
-            Swal.close();
-            console.error("Excel processing error:", error);
-            Swal.fire('Error', 'Failed to process Excel file: ' + error.message, 'error');
-        }
-    };
-    
-    reader.onerror = (error) => {
-        Swal.close();
-        console.error("File reading error:", error);
-        Swal.fire('Error', 'Failed to read the file', 'error');
-    };
-    
-    reader.readAsArrayBuffer(file);
-}
-
-// ============================================
-// EDIT, DELETE, VIEW FUNCTIONS
+// EDIT STUDENT
 // ============================================
 
 window.editStudent = async function(id) {
-     if (!canEditStudent()) {
+    if (!canEditStudent()) {
         Swal.fire({
             title: '⛔ Access Denied',
             html: `<p>You do not have permission to edit students.</p>
                    <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
-                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can edit students.</p>
-                   <hr>
-                   <p>Please contact your administrator for access.</p>`,
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can edit students.</p>`,
             icon: 'error',
             confirmButtonText: 'OK'
         });
@@ -3401,7 +3884,6 @@ window.editStudent = async function(id) {
     const availableClasses = isAlevel ? alevelClasses : olevelClasses;
     const availableStreams = isAlevel ? alevelStreams : olevelStreams;
     
-    // Load houses from database
     const { data: houses, error: housesError } = await sb
         .from('houses')
         .select('id, name, color')
@@ -3413,7 +3895,6 @@ window.editStudent = async function(id) {
     
     const housesList = houses || [];
     
-    // Generate house options HTML with color styling and selected attribute
     const houseOptionsHtml = housesList.map(house => `
         <option value="${house.id}" style="color: ${house.color}; font-weight: 500;" ${student.house_id === house.id ? 'selected' : ''}>
             🏠 ${escapeHtml(house.name)}
@@ -3526,141 +4007,47 @@ window.editStudent = async function(id) {
 };
 
 // ============================================
-// STUDENT MODULE - BUTTONS VISIBLE, ALERTS FOR UNAUTHORIZED
+// DELETE SINGLE STUDENT - FIXED
 // ============================================
-
-// ============================================
-// VERIFY SUPER ADMIN PASSWORD (For Admin delete)
-// ============================================
-
-async function verifySuperAdminPasswordForStudent() {
-    return new Promise((resolve) => {
-        Swal.fire({
-            title: '🔐 Super Admin Authorization Required',
-            html: `
-                <div class="text-start">
-                    <div class="alert alert-danger mb-3">
-                        <i class="fas fa-shield-alt"></i> 
-                        <strong>Authorization Required!</strong><br>
-                        This action requires Super Administrator approval.
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Super Admin Password</label>
-                        <input type="password" id="superAdminPassword" class="form-control" 
-                               placeholder="Enter Super Admin password" autocomplete="off">
-                        <small class="text-muted">A Super Admin must authorize this action.</small>
-                    </div>
-                    <div id="passwordError" class="alert alert-danger small" style="display: none;">
-                        <i class="fas fa-exclamation-triangle"></i> Incorrect Super Admin password. Access denied.
-                    </div>
-                </div>
-            `,
-            width: '450px',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check"></i> Authorize',
-            cancelButtonText: '<i class="fas fa-times"></i> Cancel',
-            confirmButtonColor: '#d33',
-            allowOutsideClick: false,
-            didOpen: () => {
-                const passwordInput = document.getElementById('superAdminPassword');
-                if (passwordInput) {
-                    passwordInput.focus();
-                    passwordInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            Swal.clickConfirm();
-                        }
-                    });
-                }
-            },
-            preConfirm: async () => {
-                const password = document.getElementById('superAdminPassword')?.value;
-                
-                if (!password) {
-                    Swal.showValidationMessage('Please enter Super Admin password');
-                    return false;
-                }
-                
-                try {
-                    const { data: superAdminData, error: superAdminError } = await sb
-                        .from('users')
-                        .select('email')
-                        .eq('role', 'superadmin')
-                        .limit(1)
-                        .single();
-                    
-                    if (superAdminError) {
-                        Swal.showValidationMessage('Could not verify Super Admin credentials');
-                        return false;
-                    }
-                    
-                    const { data, error } = await sb.auth.signInWithPassword({
-                        email: superAdminData.email,
-                        password: password
-                    });
-                    
-                    if (error) {
-                        const errorDiv = document.getElementById('passwordError');
-                        if (errorDiv) errorDiv.style.display = 'block';
-                        Swal.showValidationMessage('Incorrect Super Admin password');
-                        return false;
-                    }
-                    
-                    return true;
-                } catch (err) {
-                    Swal.showValidationMessage('Verification failed. Please try again.');
-                    return false;
-                }
-            }
-        }).then((result) => {
-            resolve(result.isConfirmed);
-        });
-    });
-}
-
-// ============================================
-// PERMISSION CHECK FUNCTIONS (For alerts)
-// ============================================
-
-function canAddStudent() {
-    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
-}
-
-function canEditStudent() {
-    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
-}
-
-function canDeleteStudent() {
-    if (currentUserRole === 'superadmin') return 'superadmin';
-    if (currentUserRole === 'admin') return 'admin';
-    return false;
-}
-
-function canUseBulkUpload() {
-    return (currentUserRole === 'superadmin' || currentUserRole === 'admin');
-}
 
 window.deleteStudentItem = async function(id) {
     const student = students.find(s => s.id === id);
     if (!student) return;
     
+    const rows = document.querySelectorAll('#studentsTableBody tr');
+    let isVisible = false;
+    for (const row of rows) {
+        const cb = row.querySelector(`.studentCheck[data-id="${id}"]`);
+        if (cb && row.style.display !== 'none') {
+            isVisible = true;
+            break;
+        }
+    }
+    
+    if (!isVisible) {
+        Swal.fire({
+            title: 'Student Not Visible',
+            text: 'This student is currently filtered out. Please clear filters to delete.',
+            icon: 'warning',
+            confirmButtonText: 'OK'
+        });
+        return;
+    }
+    
     const deletePermission = canDeleteStudent();
     
-    // If not authorized to delete at all
     if (!deletePermission) {
         Swal.fire({
             title: '⛔ Access Denied',
             html: `<p>You do not have permission to delete students.</p>
                    <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
-                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can delete students.</p>
-                   <hr>
-                   <p>Please contact your administrator for access.</p>`,
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can delete students.</p>`,
             icon: 'error',
             confirmButtonText: 'OK'
         });
         return;
     }
     
-    // Super Admin - delete directly
     if (deletePermission === 'superadmin') {
         const result = await Swal.fire({
             title: 'Delete Student?',
@@ -3686,13 +4073,12 @@ window.deleteStudentItem = async function(id) {
         return;
     }
     
-    // Admin - needs Super Admin password
     if (deletePermission === 'admin') {
         const result = await Swal.fire({
             title: 'Delete Student?',
             html: `<p>Are you sure you want to delete <strong>${escapeHtml(student.name)}</strong>?</p>
                    <p class="text-danger">⚠️ This action cannot be undone!</p>
-                   <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization is required to delete students.</p>`,
+                   <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Super Admin authorization is required.</p>`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -3737,32 +4123,39 @@ window.deleteStudentItem = async function(id) {
     }
 };
 
+// ============================================
+// BULK DELETE STUDENTS - FIXED
+// ============================================
+
 window.bulkDeleteStudents = async function() {
-    const ids = Array.from(document.querySelectorAll('.studentCheck:checked')).map(cb => cb.dataset.id);
+    const visibleRows = document.querySelectorAll('#studentsTableBody tr:not([style*="display: none"])');
+    const ids = [];
+    visibleRows.forEach(row => {
+        const cb = row.querySelector('.studentCheck:checked');
+        if (cb) {
+            ids.push(cb.dataset.id);
+        }
+    });
     
-    if (!ids.length) {
-        Swal.fire('Error', 'No students selected', 'error');
+    if (ids.length === 0) {
+        Swal.fire('Error', 'No students selected. Please check the boxes of students you want to delete.', 'error');
         return;
     }
     
     const deletePermission = canDeleteStudent();
     
-    // If not authorized to delete at all
     if (!deletePermission) {
         Swal.fire({
             title: '⛔ Access Denied',
             html: `<p>You do not have permission to delete students.</p>
                    <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
-                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can delete students.</p>
-                   <hr>
-                   <p>Please contact your administrator for access.</p>`,
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can delete students.</p>`,
             icon: 'error',
             confirmButtonText: 'OK'
         });
         return;
     }
     
-    // Super Admin - delete directly
     if (deletePermission === 'superadmin') {
         const result = await Swal.fire({
             title: `Delete ${ids.length} students?`,
@@ -3788,7 +4181,6 @@ window.bulkDeleteStudents = async function() {
         return;
     }
     
-    // Admin - needs Super Admin password
     if (deletePermission === 'admin') {
         const result = await Swal.fire({
             title: `Delete ${ids.length} students?`,
@@ -3846,140 +4238,373 @@ window.bulkDeleteStudents = async function() {
 };
 
 // ============================================
-// VIEW STUDENT DETAILS - ADDITIONAL INFO REMOVED
+// BULK UPLOAD - EXCEL
 // ============================================
 
-window.viewStudent = async function(id) {
-    const student = students.find(s => s.id === id);
-    if (!student) return;
-    
-    // Load house information if assigned
-    let houseInfo = '';
-    if (student.house_id) {
-        const { data: house } = await sb
-            .from('houses')
-            .select('name, color')
-            .eq('id', student.house_id)
-            .single();
-        
-        if (house) {
-            houseInfo = `
-                <div class="detail-row">
-                    <div class="detail-label">🏠 House:</div>
-                    <div class="detail-value">
-                        <span style="background: ${house.color}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px;">
-                            ${escapeHtml(house.name)}
-                        </span>
-                    </div>
-                </div>
-            `;
-        }
+window.showBulkUploadModal = function() {
+    if (!canUseBulkUpload()) {
+        Swal.fire({
+            title: '⛔ Access Denied',
+            html: `<p>You do not have permission to bulk upload students.</p>
+                   <p><strong>Your Role:</strong> ${currentUserRole.toUpperCase()}</p>
+                   <p>Only <strong>Super Admin</strong> and <strong>Admin</strong> can bulk upload.</p>`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        return;
     }
     
-    // Get class teacher if available
-    let classTeacher = 'Not Assigned';
-    if (student.class) {
-        const classNumber = student.class.replace('S.', '');
-        const streamLower = (student.stream || 'a').toLowerCase();
-        const teacherKey = `teacher_s${classNumber}_${streamLower}`;
-        
-        const { data: settings } = await sb
-            .from('school_settings')
-            .select(teacherKey)
-            .limit(1)
-            .maybeSingle();
-        
-        if (settings && settings[teacherKey]) {
-            classTeacher = settings[teacherKey];
-        }
-    }
-    
-    const isAlevel = student.class === 'S.5' || student.class === 'S.6';
+    const isAlevel = currentLevel === 'alevel';
     
     Swal.fire({
-        title: `<i class="fas fa-user-graduate"></i> Student Details`,
+        title: '<i class="fas fa-upload"></i> Bulk Upload Students (Excel)',
         html: `
-            <div class="text-start" style="max-width: 500px;">
-                <div style="display: flex; justify-content: center; margin-bottom: 15px;">
-                    <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #01605a, #ff862d); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                        <i class="fas fa-user-graduate" style="font-size: 40px; color: white;"></i>
-                    </div>
+            <div class="text-start">
+                <div class="alert alert-info small p-2 mb-3">
+                    <i class="fas fa-info-circle"></i> <strong>Instructions:</strong><br>
+                    1. Click "Download Template" below<br>
+                    2. Fill in student data (Name and Class are required)<br>
+                    3. Save as Excel file (.xlsx)<br>
+                    4. Select and upload the file
                 </div>
                 
-                <div style="background: #f0f8ff; padding: 12px; border-radius: 10px; margin-bottom: 15px;">
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Student Name:</div>
-                        <div class="detail-value">${escapeHtml(student.name)}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Admission No:</div>
-                        <div class="detail-value">${student.admission_no || '-'}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Class:</div>
-                        <div class="detail-value">${student.class} ${student.stream ? '- ' + student.stream : ''}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Student Type:</div>
-                        <div class="detail-value">${student.student_type || 'Day'}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Gender:</div>
-                        <div class="detail-value">${student.gender || '-'}</div>
-                    </div>
-                    ${houseInfo}
-                    ${isAlevel ? `
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Combination:</div>
-                        <div class="detail-value">${student.combination || '-'}</div>
-                    </div>
-                    ` : ''}
-                    <div class="detail-row" style="display: flex; margin-bottom: 8px;">
-                        <div class="detail-label" style="width: 120px; font-weight: bold; color: #01605a;">Class Teacher:</div>
-                        <div class="detail-value">${escapeHtml(classTeacher)}</div>
-                    </div>
-                </div>
+                <button class="btn btn-info btn-sm w-100 mb-3" onclick="downloadExcelTemplate()">
+                    <i class="fas fa-download"></i> Download Excel Template
+                </button>
                 
-                <div style="background: #f8f9fa; padding: 12px; border-radius: 10px; margin-bottom: 15px;">
-                    <h6 style="color: #01605a; margin-bottom: 10px;"><i class="fas fa-parent"></i> Parent/Guardian Information</h6>
-                    <div class="detail-row" style="display: flex; margin-bottom: 6px;">
-                        <div class="detail-label" style="width: 100px; font-weight: bold;">Name:</div>
-                        <div class="detail-value">${escapeHtml(student.parent_name || '-')}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex; margin-bottom: 6px;">
-                        <div class="detail-label" style="width: 100px; font-weight: bold;">Phone:</div>
-                        <div class="detail-value">${student.parent_phone || '-'}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex; margin-bottom: 6px;">
-                        <div class="detail-label" style="width: 100px; font-weight: bold;">Email:</div>
-                        <div class="detail-value">${student.parent_email || '-'}</div>
-                    </div>
-                    <div class="detail-row" style="display: flex;">
-                        <div class="detail-label" style="width: 100px; font-weight: bold;">Address:</div>
-                        <div class="detail-value">${escapeHtml(student.address || '-')}</div>
-                    </div>
+                <div class="mb-3">
+                    <label class="fw-bold">Select Excel File</label>
+                    <input type="file" id="bulkExcelFile" accept=".xlsx, .xls" class="form-control">
                 </div>
             </div>
         `,
         width: '550px',
-        confirmButtonText: '<i class="fas fa-times"></i> Close',
-        showCloseButton: true,
-        customClass: {
-            popup: 'student-details-modal'
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-upload"></i> Upload',
+        preConfirm: () => {
+            const file = document.getElementById('bulkExcelFile')?.files[0];
+            if (!file) {
+                Swal.showValidationMessage('Please select an Excel file');
+                return false;
+            }
+            return file;
+        }
+    }).then(async (result) => {
+        if (result.value) {
+            await processExcelUpload(result.value);
         }
     });
 };
 
-// ============================================
-// PRINT FUNCTIONS
-// ============================================
+window.downloadExcelTemplate = function() {
+    const isAlevel = currentLevel === 'alevel';
+    
+    const headers = [
+        'Name', 'Class', 'Stream', 'Gender', 'Student Type', 
+        'House', 'Parent Name', 'Parent Phone', 'Parent Email', 'Address'
+    ];
+    
+    if (isAlevel) {
+        headers.splice(6, 0, 'Combination');
+    }
+    
+    const sampleData = [
+        [
+            'John Doe',
+            isAlevel ? 'S.5' : 'S.3',
+            isAlevel ? 'Sciences' : 'A',
+            'Male',
+            'Day',
+            isAlevel ? 'PCM' : '',
+            'Red House',
+            'Mr. Doe',
+            '0772123456',
+            'john@email.com',
+            'Kampala'
+        ],
+        [
+            'Jane Smith',
+            isAlevel ? 'S.6' : 'S.4',
+            isAlevel ? 'Arts' : 'B',
+            'Female',
+            'Boarding',
+            isAlevel ? 'HEG' : '',
+            'Blue House',
+            'Mrs. Smith',
+            '0772987654',
+            'jane@email.com',
+            'Entebbe'
+        ]
+    ];
+    
+    const wsData = [headers, ...sampleData];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    
+    ws['!cols'] = [
+        { wch: 25 }, { wch: 10 }, { wch: 12 }, { wch: 8 },
+        { wch: 12 }, ...(isAlevel ? [{ wch: 12 }] : []),
+        { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 30 }
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students Template');
+    
+    const instructionsData = [
+        ['INSTRUCTIONS FOR BULK UPLOAD'],
+        [''],
+        ['Required Fields:', 'Name, Class'],
+        ['Optional Fields:', 'Stream, Gender, Student Type, House, Parent Name, Parent Phone, Parent Email, Address'],
+        ...(isAlevel ? [['For A-Level:', 'Combination is optional (e.g., PCM, HEG, BAM)']] : []),
+        [''],
+        ['Valid Values:'],
+        ['Class (O-Level):', 'S.1, S.2, S.3, S.4'],
+        ['Class (A-Level):', 'S.5, S.6'],
+        ['Gender:', 'Male, Female'],
+        ['Student Type:', 'Day, Boarding'],
+        ['House:', 'Must match existing houses in the system'],
+        ...(isAlevel ? [['Combination Examples:', 'PCM, PCB, HEG, BAM, MEG']] : []),
+        [''],
+        ['NOTE: House names must exactly match existing houses in the system!']
+    ];
+    
+    const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
+    wsInstructions['!cols'] = [{ wch: 25 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+    
+    XLSX.writeFile(wb, `student_template_${currentLevel}.xlsx`);
+    Swal.fire('Template Downloaded', 'Fill the Excel template and upload back', 'success');
+};
+
+async function processExcelUpload(file) {
+    Swal.fire({ 
+        title: 'Processing...', 
+        text: 'Reading Excel file...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            
+            if (!jsonData || jsonData.length === 0) {
+                Swal.fire('Error', 'No data found in Excel file', 'error');
+                return;
+            }
+            
+            const { data: houses } = await sb.from('houses').select('id, name');
+            const houseMap = {};
+            if (houses) {
+                houses.forEach(house => {
+                    houseMap[house.name.toLowerCase()] = house.id;
+                });
+            }
+            
+            let successCount = 0;
+            let errorCount = 0;
+            const errors = [];
+            
+            for (let i = 0; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const rowNum = i + 2;
+                
+                try {
+                    const name = row.Name || row.name || row.NAME || '';
+                    const className = row.Class || row.class || row.CLASS || '';
+                    const stream = row.Stream || row.stream || '';
+                    const gender = row.Gender || row.gender || 'Male';
+                    const studentType = row['Student Type'] || row.student_type || row['Student_Type'] || 'Day';
+                    const house = row.House || row.house || '';
+                    const parentName = row['Parent Name'] || row.parent_name || row['Parent_Name'] || '';
+                    const parentPhone = row['Parent Phone'] || row.parent_phone || row['Parent_Phone'] || '';
+                    const parentEmail = row['Parent Email'] || row.parent_email || row['Parent_Email'] || '';
+                    const address = row.Address || row.address || '';
+                    let combination = row.Combination || row.combination || '';
+                    
+                    if (!name) {
+                        errors.push(`Row ${rowNum}: Name is required`);
+                        errorCount++;
+                        continue;
+                    }
+                    if (!className) {
+                        errors.push(`Row ${rowNum}: Class is required`);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    const validClasses = currentLevel === 'olevel' 
+                        ? ['S.1', 'S.2', 'S.3', 'S.4']
+                        : ['S.5', 'S.6'];
+                    
+                    if (!validClasses.includes(className)) {
+                        errors.push(`Row ${rowNum}: Invalid class "${className}". Valid: ${validClasses.join(', ')}`);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    let houseId = null;
+                    if (house) {
+                        const houseName = house.toLowerCase();
+                        if (houseMap[houseName]) {
+                            houseId = houseMap[houseName];
+                        } else {
+                            errors.push(`Row ${rowNum}: House "${house}" not found. Available: ${houses?.map(h => h.name).join(', ') || 'None'}`);
+                            errorCount++;
+                            continue;
+                        }
+                    }
+                    
+                    const year = new Date().getFullYear();
+                    const prefix = currentLevel === 'olevel' ? 'O' : 'A';
+                    const timestamp = Date.now().toString().slice(-8);
+                    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+                    const admissionNo = `${prefix}/${year}/${timestamp}${random}`;
+                    
+                    const studentData = {
+                        admission_no: admissionNo,
+                        name: name,
+                        class: className,
+                        stream: stream || '',
+                        gender: gender === 'Male' ? 'Male' : 'Female',
+                        student_type: studentType === 'Boarding' ? 'Boarding' : 'Day',
+                        house_id: houseId,
+                        parent_name: parentName,
+                        parent_phone: parentPhone,
+                        parent_email: parentEmail,
+                        address: address,
+                        level: currentLevel,
+                        created_at: new Date().toISOString()
+                    };
+                    
+                    if (currentLevel === 'alevel' && combination) {
+                        studentData.combination = combination.toUpperCase();
+                    }
+                    
+                    const { error } = await sb.from('students').insert([studentData]);
+                    
+                    if (error) {
+                        errors.push(`Row ${rowNum}: ${error.message}`);
+                        errorCount++;
+                    } else {
+                        successCount++;
+                    }
+                    
+                } catch (err) {
+                    errors.push(`Row ${rowNum}: ${err.message}`);
+                    errorCount++;
+                }
+            }
+            
+            Swal.close();
+            
+            let message = `<div class="text-start">`;
+            message += `<p><strong>✅ Successfully added:</strong> ${successCount} students</p>`;
+            if (errorCount > 0) {
+                message += `<p><strong>❌ Failed:</strong> ${errorCount} students</p>`;
+                if (errors.length > 0) {
+                    message += `<hr><strong>Errors:</strong><ul>`;
+                    errors.slice(0, 10).forEach(err => {
+                        message += `<li>${escapeHtml(err)}</li>`;
+                    });
+                    if (errors.length > 10) {
+                        message += `<li>... and ${errors.length - 10} more errors</li>`;
+                    }
+                    message += `</ul>`;
+                }
+            }
+            message += `</div>`;
+            
+            Swal.fire({
+                title: 'Upload Complete',
+                html: message,
+                icon: errorCount > 0 ? 'warning' : 'success',
+                width: '600px'
+            });
+            
+            if (typeof refreshStudents === 'function') {
+                await refreshStudents();
+            }
+            
+        } catch (error) {
+            Swal.close();
+            Swal.fire('Error', 'Failed to process Excel file: ' + error.message, 'error');
+        }
+    };
+    
+    reader.onerror = (error) => {
+        Swal.close();
+        Swal.fire('Error', 'Failed to read the file', 'error');
+    };
+    
+    reader.readAsArrayBuffer(file);
+}
 
 // ============================================
-// PRINT ALL STUDENTS WITH SCHOOL INFO & WATERMARK
+// EXPORT STUDENTS TO EXCEL
 // ============================================
 
+window.exportStudents = async function() {
+    if (!students.length) {
+        Swal.fire('Error', 'No students to export', 'error');
+        return;
+    }
+    
+    const { data: houses } = await sb.from('houses').select('id, name, color');
+    const housesMap = {};
+    if (houses) {
+        houses.forEach(house => {
+            housesMap[house.id] = house;
+        });
+    }
+    
+    const exportData = students.map(s => {
+        const house = housesMap[s.house_id];
+        return {
+            'Admission No': s.admission_no || '',
+            'Student Name': s.name || '',
+            'Class': s.class || '',
+            'Stream': s.stream || '',
+            'Gender': s.gender || '',
+            'Student Type': s.student_type || 'Day',
+            'House': house ? house.name : '',
+            'Parent/Guardian': s.parent_name || '',
+            'Parent Phone': s.parent_phone || '',
+            'Parent Email': s.parent_email || '',
+            'Address': s.address || '',
+            'Date Registered': s.created_at ? new Date(s.created_at).toLocaleDateString() : ''
+        };
+    });
+    
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [
+        { wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 12 },
+        { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 20 },
+        { wch: 15 }, { wch: 25 }, { wch: 30 }, { wch: 15 }
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${currentLevel.toUpperCase()}_Students`);
+    
+    const filename = `Students_${currentLevel.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    
+    Swal.fire({
+        title: 'Exported!',
+        text: `${students.length} students exported successfully.`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+    });
+};
+
 // ============================================
-// PRINT FILTERED STUDENTS (Respects Search & Filters)
+// PRINT FUNCTIONS - KEPT ORIGINAL
 // ============================================
 
 window.printFilteredStudents = async function() {
@@ -4080,13 +4705,13 @@ window.printFilteredStudents = async function() {
             
             tableRows += `
                 <tr>
-                    <td style="padding: 8px; text-align: center;">${index + 1}</span></td>
-                    <td style="padding: 8px;">${escapeHtml(student.name)}</span></td>
-                    <td style="padding: 8px; text-align: center;">${student.admission_no || '-'}</span></td>
-                    <td style="padding: 8px; text-align: center;">${student.gender || '-'}</span></td>
-                    <td style="padding: 8px; text-align: center;">${houseHtml}</span></td>
-                    <td style="padding: 8px;">${escapeHtml(student.parent_name || '-')}</span></td>
-                    <td style="padding: 8px;">${student.parent_phone || '-'}</span></td>
+                    <td style="padding: 8px; text-align: center;">${index + 1}</td>
+                    <td style="padding: 8px;">${escapeHtml(student.name)}</td>
+                    <td style="padding: 8px; text-align: center;">${student.admission_no || '-'}</td>
+                    <td style="padding: 8px; text-align: center;">${student.gender || '-'}</td>
+                    <td style="padding: 8px; text-align: center;">${houseHtml}</td>
+                    <td style="padding: 8px;">${escapeHtml(student.parent_name || '-')}</td>
+                    <td style="padding: 8px;">${student.parent_phone || '-'}</td>
                 </tr>
             `;
         });
@@ -4422,15 +5047,11 @@ window.printFilteredStudents = async function() {
     printWindow.document.close();
 };
 
-// Update the button in renderStudents to use the new function
-// Change the button from onclick="printAllStudents()" to onclick="printFilteredStudents()"
-
 // ============================================
-// PRINT STUDENTS BY CLASS WITH SCHOOL INFO & WATERMARK
+// PRINT STUDENTS BY CLASS
 // ============================================
 
 window.printStudentsByClass = async function() {
-    // Load school settings for logo and info
     const { data: schoolData } = await sb
         .from('school_settings')
         .select('*')
@@ -4447,7 +5068,6 @@ window.printStudentsByClass = async function() {
         principal_name: 'Principal'
     };
     
-    // Get unique classes
     const classes = [...new Set(students.map(s => s.class))].sort();
     
     if (classes.length === 0) {
@@ -4467,7 +5087,6 @@ window.printStudentsByClass = async function() {
     
     if (!className) return;
     
-    // Filter students by selected class
     const filteredStudents = students.filter(s => s.class === className);
     
     if (filteredStudents.length === 0) {
@@ -4475,7 +5094,6 @@ window.printStudentsByClass = async function() {
         return;
     }
     
-    // Load houses for display
     const { data: houses } = await sb.from('houses').select('id, name, color');
     const housesMap = {};
     if (houses) {
@@ -4492,7 +5110,6 @@ window.printStudentsByClass = async function() {
     });
     const logoUrl = schoolInfo.school_logo || '';
     
-    // Generate table rows
     let tableRows = '';
     filteredStudents.forEach((student, index) => {
         const house = housesMap[student.house_id];
@@ -4513,7 +5130,6 @@ window.printStudentsByClass = async function() {
         `;
     });
     
-    // Count statistics
     const maleCount = filteredStudents.filter(s => s.gender === 'Male').length;
     const femaleCount = filteredStudents.filter(s => s.gender === 'Female').length;
     const dayCount = filteredStudents.filter(s => s.student_type === 'Day').length;
@@ -4765,12 +5381,12 @@ window.printStudentsByClass = async function() {
     
     printWindow.document.close();
 };
+
 // ============================================
-// PRINT STUDENT ID CARDS WITH SCHOOL INFO & WATERMARK
+// PRINT STUDENT ID CARDS
 // ============================================
 
 window.printStudentIdCards = async function() {
-    // Load school settings for logo and info
     const { data: schoolData } = await sb
         .from('school_settings')
         .select('*')
@@ -4787,7 +5403,6 @@ window.printStudentIdCards = async function() {
         principal_name: 'Principal'
     };
     
-    // Get selected students from checkboxes
     const selected = Array.from(document.querySelectorAll('.studentCheck:checked'))
         .map(cb => students.find(s => s.id === cb.dataset.id))
         .filter(s => s);
@@ -4816,7 +5431,6 @@ window.printStudentIdCards = async function() {
         return;
     }
     
-    // Load houses for display
     const { data: houses } = await sb.from('houses').select('id, name, color');
     const housesMap = {};
     if (houses) {
@@ -4826,18 +5440,12 @@ window.printStudentIdCards = async function() {
     }
     
     const printWindow = window.open('', '_blank');
-    const currentDate = new Date().toLocaleDateString('en-GB');
     const logoUrl = schoolInfo.school_logo || '';
     
     let allCardsHtml = '';
     
     for (const student of studentsToPrint) {
         const house = housesMap[student.house_id];
-        const houseHtml = house ? 
-            `<span style="background: ${house.color}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; display: inline-block;">🏠 ${escapeHtml(house.name)}</span>` : 
-            '<span style="color: #999;">No House Assigned</span>';
-        
-        // Generate a unique card ID
         const cardId = `CARD-${student.admission_no || student.id.slice(0, 8)}`;
         
         allCardsHtml += `
@@ -5143,127 +5751,16 @@ window.printStudentIdCards = async function() {
     
     printWindow.document.close();
 };
-// ============================================
-// EXPORT STUDENTS TO EXCEL WITH HOUSE & SCHOOL INFO
-// ============================================
-
-window.exportStudents = async function() {
-    if (!students.length) {
-        Swal.fire('Error', 'No students to export', 'error');
-        return;
-    }
-    
-    // Load houses for display
-    const { data: houses } = await sb.from('houses').select('id, name, color');
-    const housesMap = {};
-    if (houses) {
-        houses.forEach(house => {
-            housesMap[house.id] = house;
-        });
-    }
-    
-    // Prepare data for export
-    const exportData = students.map(s => {
-        const house = housesMap[s.house_id];
-        
-        return {
-            'Admission No': s.admission_no || '',
-            'Student Name': s.name || '',
-            'Class': s.class || '',
-            'Stream': s.stream || '',
-            'Gender': s.gender || '',
-            'Student Type': s.student_type || 'Day',
-            'House': house ? house.name : '',
-            'Parent/Guardian': s.parent_name || '',
-            'Parent Phone': s.parent_phone || '',
-            'Parent Email': s.parent_email || '',
-            'Address': s.address || '',
-            'Date Registered': s.created_at ? new Date(s.created_at).toLocaleDateString() : ''
-        };
-    });
-    
-    // Create worksheet
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    
-    // Set column widths
-    ws['!cols'] = [
-        { wch: 15 }, // Admission No
-        { wch: 25 }, // Student Name
-        { wch: 10 }, // Class
-        { wch: 12 }, // Stream
-        { wch: 8 },  // Gender
-        { wch: 12 }, // Student Type
-        { wch: 15 }, // House
-        { wch: 20 }, // Parent/Guardian
-        { wch: 15 }, // Parent Phone
-        { wch: 25 }, // Parent Email
-        { wch: 30 }, // Address
-        { wch: 15 }  // Date Registered
-    ];
-    
-    // Style the header row
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:L1');
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-        const address = XLSX.utils.encode_cell({ r: 0, c: C });
-        if (!ws[address]) continue;
-        ws[address].s = {
-            font: { bold: true, color: { rgb: "FFFFFF" } },
-            fill: { fgColor: { rgb: "01605a" } },
-            alignment: { horizontal: "center" }
-        };
-    }
-    
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${currentLevel.toUpperCase()}_Students`);
-    
-    // Generate filename
-    const filename = `Students_${currentLevel.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    
-    // Export
-    XLSX.writeFile(wb, filename);
-    
-    Swal.fire({
-        title: 'Exported!',
-        text: `${students.length} students exported successfully.`,
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-    });
-};
 
 // ============================================
 // INITIALIZATION
 // ============================================
 
-async function init() {
-    await initSupabase();
-    await getStudents();
-    await sb.auth.signInWithPassword({ email: 'superadmin@school.com', password: 'Admin123!' }).catch(() => {});
-    
-    document.getElementById('app').innerHTML = await renderStudents();
-    await loadStudentsTable();
-    
-    document.getElementById('levelOlevel')?.addEventListener('click', async () => {
-        currentLevel = 'olevel';
-        document.getElementById('levelOlevel').classList.add('active');
-        document.getElementById('levelAlevel').classList.remove('active');
-        document.getElementById('app').innerHTML = await renderStudents();
-        await loadStudentsTable();
-    });
-    
-    document.getElementById('levelAlevel')?.addEventListener('click', async () => {
-        currentLevel = 'alevel';
-        document.getElementById('levelAlevel').classList.add('active');
-        document.getElementById('levelOlevel').classList.remove('active');
-        document.getElementById('app').innerHTML = await renderStudents();
-        await loadStudentsTable();
-    });
-}
-
-init();
-
-
+console.log('✅ Student Module Loaded - Complete Masterpiece!');
+console.log('✅ Features: Class Statistics Dashboard, View Student Details with Marks, Add, Edit, Delete, Bulk Upload, Export, Print');
+console.log('✅ Fixed: Select All only checks visible rows');
+console.log('✅ Fixed: House Filter properly filters by house name');
+console.log('✅ Fixed: Bulk Delete only deletes visible selected rows');
 
 // ==================== SUBJECTS MODULE ====================
 // ============================================
