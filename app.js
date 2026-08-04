@@ -825,9 +825,10 @@ async function getSchoolSettings() {
 }
 
 // ============================================
-// FIXED DASHBOARD - CORRECT GRADE DISTRIBUTION
-// Uses actual grades from settings (A, B, C, D, E)
-// No hardcoded F grade
+// FINAL DASHBOARD MASTERPIECE - FULLY WORKING
+// Fixed: Grade Distribution (A-E only, no F)
+// Fixed: Class Statistics with Boarding/Day
+// All Analytics Tabs Working: Performance, Progress, Heatmap, Trends, Comparative
 // ============================================
 
 async function renderDashboard() {
@@ -843,9 +844,7 @@ async function renderDashboard() {
         getSchoolSettings()
     ]);
     
-    // ============================================
-    // FIX: Attach student names to marks data
-    // ============================================
+    // Attach student names to marks data
     for (const mark of marksData) {
         const student = studentsData.find(s => s.id === mark.student_id);
         if (student) {
@@ -884,9 +883,6 @@ async function renderDashboard() {
         secretary: 'bg-success'
     };
     const roleColor = roleBadgeColors[currentUserRole] || 'bg-secondary';
-    
-    // Get available pages from roleMenus for current user
-    const availablePages = roleMenus[currentUserRole]?.map(menu => menu.page) || [];
     
     // Welcome buttons based on role
     const welcomeButtonConfig = {
@@ -994,7 +990,7 @@ async function renderDashboard() {
         config.roles.includes(currentUserRole)
     );
     
-    // Generate stats cards HTML (responsive grid)
+    // Generate stats cards HTML
     const statsCardsHtml = `
         <div class="stats-grid">
             ${visibleCards.map(([key, card]) => `
@@ -1069,19 +1065,106 @@ async function renderDashboard() {
     ` : '';
     
     // ============================================
+    // CLASS STATISTICS WITH BOARDING/DAY BREAKDOWN
+    // ============================================
+    function getClassStats() {
+        const classStats = {};
+        const classColors = {
+            'S.1': '#4facfe',
+            'S.2': '#43e97b',
+            'S.3': '#fa709a',
+            'S.4': '#f093fb',
+            'S.5': '#4facfe',
+            'S.6': '#f093fb'
+        };
+        
+        const allClasses = currentLevel === 'olevel' ? ['S.1', 'S.2', 'S.3', 'S.4'] : ['S.5', 'S.6'];
+        for (const className of allClasses) {
+            classStats[className] = {
+                total: 0,
+                boarding: 0,
+                day: 0,
+                color: classColors[className] || '#6c757d'
+            };
+        }
+        
+        for (const student of studentsData) {
+            const className = student.class || 'Unknown';
+            if (!classStats[className]) {
+                classStats[className] = { total: 0, boarding: 0, day: 0, color: '#6c757d' };
+            }
+            classStats[className].total++;
+            if (student.student_type === 'Boarding') {
+                classStats[className].boarding++;
+            } else {
+                classStats[className].day++;
+            }
+        }
+        
+        const result = [];
+        const totalStudents = studentsData.length || 1;
+        const classOrder = currentLevel === 'olevel' ? ['S.1', 'S.2', 'S.3', 'S.4'] : ['S.5', 'S.6'];
+        
+        for (const [className, stats] of Object.entries(classStats)) {
+            result.push({
+                class: className,
+                total: stats.total,
+                boarding: stats.boarding,
+                day: stats.day,
+                percentage: ((stats.total / totalStudents) * 100).toFixed(1),
+                color: stats.color
+            });
+        }
+        
+        result.sort((a, b) => {
+            const indexA = classOrder.indexOf(a.class);
+            const indexB = classOrder.indexOf(b.class);
+            if (indexA === -1 && indexB === -1) return 0;
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
+        
+        return result;
+    }
+    
+    const classStats = getClassStats();
+    
+    const classStatsHtml = `
+        <div class="class-stats-dashboard">
+            <div class="stats-header">
+                <h5><i class="fas fa-chart-bar"></i> Student Statistics by Class</h5>
+                <span class="total-students">Total: <strong>${studentsData.length}</strong> students</span>
+                <span class="breakdown-summary">
+                    🏠 <strong>${studentsData.filter(s => s.student_type === 'Boarding').length}</strong> Boarding | 
+                    ☀️ <strong>${studentsData.filter(s => s.student_type === 'Day').length}</strong> Day
+                </span>
+            </div>
+            <div class="stats-grid">
+                ${classStats.map(stat => `
+                    <div class="stat-card-mini" style="border-left: 4px solid ${stat.color};">
+                        <div class="stat-class">${stat.class}</div>
+                        <div class="stat-number">${stat.total}</div>
+                        <div class="stat-breakdown">
+                            <span class="stat-boarding"><i class="fas fa-home"></i> ${stat.boarding}</span>
+                            <span class="stat-day"><i class="fas fa-sun"></i> ${stat.day}</span>
+                        </div>
+                        <div class="stat-bar" style="width: ${stat.percentage}%; background: ${stat.color};"></div>
+                        <div class="stat-percent">${stat.percentage}%</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    // ============================================
     // ANALYTICS SECTION - SUPER ADMIN ONLY
-    // FIXED: Uses actual grades from marks data
     // ============================================
     let analyticsHtml = '';
     
     if (currentUserRole === 'superadmin') {
         try {
-            // ============================================
-            // FIX: Get actual grades from the grading rules
-            // ============================================
-            const gradeKeys = ['A', 'B', 'C', 'D', 'E']; // Only grades used in system
-            
-            // Initialize grade counts
+            const gradeKeys = ['A', 'B', 'C', 'D', 'E'];
             const gradeCounts = {};
             gradeKeys.forEach(g => gradeCounts[g] = 0);
             
@@ -1102,10 +1185,7 @@ async function renderDashboard() {
                     
                     totalScores += percentage;
                     
-                    // ============================================
-                    // FIX: Get grade from the actual grading system
-                    // ============================================
-                    let grade = 'E'; // Default
+                    let grade = 'E';
                     if (percentage >= 85) grade = 'A';
                     else if (percentage >= 70) grade = 'B';
                     else if (percentage >= 60) grade = 'C';
@@ -1127,8 +1207,7 @@ async function renderDashboard() {
                         studentScores[studentName] = { 
                             name: studentName, 
                             scores: [], 
-                            class: mark.student_class || 'Unknown',
-                            admission: mark.student_admission || '-'
+                            class: mark.student_class || 'Unknown'
                         };
                     }
                     studentScores[studentName].scores.push(percentage);
@@ -1150,13 +1229,11 @@ async function renderDashboard() {
                         name: name,
                         average: data.scores.reduce((a, b) => a + b, 0) / data.scores.length,
                         count: data.scores.length,
-                        class: data.class,
-                        admission: data.admission
+                        class: data.class
                     }))
                     .sort((a, b) => b.average - a.average)
                     .slice(0, 10);
                 
-                // Store data for charts
                 window._analyticsData = {
                     gradeCounts,
                     subjectScores,
@@ -1173,10 +1250,7 @@ async function renderDashboard() {
                     gradeKeys
                 };
                 
-                // ============================================
-                // FIX: Generate analytics with correct grades
-                // ============================================
-                analyticsHtml = generateFixedAnalyticsHTML(
+                analyticsHtml = generateCompleteAnalyticsHTML(
                     gradeCounts, 
                     subjectScores, 
                     topPerformers,
@@ -1250,6 +1324,9 @@ async function renderDashboard() {
             <!-- Statistics Cards -->
             ${statsCardsHtml}
             
+            <!-- Class Statistics with Boarding/Day -->
+            ${classStatsHtml}
+            
             <!-- Analytics Section (Super Admin Only) -->
             ${analyticsHtml}
             
@@ -1299,7 +1376,6 @@ async function renderDashboard() {
         </div>
         
         <style>
-            /* Logo Watermark */
             .logo-watermark {
                 position: fixed;
                 top: 50%;
@@ -1344,7 +1420,6 @@ async function renderDashboard() {
                 z-index: 1;
             }
             
-            /* Dashboard Styles */
             .dashboard-container {
                 padding: 20px;
                 max-width: 1400px;
@@ -1380,7 +1455,6 @@ async function renderDashboard() {
             }
             .welcome-avatar i { font-size: 32px; color: white; }
             .welcome-avatar img { width: 100%; height: 100%; object-fit: cover; }
-            
             .welcome-info h2 {
                 margin: 0 0 8px 0;
                 font-size: 22px;
@@ -1395,7 +1469,6 @@ async function renderDashboard() {
             .role-badge.librarian { background: #212529; }
             .role-badge.secretary { background: #198754; }
             .level-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #6c757d; color: white; }
-            
             .welcome-actions { display: flex; gap: 12px; flex-wrap: wrap; }
             .welcome-btn {
                 padding: 10px 20px;
@@ -1444,6 +1517,73 @@ async function renderDashboard() {
             .stat-value { margin: 0; font-size: 28px; font-weight: 700; color: #2c3e50; }
             .stat-label { margin: 5px 0 0; font-size: 14px; color: #6c757d; }
             .stat-extra { font-size: 11px; color: #95a5a6; display: block; margin-top: 4px; }
+            
+            /* Class Statistics Dashboard */
+            .class-stats-dashboard {
+                background: white;
+                border-radius: 16px;
+                padding: 20px 25px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                border: 1px solid #eef2f6;
+                position: relative;
+                z-index: 1;
+            }
+            .stats-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .stats-header h5 {
+                margin: 0;
+                color: #2c3e50;
+                font-weight: 600;
+            }
+            .stats-header h5 i {
+                color: #ff862d;
+            }
+            .total-students {
+                font-size: 14px;
+                color: #6c757d;
+            }
+            .total-students strong {
+                color: #01605a;
+                font-size: 18px;
+            }
+            .breakdown-summary {
+                font-size: 13px;
+                color: #6c757d;
+            }
+            .breakdown-summary strong {
+                color: #2c3e50;
+            }
+            
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 12px;
+            }
+            .stat-card-mini {
+                background: #f8f9fa;
+                border-radius: 12px;
+                padding: 14px 16px;
+                border-left: 4px solid #01605a;
+                transition: transform 0.2s;
+                text-align: center;
+            }
+            .stat-card-mini:hover { transform: translateY(-3px); }
+            .stat-class { font-size: 13px; font-weight: 700; color: #2c3e50; margin-bottom: 2px; }
+            .stat-number { font-size: 32px; font-weight: 700; color: #2c3e50; line-height: 1.2; }
+            .stat-breakdown { display: flex; justify-content: center; gap: 16px; font-size: 12px; margin: 4px 0 8px; }
+            .stat-boarding { color: #01605a; font-weight: 600; }
+            .stat-boarding i { color: #01605a; }
+            .stat-day { color: #f39c12; font-weight: 600; }
+            .stat-day i { color: #f39c12; }
+            .stat-bar { height: 4px; border-radius: 2px; margin: 6px auto 0; transition: width 0.5s ease; max-width: 100%; }
+            .stat-percent { font-size: 10px; color: #6c757d; text-align: center; margin-top: 2px; }
             
             .dashboard-bottom {
                 display: grid;
@@ -1551,7 +1691,6 @@ async function renderDashboard() {
             }
             .analytics-tab:hover { background: #e0e0e0; }
             .analytics-tab.active { background: linear-gradient(135deg, #01605a, #ff862d); color: white; }
-            
             .analytics-panel { display: none; animation: fadeIn 0.4s ease; }
             .analytics-panel.active { display: block; }
             @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
@@ -1598,25 +1737,42 @@ async function renderDashboard() {
                 .analytics-tabs { justify-content: center; }
                 .comparative-controls { flex-direction: column; }
                 .comparative-controls select { width: 100%; }
+                .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+                .stat-card-mini { padding: 12px 10px; }
+                .stat-number { font-size: 26px; }
+                .stat-breakdown { font-size: 11px; gap: 12px; }
+                .stat-class { font-size: 12px; }
+                .stats-header { flex-direction: column; align-items: flex-start; }
+                .breakdown-summary { font-size: 12px; }
             }
+            
             @media (max-width: 480px) {
                 .welcome-btn { padding: 8px 16px; font-size: 12px; }
                 .welcome-info h2 { font-size: 18px; }
                 .payment-item { flex-direction: column; text-align: center; gap: 8px; }
                 .payment-info { align-items: center; }
+                .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+                .stat-card-mini { padding: 10px 8px; border-left-width: 3px; }
+                .stat-number { font-size: 22px; }
+                .stat-breakdown { font-size: 10px; gap: 8px; flex-wrap: wrap; }
+                .stat-class { font-size: 11px; }
+                .stat-bar { height: 3px; }
+                .stat-percent { font-size: 9px; }
+                .breakdown-summary { font-size: 11px; }
             }
         </style>
     `;
 }
 
 // ============================================
-// FIXED ANALYTICS HTML GENERATOR
-// Uses only grades A, B, C, D, E (no F)
+// COMPLETE ANALYTICS HTML GENERATOR
+// ============================================
+// ============================================
+// REPLACE THIS ENTIRE FUNCTION IN YOUR CODE
 // ============================================
 
-function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, avgScore, passRate, distinctionRate, bestSubject, worstSubject, totalMarks, marksData, studentsData, gradeKeys) {
+function generateCompleteAnalyticsHTML(gradeCounts, subjectScores, topPerformers, avgScore, passRate, distinctionRate, bestSubject, worstSubject, totalMarks, marksData, studentsData, gradeKeys) {
     
-    // Grade colors for A, B, C, D, E only
     const gradeColors = {
         'A': '#27ae60',
         'B': '#2ecc71',
@@ -1625,7 +1781,7 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
         'E': '#e74c3c'
     };
     
-    // Build grade distribution bars
+    // Grade distribution bars - A-E only
     let gradeBars = '';
     for (const grade of gradeKeys) {
         const count = gradeCounts[grade] || 0;
@@ -1800,21 +1956,95 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
         trendHtml = '<div class="text-center text-muted py-4">Not enough data for trend analysis</div>';
     }
     
-    // Build the full HTML with correct grade distribution
+    // Trend summary
+    let trendSummary = '';
+    if (terms.length >= 2) {
+        const first = marksByTerm[terms[0]].reduce((a,b) => a + b, 0) / marksByTerm[terms[0]].length;
+        const last = marksByTerm[terms[terms.length-1]].reduce((a,b) => a + b, 0) / marksByTerm[terms[terms.length-1]].length;
+        const change = ((last - first) / first) * 100;
+        let trend = 'Stable';
+        if (change > 5) trend = 'Improving';
+        else if (change < -5) trend = 'Declining';
+        
+        trendSummary = `
+            <div class="trend-item"><span class="trend-label">Overall Trend</span><span class="trend-value" style="color:${trend === 'Improving' ? '#27ae60' : trend === 'Declining' ? '#dc3545' : '#f39c12'};">${trend}</span></div>
+            <div class="trend-item"><span class="trend-label">Improvement</span><span class="trend-value" style="color:${change > 0 ? '#27ae60' : '#6c757d'};">${change > 0 ? change.toFixed(1) : 0}%</span></div>
+            <div class="trend-item"><span class="trend-label">Decline</span><span class="trend-value" style="color:${change < 0 ? '#dc3545' : '#6c757d'};">${change < 0 ? Math.abs(change).toFixed(1) : 0}%</span></div>
+            <div class="trend-item"><span class="trend-label">Total Records</span><span class="trend-value">${marksData.length}</span></div>
+        `;
+    } else {
+        trendSummary = '<div class="text-center text-muted py-4">Not enough data for trend analysis</div>';
+    }
+    
+    // Heatmap
+    const heatmapData = {};
+    for (const mark of marksData) {
+        const student = studentsData.find(s => s.id === mark.student_id);
+        if (!student) continue;
+        const className = student.class || 'Unknown';
+        const subject = mark.subject || 'Unknown';
+        let pct = 0;
+        if (currentLevel === 'olevel') {
+            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
+        } else {
+            pct = (mark.marks_obtained / mark.max_marks) * 100;
+        }
+        const key = `${className}|${subject}`;
+        if (!heatmapData[key]) heatmapData[key] = { total: 0, count: 0 };
+        heatmapData[key].total += pct;
+        heatmapData[key].count++;
+    }
+    
+    const classes = ['S.1', 'S.2', 'S.3', 'S.4', 'S.5', 'S.6'].filter(c => 
+        Object.keys(heatmapData).some(k => k.startsWith(c))
+    );
+    const heatSubjects = Object.keys(subjectScores).filter(s => 
+        Object.keys(heatmapData).some(k => k.includes(`|${s}`))
+    );
+    
+    let heatmapHtml = '';
+    if (classes.length > 0 && heatSubjects.length > 0) {
+        let tableHtml = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead><tr><th style="padding:6px;background:#01605a;color:white;position:sticky;left:0;z-index:2;">Subject \\ Class</th>`;
+        for (const c of classes) {
+            tableHtml += `<th style="padding:6px;background:#01605a;color:white;text-align:center;">${c}</th>`;
+        }
+        tableHtml += `</tr></thead><tbody>`;
+        for (const subject of heatSubjects) {
+            tableHtml += `<tr><td style="padding:6px;background:#f8f9fa;font-weight:600;position:sticky;left:0;z-index:1;border:1px solid #eef2f6;">${subject}</td>`;
+            for (const className of classes) {
+                const key = `${className}|${subject}`;
+                const data = heatmapData[key];
+                if (data) {
+                    const avg = data.total / data.count;
+                    const color = avg >= 80 ? '#27ae60' : avg >= 60 ? '#f39c12' : avg >= 40 ? '#e67e22' : '#e74c3c';
+                    tableHtml += `<td style="padding:6px;text-align:center;background:${color};color:${avg>=60?'white':'black'};border:1px solid #eef2f6;font-weight:600;">${avg.toFixed(1)}%</td>`;
+                } else {
+                    tableHtml += `<td style="padding:6px;text-align:center;color:#bdc3c7;border:1px solid #eef2f6;">-</td>`;
+                }
+            }
+            tableHtml += `</tr>`;
+        }
+        tableHtml += `</tbody></table></div>`;
+        heatmapHtml = tableHtml;
+    } else {
+        heatmapHtml = '<div class="text-center text-muted py-4">No heatmap data available</div>';
+    }
+    
     return `
         <div class="analytics-section">
             <div class="analytics-header">
                 <h4><i class="fas fa-chart-pie"></i> Advanced Analytics & Insights</h4>
-                <div class="analytics-tabs">
-                    <button class="analytics-tab active" data-tab="performance">📊 Performance</button>
-                    <button class="analytics-tab" data-tab="progress">📈 Student Progress</button>
-                    <button class="analytics-tab" data-tab="heatmap">🔥 Subject Heatmap</button>
-                    <button class="analytics-tab" data-tab="trends">📉 Trends</button>
-                    <button class="analytics-tab" data-tab="comparative">⚖️ Comparative</button>
+                <div class="analytics-tabs" id="analyticsTabs">
+                    <button class="analytics-tab active" data-tab="performance" onclick="switchAnalyticsTab('performance')">📊 Performance</button>
+                    <button class="analytics-tab" data-tab="progress" onclick="switchAnalyticsTab('progress')">📈 Student Progress</button>
+                    <button class="analytics-tab" data-tab="heatmap" onclick="switchAnalyticsTab('heatmap')">🔥 Subject Heatmap</button>
+                    <button class="analytics-tab" data-tab="trends" onclick="switchAnalyticsTab('trends')">📉 Trends</button>
+                    <button class="analytics-tab" data-tab="comparative" onclick="switchAnalyticsTab('comparative')">⚖️ Comparative</button>
                 </div>
             </div>
             
-            <!-- Performance Tab -->
+            <!-- PERFORMANCE TAB -->
             <div class="analytics-panel active" id="panel-performance">
                 <div class="row">
                     <div class="col-md-6">
@@ -1854,13 +2084,13 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
                 </div>
             </div>
             
-            <!-- Student Progress Tab -->
+            <!-- STUDENT PROGRESS TAB -->
             <div class="analytics-panel" id="panel-progress">
                 <div class="row">
                     <div class="col-md-8">
                         <div class="chart-card">
                             <h6>📈 Student Progress Over Time</h6>
-                            <div class="chart-container" id="studentProgressChart">
+                            <div class="chart-container">
                                 ${progressChart}
                             </div>
                         </div>
@@ -1876,14 +2106,14 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
                 </div>
             </div>
             
-            <!-- Heatmap Tab -->
+            <!-- HEATMAP TAB -->
             <div class="analytics-panel" id="panel-heatmap">
                 <div class="row">
                     <div class="col-md-12">
                         <div class="chart-card">
                             <h6>🔥 Subject Performance Heatmap</h6>
-                            <div class="chart-container" id="heatmapChart" style="height:auto;min-height:200px;">
-                                ${renderHeatmapHTML(marksData, studentsData, subjectScores)}
+                            <div class="chart-container" style="height:auto;min-height:200px;">
+                                ${heatmapHtml}
                             </div>
                             <div class="heatmap-legend">
                                 <span class="legend-item"><span class="legend-color" style="background:#e74c3c;"></span> 0-40% (Poor)</span>
@@ -1896,13 +2126,13 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
                 </div>
             </div>
             
-            <!-- Trends Tab -->
+            <!-- TRENDS TAB -->
             <div class="analytics-panel" id="panel-trends">
                 <div class="row">
                     <div class="col-md-8">
                         <div class="chart-card">
                             <h6>📉 Performance Trends: Improvement/Decline</h6>
-                            <div class="chart-container" id="trendsChart">
+                            <div class="chart-container">
                                 ${trendHtml}
                             </div>
                         </div>
@@ -1911,29 +2141,14 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
                         <div class="chart-card">
                             <h6>📊 Trend Summary</h6>
                             <div id="trendSummary">
-                                ${(() => {
-                                    let trend = 'Stable', change = 0;
-                                    if (terms.length >= 2) {
-                                        const first = marksByTerm[terms[0]].reduce((a,b) => a + b, 0) / marksByTerm[terms[0]].length;
-                                        const last = marksByTerm[terms[terms.length-1]].reduce((a,b) => a + b, 0) / marksByTerm[terms[terms.length-1]].length;
-                                        change = ((last - first) / first) * 100;
-                                        if (change > 5) trend = 'Improving';
-                                        else if (change < -5) trend = 'Declining';
-                                    }
-                                    return `
-                                        <div class="trend-item"><span class="trend-label">Overall Trend</span><span class="trend-value" style="color:${trend === 'Improving' ? '#27ae60' : trend === 'Declining' ? '#dc3545' : '#f39c12'};">${trend}</span></div>
-                                        <div class="trend-item"><span class="trend-label">Improvement</span><span class="trend-value" style="color:${change > 0 ? '#27ae60' : '#6c757d'};">${change > 0 ? change.toFixed(1) : 0}%</span></div>
-                                        <div class="trend-item"><span class="trend-label">Decline</span><span class="trend-value" style="color:${change < 0 ? '#dc3545' : '#6c757d'};">${change < 0 ? Math.abs(change).toFixed(1) : 0}%</span></div>
-                                        <div class="trend-item"><span class="trend-label">Total Records</span><span class="trend-value">${marksData.length}</span></div>
-                                    `;
-                                })()}
+                                ${trendSummary}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Comparative Tab -->
+            <!-- COMPARATIVE TAB -->
             <div class="analytics-panel" id="panel-comparative">
                 <div class="comparative-controls">
                     <select id="compareType" class="form-select form-select-sm" style="width:auto;min-width:150px;" onchange="populateComparativeDropdowns()">
@@ -1975,65 +2190,387 @@ function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, a
     `;
 }
 
-function renderHeatmapHTML(marksData, studentsData, subjectScores) {
-    const heatmapData = {};
-    for (const mark of marksData) {
-        const student = studentsData.find(s => s.id === mark.student_id);
-        if (!student) continue;
-        const className = student.class || 'Unknown';
-        const subject = mark.subject || 'Unknown';
-        let pct = 0;
-        if (currentLevel === 'olevel') {
-            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
-        } else {
-            pct = (mark.marks_obtained / mark.max_marks) * 100;
+// ============================================
+// ADD THIS FUNCTION FOR TAB SWITCHING
+// ============================================
+
+window.switchAnalyticsTab = function(tabName) {
+    // Remove active class from all tabs
+    document.querySelectorAll('.analytics-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Hide all panels
+    document.querySelectorAll('.analytics-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    
+    // Add active class to clicked tab
+    const clickedTab = document.querySelector(`.analytics-tab[data-tab="${tabName}"]`);
+    if (clickedTab) {
+        clickedTab.classList.add('active');
+    }
+    
+    // Show the corresponding panel
+    const panel = document.getElementById(`panel-${tabName}`);
+    if (panel) {
+        panel.classList.add('active');
+    }
+    
+    // If comparative tab, populate dropdowns
+    if (tabName === 'comparative') {
+        setTimeout(populateComparativeDropdowns, 100);
+    }
+    
+    console.log('Switched to tab:', tabName);
+};
+
+// ============================================
+// ADD THESE FUNCTIONS FOR COMPARATIVE ANALYSIS
+// ============================================
+
+window.populateComparativeDropdowns = function() {
+    const data = window._analyticsData;
+    if (!data) return;
+    
+    const type = document.getElementById('compareType')?.value || 'classes';
+    const select1 = document.getElementById('compareItem1');
+    const select2 = document.getElementById('compareItem2');
+    if (!select1 || !select2) return;
+    
+    let options = [];
+    if (type === 'classes') {
+        options = [...new Set(data.studentsData.map(s => s.class))].filter(Boolean).sort();
+    } else if (type === 'subjects') {
+        options = Object.keys(data.subjectScores).filter(s => s !== 'Unknown').sort();
+    } else if (type === 'terms') {
+        options = [...new Set(data.marksData.map(m => m.exam))].filter(Boolean);
+    } else if (type === 'years') {
+        options = [...new Set(data.marksData.map(m => m.year))].filter(Boolean).sort();
+    }
+    
+    select1.innerHTML = options.map(o => `<option value="${o}">${o}</option>`).join('');
+    select2.innerHTML = options.map(o => `<option value="${o}">${o}</option>`).join('');
+    if (options.length >= 2) { select1.value = options[0]; select2.value = options[1]; }
+};
+
+window.updateComparativeAnalysis = function() {
+    const data = window._analyticsData;
+    if (!data) return;
+    
+    const type = document.getElementById('compareType')?.value || 'classes';
+    const item1 = document.getElementById('compareItem1')?.value;
+    const item2 = document.getElementById('compareItem2')?.value;
+    const chart = document.getElementById('comparativeChart');
+    const stats1 = document.getElementById('compareStats1');
+    const stats2 = document.getElementById('compareStats2');
+    
+    if (!item1 || !item2 || item1 === item2) {
+        chart.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:180px;">
+            <div style="font-size:36px;">🔍</div><p style="color:#6c757d;">Select two different items to compare</p></div>`;
+        stats1.innerHTML = '<h6>📊 Item 1</h6><p class="text-muted">Select items to compare</p>';
+        stats2.innerHTML = '<h6>📊 Item 2</h6><p class="text-muted">Select items to compare</p>';
+        return;
+    }
+    
+    let data1 = [], data2 = [];
+    let label1 = item1, label2 = item2;
+    
+    if (type === 'classes') {
+        data1 = data.marksData.filter(m => {
+            const student = data.studentsData.find(s => s.id === m.student_id);
+            return student && student.class === item1;
+        });
+        data2 = data.marksData.filter(m => {
+            const student = data.studentsData.find(s => s.id === m.student_id);
+            return student && student.class === item2;
+        });
+        label1 = `Class ${item1}`;
+        label2 = `Class ${item2}`;
+    } else if (type === 'subjects') {
+        data1 = data.marksData.filter(m => m.subject === item1);
+        data2 = data.marksData.filter(m => m.subject === item2);
+        label1 = item1;
+        label2 = item2;
+    } else if (type === 'terms') {
+        data1 = data.marksData.filter(m => m.exam === item1);
+        data2 = data.marksData.filter(m => m.exam === item2);
+        label1 = item1;
+        label2 = item2;
+    } else if (type === 'years') {
+        data1 = data.marksData.filter(m => m.year === item1);
+        data2 = data.marksData.filter(m => m.year === item2);
+        label1 = item1;
+        label2 = item2;
+    }
+    
+    const calcStats = (d) => {
+        let total = 0, pass = 0;
+        for (const m of d) {
+            let pct = 0;
+            if (currentLevel === 'olevel') pct = Math.min(100, Math.max(0, (m.ca_score || 0) + (m.exam_80 || 0)));
+            else pct = (m.marks_obtained / m.max_marks) * 100;
+            total += pct;
+            if (pct >= 50) pass++;
         }
-        const key = `${className}|${subject}`;
-        if (!heatmapData[key]) heatmapData[key] = { total: 0, count: 0 };
-        heatmapData[key].total += pct;
-        heatmapData[key].count++;
+        const count = d.length || 1;
+        return { avg: total / count, passRate: (pass / count) * 100, count };
+    };
+    
+    const s1 = calcStats(data1);
+    const s2 = calcStats(data2);
+    
+    chart.innerHTML = `
+        <div style="padding:10px;">
+            <div style="display:flex;justify-content:space-around;align-items:flex-end;height:180px;margin-bottom:15px;">
+                <div style="display:flex;flex-direction:column;align-items:center;width:45%;">
+                    <div style="display:flex;gap:12px;align-items:flex-end;height:140px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s1.avg/100)*140}px;width:35px;background:linear-gradient(180deg,#01605a,#2ecc71);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s1.avg.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Avg</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s1.passRate/100)*140}px;width:35px;background:linear-gradient(180deg,#27ae60,#2ecc71);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s1.passRate.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Pass</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-weight:700;font-size:13px;color:#01605a;">${escapeHtml(label1)}</div>
+                    <div style="font-size:10px;color:#6c757d;">${data1.length} records</div>
+                </div>
+                <div style="width:10%;text-align:center;font-size:20px;color:#6c757d;">VS</div>
+                <div style="display:flex;flex-direction:column;align-items:center;width:45%;">
+                    <div style="display:flex;gap:12px;align-items:flex-end;height:140px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s2.avg/100)*140}px;width:35px;background:linear-gradient(180deg,#ff862d,#f39c12);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s2.avg.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Avg</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s2.passRate/100)*140}px;width:35px;background:linear-gradient(180deg,#e67e22,#f39c12);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s2.passRate.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Pass</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-weight:700;font-size:13px;color:#ff862d;">${escapeHtml(label2)}</div>
+                    <div style="font-size:10px;color:#6c757d;">${data2.length} records</div>
+                </div>
+            </div>
+            <div style="text-align:center;padding:8px;background:${s1.avg > s2.avg ? '#d4edda' : s2.avg > s1.avg ? '#f8d7da' : '#fff3cd'};border-radius:8px;">
+                <strong>${s1.avg > s2.avg ? `🏆 ${label1} leads by ${(s1.avg - s2.avg).toFixed(1)}%` : 
+                      s2.avg > s1.avg ? `🏆 ${label2} leads by ${(s2.avg - s1.avg).toFixed(1)}%` : 
+                      `⚖️ ${label1} and ${label2} are tied`}</strong>
+            </div>
+        </div>
+    `;
+    
+    stats1.innerHTML = `<h6>📊 ${escapeHtml(label1)}</h6>
+        <div class="stat-row"><span>Average</span><span><strong>${s1.avg.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Pass Rate</span><span><strong>${s1.passRate.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Records</span><span><strong>${data1.length}</strong></span></div>`;
+    
+    stats2.innerHTML = `<h6>📊 ${escapeHtml(label2)}</h6>
+        <div class="stat-row"><span>Average</span><span><strong>${s2.avg.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Pass Rate</span><span><strong>${s2.passRate.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Records</span><span><strong>${data2.length}</strong></span></div>`;
+};
+
+// ============================================
+// COMPARATIVE DROPDOWN POPULATE ON CHANGE
+// ============================================
+
+// Also add this to handle dropdown changes
+document.addEventListener('change', function(e) {
+    if (e.target.id === 'compareType') {
+        populateComparativeDropdowns();
+    }
+});
+// ============================================
+// HELPER FUNCTIONS FOR COMPARATIVE & PERFORMER FILTERS
+// ============================================
+
+window.populateComparativeDropdowns = function() {
+    const data = window._analyticsData;
+    if (!data) return;
+    
+    const type = document.getElementById('compareType')?.value || 'classes';
+    const select1 = document.getElementById('compareItem1');
+    const select2 = document.getElementById('compareItem2');
+    if (!select1 || !select2) return;
+    
+    let options = [];
+    if (type === 'classes') {
+        options = [...new Set(data.studentsData.map(s => s.class))].filter(Boolean).sort();
+    } else if (type === 'subjects') {
+        options = Object.keys(data.subjectScores).filter(s => s !== 'Unknown').sort();
+    } else if (type === 'terms') {
+        options = [...new Set(data.marksData.map(m => m.exam))].filter(Boolean);
+    } else if (type === 'years') {
+        options = [...new Set(data.marksData.map(m => m.year))].filter(Boolean).sort();
     }
     
-    const classes = ['S.1', 'S.2', 'S.3', 'S.4', 'S.5', 'S.6'].filter(c => 
-        Object.keys(heatmapData).some(k => k.startsWith(c))
-    );
-    const subjects = Object.keys(subjectScores).filter(s => 
-        Object.keys(heatmapData).some(k => k.includes(`|${s}`))
-    );
+    select1.innerHTML = options.map(o => `<option value="${o}">${o}</option>`).join('');
+    select2.innerHTML = options.map(o => `<option value="${o}">${o}</option>`).join('');
+    if (options.length >= 2) { select1.value = options[0]; select2.value = options[1]; }
+};
+
+window.updateComparativeAnalysis = function() {
+    const data = window._analyticsData;
+    if (!data) return;
     
-    if (classes.length === 0 || subjects.length === 0) {
-        return '<div class="text-center text-muted py-4">No heatmap data available</div>';
+    const type = document.getElementById('compareType')?.value || 'classes';
+    const item1 = document.getElementById('compareItem1')?.value;
+    const item2 = document.getElementById('compareItem2')?.value;
+    const chart = document.getElementById('comparativeChart');
+    const stats1 = document.getElementById('compareStats1');
+    const stats2 = document.getElementById('compareStats2');
+    
+    if (!item1 || !item2 || item1 === item2) {
+        chart.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:180px;">
+            <div style="font-size:36px;">🔍</div><p style="color:#6c757d;">Select two different items to compare</p></div>`;
+        stats1.innerHTML = '<h6>📊 Item 1</h6><p class="text-muted">Select items to compare</p>';
+        stats2.innerHTML = '<h6>📊 Item 2</h6><p class="text-muted">Select items to compare</p>';
+        return;
     }
     
-    let html = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <thead><tr><th style="padding:6px;background:#01605a;color:white;position:sticky;left:0;z-index:2;">Subject \\ Class</th>`;
-    for (const c of classes) {
-        html += `<th style="padding:6px;background:#01605a;color:white;text-align:center;">${c}</th>`;
+    let data1 = [], data2 = [];
+    let label1 = item1, label2 = item2;
+    
+    if (type === 'classes') {
+        data1 = data.marksData.filter(m => {
+            const student = data.studentsData.find(s => s.id === m.student_id);
+            return student && student.class === item1;
+        });
+        data2 = data.marksData.filter(m => {
+            const student = data.studentsData.find(s => s.id === m.student_id);
+            return student && student.class === item2;
+        });
+        label1 = `Class ${item1}`;
+        label2 = `Class ${item2}`;
+    } else if (type === 'subjects') {
+        data1 = data.marksData.filter(m => m.subject === item1);
+        data2 = data.marksData.filter(m => m.subject === item2);
+        label1 = item1;
+        label2 = item2;
+    } else if (type === 'terms') {
+        data1 = data.marksData.filter(m => m.exam === item1);
+        data2 = data.marksData.filter(m => m.exam === item2);
+        label1 = item1;
+        label2 = item2;
+    } else if (type === 'years') {
+        data1 = data.marksData.filter(m => m.year === item1);
+        data2 = data.marksData.filter(m => m.year === item2);
+        label1 = item1;
+        label2 = item2;
     }
-    html += `</tr></thead><tbody>`;
-    for (const subject of subjects) {
-        html += `<tr><td style="padding:6px;background:#f8f9fa;font-weight:600;position:sticky;left:0;z-index:1;border:1px solid #eef2f6;">${subject}</td>`;
-        for (const className of classes) {
-            const key = `${className}|${subject}`;
-            const data = heatmapData[key];
-            if (data) {
-                const avg = data.total / data.count;
-                const color = avg >= 80 ? '#27ae60' : avg >= 60 ? '#f39c12' : avg >= 40 ? '#e67e22' : '#e74c3c';
-                html += `<td style="padding:6px;text-align:center;background:${color};color:${avg>=60?'white':'black'};border:1px solid #eef2f6;font-weight:600;">${avg.toFixed(1)}%</td>`;
-            } else {
-                html += `<td style="padding:6px;text-align:center;color:#bdc3c7;border:1px solid #eef2f6;">-</td>`;
-            }
+    
+    const calcStats = (d) => {
+        let total = 0, pass = 0;
+        for (const m of d) {
+            let pct = 0;
+            if (currentLevel === 'olevel') pct = Math.min(100, Math.max(0, (m.ca_score || 0) + (m.exam_80 || 0)));
+            else pct = (m.marks_obtained / m.max_marks) * 100;
+            total += pct;
+            if (pct >= 50) pass++;
         }
-        html += `</tr>`;
+        const count = d.length || 1;
+        return { avg: total / count, passRate: (pass / count) * 100, count };
+    };
+    
+    const s1 = calcStats(data1);
+    const s2 = calcStats(data2);
+    
+    chart.innerHTML = `
+        <div style="padding:10px;">
+            <div style="display:flex;justify-content:space-around;align-items:flex-end;height:180px;margin-bottom:15px;">
+                <div style="display:flex;flex-direction:column;align-items:center;width:45%;">
+                    <div style="display:flex;gap:12px;align-items:flex-end;height:140px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s1.avg/100)*140}px;width:35px;background:linear-gradient(180deg,#01605a,#2ecc71);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s1.avg.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Avg</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s1.passRate/100)*140}px;width:35px;background:linear-gradient(180deg,#27ae60,#2ecc71);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s1.passRate.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Pass</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-weight:700;font-size:13px;color:#01605a;">${escapeHtml(label1)}</div>
+                    <div style="font-size:10px;color:#6c757d;">${data1.length} records</div>
+                </div>
+                <div style="width:10%;text-align:center;font-size:20px;color:#6c757d;">VS</div>
+                <div style="display:flex;flex-direction:column;align-items:center;width:45%;">
+                    <div style="display:flex;gap:12px;align-items:flex-end;height:140px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s2.avg/100)*140}px;width:35px;background:linear-gradient(180deg,#ff862d,#f39c12);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s2.avg.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Avg</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                            <div style="height:${(s2.passRate/100)*140}px;width:35px;background:linear-gradient(180deg,#e67e22,#f39c12);border-radius:4px 4px 0 0;">
+                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s2.passRate.toFixed(1)}%</span>
+                            </div>
+                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Pass</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-weight:700;font-size:13px;color:#ff862d;">${escapeHtml(label2)}</div>
+                    <div style="font-size:10px;color:#6c757d;">${data2.length} records</div>
+                </div>
+            </div>
+            <div style="text-align:center;padding:8px;background:${s1.avg > s2.avg ? '#d4edda' : s2.avg > s1.avg ? '#f8d7da' : '#fff3cd'};border-radius:8px;">
+                <strong>${s1.avg > s2.avg ? `🏆 ${label1} leads by ${(s1.avg - s2.avg).toFixed(1)}%` : 
+                      s2.avg > s1.avg ? `🏆 ${label2} leads by ${(s2.avg - s1.avg).toFixed(1)}%` : 
+                      `⚖️ ${label1} and ${label2} are tied`}</strong>
+            </div>
+        </div>
+    `;
+    
+    stats1.innerHTML = `<h6>📊 ${escapeHtml(label1)}</h6>
+        <div class="stat-row"><span>Average</span><span><strong>${s1.avg.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Pass Rate</span><span><strong>${s1.passRate.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Records</span><span><strong>${data1.length}</strong></span></div>`;
+    
+    stats2.innerHTML = `<h6>📊 ${escapeHtml(label2)}</h6>
+        <div class="stat-row"><span>Average</span><span><strong>${s2.avg.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Pass Rate</span><span><strong>${s2.passRate.toFixed(1)}%</strong></span></div>
+        <div class="stat-row"><span>Records</span><span><strong>${data2.length}</strong></span></div>`;
+};
+
+// ============================================
+// ANALYTICS TAB SWITCHING
+// ============================================
+
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('analytics-tab')) {
+        document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.analytics-panel').forEach(p => p.classList.remove('active'));
+        e.target.classList.add('active');
+        const panel = document.getElementById(`panel-${e.target.dataset.tab}`);
+        if (panel) panel.classList.add('active');
+        
+        if (e.target.dataset.tab === 'comparative') {
+            setTimeout(populateComparativeDropdowns, 100);
+        }
     }
-    html += `</tbody></table></div>`;
-    return html;
-}
+});
+
+// Populate comparative dropdowns on initial load
+setTimeout(populateComparativeDropdowns, 500);
 // ============================================
 // COMPLETE STUDENT MANAGEMENT - MASTERPIECE
-// With Enhanced Class Statistics Dashboard
-// Shows: Total, Boarding, Day per class
-// Responsive: 2 per row on mobile
+// With Class Statistics Dashboard
+// Fixed: Select All only checks VISIBLE rows
+// Fixed: House Filter properly filters by house name
+// NEW: View Student Details with Marks History
 // ============================================
 
 const olevelClasses = ['S.1', 'S.2', 'S.3', 'S.4'];
@@ -2366,11 +2903,11 @@ async function verifySuperAdminPasswordForStudent() {
 }
 
 // ============================================
-// GET CLASS STATISTICS WITH BOARDING/DAY BREAKDOWN
+// GET CLASS STATISTICS
 // ============================================
 
 function getClassStatistics() {
-    const classStats = {};
+    const classCounts = {};
     const classColors = {
         'S.1': '#4facfe',
         'S.2': '#43e97b',
@@ -2380,67 +2917,44 @@ function getClassStatistics() {
         'S.6': '#f093fb'
     };
     
-    // Initialize stats for all classes
-    const allClasses = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
-    for (const className of allClasses) {
-        classStats[className] = {
-            total: 0,
-            boarding: 0,
-            day: 0,
-            color: classColors[className] || '#6c757d'
-        };
-    }
-    
-    // Count students per class with boarding/day breakdown
     for (const student of students) {
         const className = student.class || 'Unknown';
-        if (!classStats[className]) {
-            classStats[className] = {
-                total: 0,
-                boarding: 0,
-                day: 0,
-                color: '#6c757d'
-            };
+        if (!classCounts[className]) {
+            classCounts[className] = 0;
         }
-        classStats[className].total++;
-        if (student.student_type === 'Boarding') {
-            classStats[className].boarding++;
-        } else {
-            classStats[className].day++;
-        }
+        classCounts[className]++;
     }
     
-    // Convert to array and calculate percentages
+    const total = students.length || 1;
     const result = [];
-    const totalStudents = students.length || 1;
     
-    for (const [className, stats] of Object.entries(classStats)) {
+    const allClasses = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
+    
+    for (const className of allClasses) {
+        const count = classCounts[className] || 0;
+        const percentage = ((count / total) * 100).toFixed(1);
         result.push({
             class: className,
-            total: stats.total,
-            boarding: stats.boarding,
-            day: stats.day,
-            percentage: ((stats.total / totalStudents) * 100).toFixed(1),
-            color: stats.color
+            count: count,
+            percentage: percentage,
+            color: classColors[className] || '#6c757d'
         });
     }
     
-    // Sort by class order
-    const classOrder = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
-    result.sort((a, b) => {
-        const indexA = classOrder.indexOf(a.class);
-        const indexB = classOrder.indexOf(b.class);
-        if (indexA === -1 && indexB === -1) return 0;
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        return indexA - indexB;
-    });
+    if (classCounts['Unknown']) {
+        result.push({
+            class: 'Unknown',
+            count: classCounts['Unknown'],
+            percentage: ((classCounts['Unknown'] / total) * 100).toFixed(1),
+            color: '#6c757d'
+        });
+    }
     
     return result;
 }
 
 // ============================================
-// RENDER STUDENTS PAGE WITH ENHANCED STATS
+// RENDER STUDENTS PAGE WITH FIXED HOUSE FILTER
 // ============================================
 
 async function renderStudents() {
@@ -2449,13 +2963,13 @@ async function renderStudents() {
     
     const classStats = getClassStatistics();
     
-    // Generate house filter options
+    // Generate house filter options with house ID as value
     const houseOptions = housesList.map(house => 
         `<option value="${house.id}">🏠 ${escapeHtml(house.name)}</option>`
     ).join('');
     
     return `
-        <!-- CLASS STATISTICS DASHBOARD - WITH BOARDING/DAY -->
+        <!-- CLASS STATISTICS DASHBOARD -->
         <div class="class-stats-dashboard">
             <div class="stats-header">
                 <h5><i class="fas fa-chart-bar"></i> Student Statistics by Class</h5>
@@ -2464,12 +2978,8 @@ async function renderStudents() {
             <div class="stats-grid">
                 ${classStats.map(stat => `
                     <div class="stat-card-mini" style="border-left: 4px solid ${stat.color};">
-                        <div class="stat-class">${stat.class}</div>
-                        <div class="stat-number">${stat.total}</div>
-                        <div class="stat-breakdown">
-                            <span class="stat-boarding"><i class="fas fa-home"></i> ${stat.boarding}</span>
-                            <span class="stat-day"><i class="fas fa-sun"></i> ${stat.day}</span>
-                        </div>
+                        <div class="stat-number">${stat.count}</div>
+                        <div class="stat-label">${stat.class}</div>
                         <div class="stat-bar" style="width: ${stat.percentage}%; background: ${stat.color};"></div>
                         <div class="stat-percent">${stat.percentage}%</div>
                     </div>
@@ -2493,7 +3003,7 @@ async function renderStudents() {
                 </div>
                 
                 <!-- SEARCH & FILTERS -->
-                <div class="row g-2">
+                <div class="row">
                     <div class="col-md-4">
                         <input type="text" id="studentSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Search by name, admission..." onkeyup="filterStudents()">
                     </div>
@@ -2544,9 +3054,6 @@ async function renderStudents() {
         </div>
         
         <style>
-            /* ========================================== */
-            /* CLASS STATISTICS DASHBOARD                 */
-            /* ========================================== */
             .class-stats-dashboard {
                 background: white;
                 border-radius: 16px;
@@ -2579,144 +3086,59 @@ async function renderStudents() {
                 color: #01605a;
                 font-size: 18px;
             }
-            
-            /* ========================================== */
-            /* STATS GRID - 2 PER ROW ON MOBILE           */
-            /* ========================================== */
             .stats-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
                 gap: 12px;
             }
-            
             .stat-card-mini {
                 background: #f8f9fa;
                 border-radius: 12px;
-                padding: 14px 16px;
+                padding: 12px 15px;
                 border-left: 4px solid #01605a;
                 transition: transform 0.2s;
-                text-align: center;
             }
             .stat-card-mini:hover {
-                transform: translateY(-3px);
+                transform: translateY(-2px);
             }
-            
-            .stat-class {
-                font-size: 13px;
-                font-weight: 700;
-                color: #2c3e50;
-                margin-bottom: 2px;
-            }
-            
             .stat-number {
-                font-size: 32px;
+                font-size: 28px;
                 font-weight: 700;
                 color: #2c3e50;
                 line-height: 1.2;
             }
-            
-            .stat-breakdown {
-                display: flex;
-                justify-content: center;
-                gap: 16px;
+            .stat-label {
                 font-size: 12px;
-                margin: 4px 0 8px;
+                color: #6c757d;
+                font-weight: 500;
+                margin-top: 2px;
             }
-            
-            .stat-boarding {
-                color: #01605a;
-                font-weight: 600;
-            }
-            .stat-boarding i {
-                color: #01605a;
-            }
-            
-            .stat-day {
-                color: #f39c12;
-                font-weight: 600;
-            }
-            .stat-day i {
-                color: #f39c12;
-            }
-            
             .stat-bar {
                 height: 4px;
                 border-radius: 2px;
-                margin: 6px auto 0;
+                margin-top: 8px;
                 transition: width 0.5s ease;
-                max-width: 100%;
             }
-            
             .stat-percent {
                 font-size: 10px;
                 color: #6c757d;
-                text-align: center;
+                text-align: right;
                 margin-top: 2px;
             }
-            
-            /* ========================================== */
-            /* RESPONSIVE - 2 PER ROW ON MOBILE           */
-            /* ========================================== */
             @media (max-width: 768px) {
                 .stats-grid {
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 10px;
-                }
-                
-                .stat-card-mini {
-                    padding: 12px 10px;
-                }
-                
-                .stat-number {
-                    font-size: 26px;
-                }
-                
-                .stat-breakdown {
-                    font-size: 11px;
-                    gap: 12px;
-                }
-                
-                .stat-class {
-                    font-size: 12px;
-                }
-                
-                .stats-header {
-                    flex-direction: column;
-                    align-items: flex-start;
-                }
-            }
-            
-            @media (max-width: 480px) {
-                .stats-grid {
-                    grid-template-columns: repeat(2, 1fr);
+                    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
                     gap: 8px;
                 }
-                
-                .stat-card-mini {
-                    padding: 10px 8px;
-                    border-left-width: 3px;
-                }
-                
                 .stat-number {
                     font-size: 22px;
                 }
-                
-                .stat-breakdown {
-                    font-size: 10px;
-                    gap: 8px;
-                    flex-wrap: wrap;
+                .stat-card-mini {
+                    padding: 10px 12px;
                 }
-                
-                .stat-class {
-                    font-size: 11px;
-                }
-                
-                .stat-bar {
-                    height: 3px;
-                }
-                
-                .stat-percent {
-                    font-size: 9px;
+                .stats-header {
+                    flex-direction: column;
+                    align-items: flex-start;
                 }
             }
         </style>
@@ -5324,12 +5746,11 @@ window.printStudentIdCards = async function() {
 // ============================================
 
 console.log('✅ Student Module Loaded - Complete Masterpiece!');
-console.log('✅ Features: Class Statistics with Boarding/Day breakdown');
-console.log('✅ Responsive: 2 per row on mobile');
-console.log('✅ View Student Details with Marks History');
+console.log('✅ Features: Class Statistics Dashboard, View Student Details with Marks, Add, Edit, Delete, Bulk Upload, Export, Print');
 console.log('✅ Fixed: Select All only checks visible rows');
 console.log('✅ Fixed: House Filter properly filters by house name');
 console.log('✅ Fixed: Bulk Delete only deletes visible selected rows');
+
 // ==================== SUBJECTS MODULE ====================
 // ============================================
 // SUBJECTS MODULE - USING SWEETALERT2 (No Bootstrap Modal)
