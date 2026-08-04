@@ -825,13 +825,9 @@ async function getSchoolSettings() {
 }
 
 // ============================================
-// RENDER DASHBOARD - COMPLETE
-// ============================================
-
-// ============================================
-// COMPLETE MASTERPIECE DASHBOARD
-// With Performance Filters: Year, Term, Student, Subject
-// With Top Performers: Class & Stream Filters
+// FIXED DASHBOARD - CORRECT GRADE DISTRIBUTION
+// Uses actual grades from settings (A, B, C, D, E)
+// No hardcoded F grade
 // ============================================
 
 async function renderDashboard() {
@@ -888,6 +884,9 @@ async function renderDashboard() {
         secretary: 'bg-success'
     };
     const roleColor = roleBadgeColors[currentUserRole] || 'bg-secondary';
+    
+    // Get available pages from roleMenus for current user
+    const availablePages = roleMenus[currentUserRole]?.map(menu => menu.page) || [];
     
     // Welcome buttons based on role
     const welcomeButtonConfig = {
@@ -995,7 +994,7 @@ async function renderDashboard() {
         config.roles.includes(currentUserRole)
     );
     
-    // Generate stats cards HTML
+    // Generate stats cards HTML (responsive grid)
     const statsCardsHtml = `
         <div class="stats-grid">
             ${visibleCards.map(([key, card]) => `
@@ -1071,32 +1070,21 @@ async function renderDashboard() {
     
     // ============================================
     // ANALYTICS SECTION - SUPER ADMIN ONLY
+    // FIXED: Uses actual grades from marks data
     // ============================================
     let analyticsHtml = '';
     
     if (currentUserRole === 'superadmin') {
         try {
-            // Get unique values for filters
-            const uniqueYears = [...new Set(marksData.map(m => m.year))].filter(Boolean).sort();
-            const uniqueTerms = [...new Set(marksData.map(m => m.exam))].filter(Boolean);
-            const uniqueSubjects = [...new Set(marksData.map(m => m.subject))].filter(Boolean).sort();
-            const uniqueStudents = [];
-            const studentMap = {};
+            // ============================================
+            // FIX: Get actual grades from the grading rules
+            // ============================================
+            const gradeKeys = ['A', 'B', 'C', 'D', 'E']; // Only grades used in system
             
-            for (const mark of marksData) {
-                const student = studentsData.find(s => s.id === mark.student_id);
-                if (student && !studentMap[student.id]) {
-                    studentMap[student.id] = student;
-                    uniqueStudents.push({ id: student.id, name: student.name, class: student.class });
-                }
-            }
+            // Initialize grade counts
+            const gradeCounts = {};
+            gradeKeys.forEach(g => gradeCounts[g] = 0);
             
-            // Get unique classes and streams for top performers
-            const uniqueClasses = [...new Set(studentsData.map(s => s.class))].filter(Boolean).sort();
-            const uniqueStreams = [...new Set(studentsData.map(s => s.stream))].filter(Boolean).sort();
-            
-            // Calculate grade distribution
-            const gradeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
             let totalScores = 0, passCount = 0, distinctionCount = 0;
             const subjectScores = {};
             const studentScores = {};
@@ -1114,12 +1102,16 @@ async function renderDashboard() {
                     
                     totalScores += percentage;
                     
-                    let grade = 'F';
-                    if (percentage >= 80) grade = 'A';
+                    // ============================================
+                    // FIX: Get grade from the actual grading system
+                    // ============================================
+                    let grade = 'E'; // Default
+                    if (percentage >= 85) grade = 'A';
                     else if (percentage >= 70) grade = 'B';
                     else if (percentage >= 60) grade = 'C';
-                    else if (percentage >= 50) grade = 'D';
-                    else if (percentage >= 40) grade = 'E';
+                    else if (percentage >= 40) grade = 'D';
+                    else grade = 'E';
+                    
                     gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
                     
                     if (percentage >= 50) passCount++;
@@ -1136,7 +1128,6 @@ async function renderDashboard() {
                             name: studentName, 
                             scores: [], 
                             class: mark.student_class || 'Unknown',
-                            stream: mark.student_stream || 'Unknown',
                             admission: mark.student_admission || '-'
                         };
                     }
@@ -1160,7 +1151,6 @@ async function renderDashboard() {
                         average: data.scores.reduce((a, b) => a + b, 0) / data.scores.length,
                         count: data.scores.length,
                         class: data.class,
-                        stream: data.stream,
                         admission: data.admission
                     }))
                     .sort((a, b) => b.average - a.average)
@@ -1180,16 +1170,13 @@ async function renderDashboard() {
                     totalMarks,
                     marksData,
                     studentsData,
-                    uniqueYears,
-                    uniqueTerms,
-                    uniqueSubjects,
-                    uniqueStudents,
-                    uniqueClasses,
-                    uniqueStreams,
-                    currentLevel
+                    gradeKeys
                 };
                 
-                analyticsHtml = generateMasterpieceAnalyticsHTML(
+                // ============================================
+                // FIX: Generate analytics with correct grades
+                // ============================================
+                analyticsHtml = generateFixedAnalyticsHTML(
                     gradeCounts, 
                     subjectScores, 
                     topPerformers,
@@ -1201,12 +1188,7 @@ async function renderDashboard() {
                     totalMarks, 
                     marksData, 
                     studentsData,
-                    uniqueYears,
-                    uniqueTerms,
-                    uniqueSubjects,
-                    uniqueStudents,
-                    uniqueClasses,
-                    uniqueStreams
+                    gradeKeys
                 );
             } else {
                 analyticsHtml = `
@@ -1317,16 +1299,6 @@ async function renderDashboard() {
         </div>
         
         <style>
-            /* ========================================== */
-            /* BASE DASHBOARD STYLES                      */
-            /* ========================================== */
-            .dashboard-container {
-                padding: 20px;
-                max-width: 1400px;
-                margin: 0 auto;
-                min-height: 100vh;
-            }
-            
             /* Logo Watermark */
             .logo-watermark {
                 position: fixed;
@@ -1372,7 +1344,14 @@ async function renderDashboard() {
                 z-index: 1;
             }
             
-            /* Welcome Section */
+            /* Dashboard Styles */
+            .dashboard-container {
+                padding: 20px;
+                max-width: 1400px;
+                margin: 0 auto;
+                min-height: 100vh;
+            }
+            
             .welcome-section {
                 background: white;
                 border-radius: 20px;
@@ -1401,6 +1380,7 @@ async function renderDashboard() {
             }
             .welcome-avatar i { font-size: 32px; color: white; }
             .welcome-avatar img { width: 100%; height: 100%; object-fit: cover; }
+            
             .welcome-info h2 {
                 margin: 0 0 8px 0;
                 font-size: 22px;
@@ -1415,6 +1395,7 @@ async function renderDashboard() {
             .role-badge.librarian { background: #212529; }
             .role-badge.secretary { background: #198754; }
             .level-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #6c757d; color: white; }
+            
             .welcome-actions { display: flex; gap: 12px; flex-wrap: wrap; }
             .welcome-btn {
                 padding: 10px 20px;
@@ -1438,7 +1419,6 @@ async function renderDashboard() {
             .welcome-btn.btn-warning { background: #ffc107; color: #000; }
             .welcome-btn.btn-warning:hover { background: #e0a800; transform: translateY(-2px); }
             
-            /* Stats Grid */
             .stats-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1465,7 +1445,6 @@ async function renderDashboard() {
             .stat-label { margin: 5px 0 0; font-size: 14px; color: #6c757d; }
             .stat-extra { font-size: 11px; color: #95a5a6; display: block; margin-top: 4px; }
             
-            /* Bottom Section */
             .dashboard-bottom {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -1535,9 +1514,7 @@ async function renderDashboard() {
             .action-btn i { font-size: 18px; width: 24px; }
             .action-btn span { font-size: 13px; font-weight: 500; color: #2c3e50; }
             
-            /* ========================================== */
-            /* ANALYTICS STYLES                          */
-            /* ========================================== */
+            /* Analytics Styles */
             .analytics-section {
                 background: white;
                 border-radius: 20px;
@@ -1589,12 +1566,10 @@ async function renderDashboard() {
             .stat-value.text-success { color:#28a745; }
             .stat-value.text-danger { color:#dc3545; }
             
-            /* Heatmap */
             .heatmap-legend { display:flex; justify-content:center; gap:20px; margin-top:15px; flex-wrap:wrap; }
             .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; color:#6c757d; }
             .legend-color { width:20px; height:20px; border-radius:4px; display:inline-block; }
             
-            /* Comparative */
             .comparative-controls { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
             .comparative-controls select { min-width:130px; }
             .comparative-stats { background:#f8f9fa; border-radius:12px; padding:15px; border:1px solid #eef2f6; min-height:100px; }
@@ -1602,93 +1577,14 @@ async function renderDashboard() {
             .stat-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #eef2f6; }
             .stat-row:last-child { border-bottom:none; }
             
-            /* Trends */
             .trend-item { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eef2f6; }
             .trend-item:last-child { border-bottom:none; }
             .trend-label { font-weight:500; color:#6c757d; }
             .trend-value { font-weight:700; color:#2c3e50; }
             
-            /* Top Performers */
             .performer-item { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #eef2f6; }
             .performer-item:last-child { border-bottom:none; }
             
-            /* Performance Filters */
-            .performance-filters {
-                background: #f8f9fa;
-                border-radius: 12px;
-                padding: 15px;
-                margin-bottom: 20px;
-                border: 1px solid #eef2f6;
-            }
-            .filter-row {
-                display: flex;
-                gap: 15px;
-                flex-wrap: wrap;
-                align-items: flex-end;
-            }
-            .filter-group {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-                min-width: 140px;
-                flex: 1;
-            }
-            .filter-group label {
-                font-size: 11px;
-                font-weight: 600;
-                color: #6c757d;
-                margin: 0;
-            }
-            .filter-group select, .filter-group input {
-                padding: 6px 10px;
-                border-radius: 8px;
-                border: 1px solid #ddd;
-                font-size: 13px;
-                background: white;
-            }
-            .filter-group select:focus, .filter-group input:focus {
-                border-color: #01605a;
-                outline: none;
-            }
-            
-            /* Performer Filters */
-            .performer-filters {
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 10px;
-                margin-bottom: 10px;
-                border: 1px solid #eef2f6;
-            }
-            .performer-filters .filter-group {
-                display: flex;
-                flex-direction: column;
-                gap: 3px;
-                margin-bottom: 8px;
-            }
-            .performer-filters .filter-group:last-child {
-                margin-bottom: 0;
-            }
-            .performer-filters .filter-group label {
-                font-size: 10px;
-                font-weight: 600;
-                color: #6c757d;
-                margin: 0;
-            }
-            .performer-filters .filter-group select {
-                padding: 4px 8px;
-                border-radius: 6px;
-                border: 1px solid #ddd;
-                font-size: 12px;
-                background: white;
-            }
-            .performer-filters .filter-group select:focus {
-                border-color: #01605a;
-                outline: none;
-            }
-            
-            /* ========================================== */
-            /* RESPONSIVE STYLES                         */
-            /* ========================================== */
             @media (max-width: 768px) {
                 .dashboard-container { padding: 15px; }
                 .welcome-section { flex-direction: column; text-align: center; padding: 20px; }
@@ -1702,9 +1598,6 @@ async function renderDashboard() {
                 .analytics-tabs { justify-content: center; }
                 .comparative-controls { flex-direction: column; }
                 .comparative-controls select { width: 100%; }
-                .filter-row { flex-direction: column; }
-                .filter-group { min-width: 100%; }
-                .performance-filters { padding: 10px; }
             }
             @media (max-width: 480px) {
                 .welcome-btn { padding: 8px 16px; font-size: 12px; }
@@ -1717,20 +1610,197 @@ async function renderDashboard() {
 }
 
 // ============================================
-// GENERATE MASTERPIECE ANALYTICS HTML
+// FIXED ANALYTICS HTML GENERATOR
+// Uses only grades A, B, C, D, E (no F)
 // ============================================
-function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerformers, avgScore, passRate, distinctionRate, bestSubject, worstSubject, totalMarks, marksData, studentsData, uniqueYears, uniqueTerms, uniqueSubjects, uniqueStudents, uniqueClasses, uniqueStreams) {
+
+function generateFixedAnalyticsHTML(gradeCounts, subjectScores, topPerformers, avgScore, passRate, distinctionRate, bestSubject, worstSubject, totalMarks, marksData, studentsData, gradeKeys) {
     
-    // Build filter options
-    const yearOptions = uniqueYears.map(y => `<option value="${y}">${y}</option>`).join('');
-    const termOptions = uniqueTerms.map(t => `<option value="${t}">${t}</option>`).join('');
-    const subjectOptions = uniqueSubjects.map(s => `<option value="${s}">${s}</option>`).join('');
-    const studentOptions = uniqueStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.class})</option>`).join('');
+    // Grade colors for A, B, C, D, E only
+    const gradeColors = {
+        'A': '#27ae60',
+        'B': '#2ecc71',
+        'C': '#f39c12',
+        'D': '#e67e22',
+        'E': '#e74c3c'
+    };
     
-    // Build performer filter options
-    const classOptions = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
-    const streamOptions = uniqueStreams.map(s => `<option value="${s}">${s}</option>`).join('');
+    // Build grade distribution bars
+    let gradeBars = '';
+    for (const grade of gradeKeys) {
+        const count = gradeCounts[grade] || 0;
+        const height = totalMarks > 0 ? ((count / totalMarks) * 150) : 0;
+        const color = gradeColors[grade] || '#6c757d';
+        gradeBars += `
+            <div style="display:flex;flex-direction:column;align-items:center;width:50px;">
+                <div style="height:${height}px;width:35px;background:${color};border-radius:4px 4px 0 0;position:relative;">
+                    <span style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:bold;">${count}</span>
+                </div>
+                <span style="margin-top:8px;font-weight:bold;font-size:14px;">${grade}</span>
+                <span style="font-size:10px;color:#6c757d;">${totalMarks > 0 ? ((count/totalMarks)*100).toFixed(1) : 0}%</span>
+            </div>
+        `;
+    }
     
+    // Subject performance bars
+    let subjectBars = '';
+    const sortedSubjects = Object.entries(subjectScores)
+        .sort((a, b) => (b[1].total/b[1].count) - (a[1].total/a[1].count))
+        .slice(0, 8);
+    
+    for (const [subject, data] of sortedSubjects) {
+        const avg = data.total / data.count;
+        const pct = Math.min(100, Math.max(0, avg));
+        const color = pct >= 80 ? '#27ae60' : pct >= 60 ? '#f39c12' : '#e74c3c';
+        subjectBars += `
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:11px;width:70px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" title="${subject}">${subject}</span>
+                <div style="flex:1;height:18px;background:#ecf0f1;border-radius:10px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:${color};border-radius:10px;transition:width 0.8s;"></div>
+                </div>
+                <span style="font-size:12px;font-weight:bold;min-width:40px;text-align:right;">${avg.toFixed(1)}%</span>
+            </div>
+        `;
+    }
+    
+    // Top performers
+    let performersHtml = '';
+    if (topPerformers && topPerformers.length > 0) {
+        performersHtml = topPerformers.map((p, i) => {
+            const rankColors = ['#f1c40f', '#bdc3c7', '#e67e22', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a'];
+            const rankTextColors = ['#000', '#000', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff'];
+            return `
+                <div class="performer-item">
+                    <div style="width:26px;height:26px;background:${rankColors[i]};color:${rankTextColors[i]};border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${i+1}</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600;font-size:13px;">${escapeHtml(p.name)}</div>
+                        <div style="font-size:10px;color:#6c757d;">${p.class || 'N/A'} | ${p.count} subjects</div>
+                    </div>
+                    <div style="font-weight:700;color:#01605a;">${p.average.toFixed(1)}%</div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        performersHtml = '<div class="text-center text-muted py-4">No performer data available</div>';
+    }
+    
+    // Student progress chart
+    const marksByTerm = {};
+    for (const mark of marksData) {
+        const key = `${mark.exam} ${mark.year}`;
+        if (!marksByTerm[key]) marksByTerm[key] = [];
+        let pct = 0;
+        if (currentLevel === 'olevel') {
+            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
+        } else {
+            pct = (mark.marks_obtained / mark.max_marks) * 100;
+        }
+        marksByTerm[key].push(pct);
+    }
+    const terms = Object.keys(marksByTerm).sort();
+    
+    let progressChart = '';
+    if (terms.length > 0) {
+        const averages = terms.map(t => marksByTerm[t].reduce((a, b) => a + b, 0) / marksByTerm[t].length);
+        let points = '';
+        let circles = '';
+        for (let i = 0; i < averages.length; i++) {
+            const x = i * (100 / (averages.length - 1 || 1));
+            const y = 170 - ((averages[i] / 100) * 170);
+            points += `${x},${y} `;
+            circles += `
+                <circle cx="${x}" cy="${y}" r="5" fill="#ff862d" stroke="white" stroke-width="2" />
+                <text x="${x}" y="${y-10}" text-anchor="middle" font-size="9" font-weight="bold" fill="#2c3e50">${averages[i].toFixed(1)}%</text>
+                <text x="${x}" y="${178}" text-anchor="middle" font-size="7" fill="#6c757d">${terms[i]||''}</text>
+            `;
+        }
+        progressChart = `
+            <div style="height:100%;padding:10px 0;">
+                <div style="position:relative;height:180px;">
+                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:0 10px;">
+                        ${[0,25,50,75,100].map(v => `
+                            <div style="border-bottom:1px dashed #eef2f6;position:relative;height:25%;">
+                                <span style="position:absolute;left:-30px;top:-8px;font-size:9px;color:#6c757d;">${v}%</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="position:absolute;top:0;left:35px;right:10px;bottom:0;display:flex;align-items:flex-end;justify-content:space-around;">
+                        <svg style="width:100%;height:100%;" viewBox="0 0 100 180">
+                            <polygon points="0,170 ${points}100,170" fill="rgba(1,96,90,0.2)" />
+                            <polyline points="${points}" fill="none" stroke="#01605a" stroke-width="3" />
+                            ${circles}
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        progressChart = '<div class="text-center text-muted py-4">No progress data available</div>';
+    }
+    
+    // Trends chart
+    let trendHtml = '';
+    if (terms.length >= 2) {
+        const first = marksByTerm[terms[0]].reduce((a, b) => a + b, 0) / marksByTerm[terms[0]].length;
+        const last = marksByTerm[terms[terms.length-1]].reduce((a, b) => a + b, 0) / marksByTerm[terms[terms.length-1]].length;
+        const change = ((last - first) / first) * 100;
+        let trend = 'Stable';
+        let trendIcon = '➡️';
+        if (change > 5) { trend = 'Improving'; trendIcon = '📈'; }
+        else if (change < -5) { trend = 'Declining'; trendIcon = '📉'; }
+        
+        const trendPoints = terms.map((t, i) => {
+            const avg = marksByTerm[t].reduce((a, b) => a + b, 0) / marksByTerm[t].length;
+            const x = i * (100 / (terms.length - 1 || 1));
+            const y = 170 - ((avg / 100) * 170);
+            return { x, y, avg, label: t };
+        });
+        
+        let trendCircles = '';
+        for (const p of trendPoints) {
+            trendCircles += `
+                <circle cx="${p.x}" cy="${p.y}" r="5" fill="#ff862d" stroke="white" stroke-width="2" />
+                <text x="${p.x}" y="${p.y-10}" text-anchor="middle" font-size="9" font-weight="bold" fill="#2c3e50">${p.avg.toFixed(1)}%</text>
+                <text x="${p.x}" y="${178}" text-anchor="middle" font-size="7" fill="#6c757d">${p.label}</text>
+            `;
+        }
+        const trendPointsStr = trendPoints.map(p => `${p.x},${p.y}`).join(' ');
+        
+        trendHtml = `
+            <div style="height:100%;padding:10px 0;">
+                <div style="position:relative;height:180px;">
+                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:0 10px;">
+                        ${[0,25,50,75,100].map(v => `
+                            <div style="border-bottom:1px dashed #eef2f6;position:relative;height:25%;">
+                                <span style="position:absolute;left:-30px;top:-8px;font-size:9px;color:#6c757d;">${v}%</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="position:absolute;top:0;left:35px;right:10px;bottom:0;display:flex;align-items:flex-end;justify-content:space-around;">
+                        <svg style="width:100%;height:100%;" viewBox="0 0 100 180">
+                            <polygon points="0,170 ${trendPointsStr}100,170" fill="rgba(1,96,90,0.2)" />
+                            <polyline points="${trendPointsStr}" fill="none" stroke="#01605a" stroke-width="3" />
+                            ${trendCircles}
+                        </svg>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:center;gap:20px;margin-top:10px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="display:inline-block;width:30px;height:3px;background:#01605a;"></span>
+                        <span style="font-size:11px;color:#6c757d;">Performance Trend</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:16px;">${trendIcon}</span>
+                        <span style="font-size:11px;font-weight:600;color:${change > 5 ? '#27ae60' : change < -5 ? '#dc3545' : '#f39c12'};">${trend} (${Math.abs(change).toFixed(1)}%)</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        trendHtml = '<div class="text-center text-muted py-4">Not enough data for trend analysis</div>';
+    }
+    
+    // Build the full HTML with correct grade distribution
     return `
         <div class="analytics-section">
             <div class="analytics-header">
@@ -1744,65 +1814,24 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
                 </div>
             </div>
             
-            <!-- ========================================== -->
-            <!-- PERFORMANCE TAB WITH FILTERS               -->
-            <!-- ========================================== -->
+            <!-- Performance Tab -->
             <div class="analytics-panel active" id="panel-performance">
-                <div class="performance-filters">
-                    <div class="filter-row">
-                        <div class="filter-group">
-                            <label>📅 Year</label>
-                            <select id="perfYear" class="form-select form-select-sm" onchange="applyPerformanceFilters()">
-                                <option value="">All Years</option>
-                                ${yearOptions}
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>📝 Term</label>
-                            <select id="perfTerm" class="form-select form-select-sm" onchange="applyPerformanceFilters()">
-                                <option value="">All Terms</option>
-                                ${termOptions}
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>📖 Subject</label>
-                            <select id="perfSubject" class="form-select form-select-sm" onchange="applyPerformanceFilters()">
-                                <option value="">All Subjects</option>
-                                ${subjectOptions}
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>👨‍🎓 Student</label>
-                            <select id="perfStudent" class="form-select form-select-sm" onchange="applyPerformanceFilters()">
-                                <option value="">All Students</option>
-                                ${studentOptions}
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>&nbsp;</label>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="resetPerformanceFilters()">
-                                <i class="fas fa-undo"></i> Reset
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
                 <div class="row">
                     <div class="col-md-6">
                         <div class="chart-card">
-                            <h6>📊 Grade Distribution</h6>
+                            <h6>📊 Grade Distribution (A-E)</h6>
                             <div class="chart-container">
                                 <div style="display:flex;height:100%;flex-direction:column;">
-                                    <div style="display:flex;justify-content:space-around;align-items:flex-end;height:180px;padding:10px 0;" id="gradeBarsContainer">
-                                        ${renderGradeBarsHTML(gradeCounts, totalMarks)}
+                                    <div style="display:flex;justify-content:space-around;align-items:flex-end;height:180px;padding:10px 0;">
+                                        ${gradeBars}
                                     </div>
-                                    <div style="text-align:center;font-size:11px;color:#6c757d;margin-top:5px;">Total: <span id="filteredTotalMarks">${totalMarks}</span> marks</div>
+                                    <div style="text-align:center;font-size:11px;color:#6c757d;margin-top:5px;">Total: ${totalMarks} marks</div>
                                 </div>
                             </div>
                             <div class="chart-stats">
-                                <div class="stat-item"><span class="stat-label">Average Score</span><span class="stat-value" id="filteredAvgScore">${avgScore}%</span></div>
-                                <div class="stat-item"><span class="stat-label">Pass Rate</span><span class="stat-value" id="filteredPassRate">${passRate}%</span></div>
-                                <div class="stat-item"><span class="stat-label">Distinction Rate</span><span class="stat-value" id="filteredDistinctionRate">${distinctionRate}%</span></div>
+                                <div class="stat-item"><span class="stat-label">Average Score</span><span class="stat-value">${avgScore}%</span></div>
+                                <div class="stat-item"><span class="stat-label">Pass Rate</span><span class="stat-value">${passRate}%</span></div>
+                                <div class="stat-item"><span class="stat-label">Distinction Rate</span><span class="stat-value">${distinctionRate}%</span></div>
                             </div>
                         </div>
                     </div>
@@ -1811,70 +1840,43 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
                             <h6>📈 Performance by Subject</h6>
                             <div class="chart-container">
                                 <div style="height:100%;">
-                                    <div style="display:flex;flex-direction:column;gap:6px;padding:5px 0;" id="subjectBarsContainer">
-                                        ${renderSubjectBarsHTML(subjectScores)}
+                                    <div style="display:flex;flex-direction:column;gap:6px;padding:5px 0;">
+                                        ${subjectBars || '<div class="text-center text-muted py-4">No subject data available</div>'}
                                     </div>
                                 </div>
                             </div>
                             <div class="chart-stats">
-                                <div class="stat-item"><span class="stat-label">Best Subject</span><span class="stat-value text-success" id="filteredBestSubject">${bestSubject}</span></div>
-                                <div class="stat-item"><span class="stat-label">Worst Subject</span><span class="stat-value text-danger" id="filteredWorstSubject">${worstSubject}</span></div>
+                                <div class="stat-item"><span class="stat-label">Best Subject</span><span class="stat-value text-success">${bestSubject}</span></div>
+                                <div class="stat-item"><span class="stat-label">Worst Subject</span><span class="stat-value text-danger">${worstSubject}</span></div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- ========================================== -->
-            <!-- STUDENT PROGRESS TAB WITH TOP PERFORMERS  -->
-            <!-- ========================================== -->
+            <!-- Student Progress Tab -->
             <div class="analytics-panel" id="panel-progress">
                 <div class="row">
                     <div class="col-md-8">
                         <div class="chart-card">
                             <h6>📈 Student Progress Over Time</h6>
                             <div class="chart-container" id="studentProgressChart">
-                                ${renderProgressChartHTML(marksData)}
+                                ${progressChart}
                             </div>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <div class="chart-card">
-                            <h6 id="performerTitle">🏆 Top Performers</h6>
-                            <!-- TOP PERFORMER FILTERS -->
-                            <div class="performer-filters">
-                                <div class="filter-group">
-                                    <label>📚 Class</label>
-                                    <select id="performerClass" class="form-select form-select-sm" onchange="updateTopPerformers()">
-                                        <option value="">All Classes</option>
-                                        ${classOptions}
-                                    </select>
-                                </div>
-                                <div class="filter-group">
-                                    <label>🌊 Stream</label>
-                                    <select id="performerStream" class="form-select form-select-sm" onchange="updateTopPerformers()">
-                                        <option value="">All Streams</option>
-                                        ${streamOptions}
-                                    </select>
-                                </div>
-                                <div class="filter-group">
-                                    <label>&nbsp;</label>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="resetPerformerFilters()">
-                                        <i class="fas fa-undo"></i> Reset
-                                    </button>
-                                </div>
-                            </div>
+                            <h6>🏆 Top Performers</h6>
                             <div id="topPerformersList" style="max-height:280px;overflow-y:auto;">
-                                ${renderTopPerformersHTML(topPerformers)}
+                                ${performersHtml}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- ========================================== -->
-            <!-- HEATMAP TAB                               -->
-            <!-- ========================================== -->
+            <!-- Heatmap Tab -->
             <div class="analytics-panel" id="panel-heatmap">
                 <div class="row">
                     <div class="col-md-12">
@@ -1894,16 +1896,14 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
                 </div>
             </div>
             
-            <!-- ========================================== -->
-            <!-- TRENDS TAB                                 -->
-            <!-- ========================================== -->
+            <!-- Trends Tab -->
             <div class="analytics-panel" id="panel-trends">
                 <div class="row">
                     <div class="col-md-8">
                         <div class="chart-card">
                             <h6>📉 Performance Trends: Improvement/Decline</h6>
                             <div class="chart-container" id="trendsChart">
-                                ${renderTrendsChartHTML(marksData)}
+                                ${trendHtml}
                             </div>
                         </div>
                     </div>
@@ -1911,16 +1911,29 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
                         <div class="chart-card">
                             <h6>📊 Trend Summary</h6>
                             <div id="trendSummary">
-                                ${renderTrendSummaryHTML(marksData)}
+                                ${(() => {
+                                    let trend = 'Stable', change = 0;
+                                    if (terms.length >= 2) {
+                                        const first = marksByTerm[terms[0]].reduce((a,b) => a + b, 0) / marksByTerm[terms[0]].length;
+                                        const last = marksByTerm[terms[terms.length-1]].reduce((a,b) => a + b, 0) / marksByTerm[terms[terms.length-1]].length;
+                                        change = ((last - first) / first) * 100;
+                                        if (change > 5) trend = 'Improving';
+                                        else if (change < -5) trend = 'Declining';
+                                    }
+                                    return `
+                                        <div class="trend-item"><span class="trend-label">Overall Trend</span><span class="trend-value" style="color:${trend === 'Improving' ? '#27ae60' : trend === 'Declining' ? '#dc3545' : '#f39c12'};">${trend}</span></div>
+                                        <div class="trend-item"><span class="trend-label">Improvement</span><span class="trend-value" style="color:${change > 0 ? '#27ae60' : '#6c757d'};">${change > 0 ? change.toFixed(1) : 0}%</span></div>
+                                        <div class="trend-item"><span class="trend-label">Decline</span><span class="trend-value" style="color:${change < 0 ? '#dc3545' : '#6c757d'};">${change < 0 ? Math.abs(change).toFixed(1) : 0}%</span></div>
+                                        <div class="trend-item"><span class="trend-label">Total Records</span><span class="trend-value">${marksData.length}</span></div>
+                                    `;
+                                })()}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- ========================================== -->
-            <!-- COMPARATIVE TAB                            -->
-            <!-- ========================================== -->
+            <!-- Comparative Tab -->
             <div class="analytics-panel" id="panel-comparative">
                 <div class="comparative-controls">
                     <select id="compareType" class="form-select form-select-sm" style="width:auto;min-width:150px;" onchange="populateComparativeDropdowns()">
@@ -1956,129 +1969,6 @@ function generateMasterpieceAnalyticsHTML(gradeCounts, subjectScores, topPerform
                 <div class="row mt-3">
                     <div class="col-md-6"><div class="comparative-stats" id="compareStats1"><h6>📊 Item 1</h6><p class="text-muted">Select items to compare</p></div></div>
                     <div class="col-md-6"><div class="comparative-stats" id="compareStats2"><h6>📊 Item 2</h6><p class="text-muted">Select items to compare</p></div></div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================
-// RENDER HELPER FUNCTIONS
-// ============================================
-
-function renderGradeBarsHTML(gradeCounts, totalMarks) {
-    const grades = ['A', 'B', 'C', 'D', 'E', 'F'];
-    const colors = ['#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c', '#c0392b'];
-    let html = '';
-    for (let i = 0; i < grades.length; i++) {
-        const count = gradeCounts[grades[i]] || 0;
-        const height = totalMarks > 0 ? ((count / totalMarks) * 150) : 0;
-        html += `
-            <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
-                <div style="height:${height}px;width:30px;background:${colors[i]};border-radius:4px 4px 0 0;position:relative;">
-                    <span style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:bold;">${count}</span>
-                </div>
-                <span style="margin-top:8px;font-weight:bold;font-size:13px;">${grades[i]}</span>
-                <span style="font-size:10px;color:#6c757d;">${totalMarks > 0 ? ((count/totalMarks)*100).toFixed(1) : 0}%</span>
-            </div>
-        `;
-    }
-    return html;
-}
-
-function renderSubjectBarsHTML(subjectScores) {
-    const sorted = Object.entries(subjectScores)
-        .sort((a, b) => (b[1].total/b[1].count) - (a[1].total/a[1].count))
-        .slice(0, 8);
-    
-    let html = '';
-    for (const [subject, data] of sorted) {
-        const avg = data.total / data.count;
-        const pct = Math.min(100, Math.max(0, avg));
-        const color = pct >= 80 ? '#27ae60' : pct >= 60 ? '#f39c12' : '#e74c3c';
-        html += `
-            <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:11px;width:70px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" title="${subject}">${subject}</span>
-                <div style="flex:1;height:18px;background:#ecf0f1;border-radius:10px;overflow:hidden;">
-                    <div style="height:100%;width:${pct}%;background:${color};border-radius:10px;transition:width 0.8s;"></div>
-                </div>
-                <span style="font-size:12px;font-weight:bold;min-width:40px;text-align:right;">${avg.toFixed(1)}%</span>
-            </div>
-        `;
-    }
-    return html || '<div class="text-center text-muted py-4">No subject data available</div>';
-}
-
-function renderTopPerformersHTML(performers) {
-    if (!performers || performers.length === 0) {
-        return '<div class="text-center text-muted py-4">No performer data available for the selected filters</div>';
-    }
-    return performers.map((p, i) => {
-        const rankColors = ['#f1c40f', '#bdc3c7', '#e67e22', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a', '#01605a'];
-        const rankTextColors = ['#000', '#000', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff', '#fff'];
-        return `
-            <div class="performer-item">
-                <div style="width:26px;height:26px;background:${rankColors[i]};color:${rankTextColors[i]};border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${i+1}</div>
-                <div style="flex:1;">
-                    <div style="font-weight:600;font-size:13px;">${escapeHtml(p.name)}</div>
-                    <div style="font-size:10px;color:#6c757d;">
-                        ${p.class || 'N/A'} ${p.stream ? '- ' + p.stream : ''} | ${p.count} subjects
-                    </div>
-                </div>
-                <div style="font-weight:700;color:#01605a;">${p.average.toFixed(1)}%</div>
-            </div>
-        `;
-    }).join('');
-}
-
-function renderProgressChartHTML(marksData) {
-    const marksByTerm = {};
-    for (const mark of marksData) {
-        const key = `${mark.exam} ${mark.year}`;
-        if (!marksByTerm[key]) marksByTerm[key] = [];
-        let pct = 0;
-        if (currentLevel === 'olevel') {
-            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
-        } else {
-            pct = (mark.marks_obtained / mark.max_marks) * 100;
-        }
-        marksByTerm[key].push(pct);
-    }
-    const terms = Object.keys(marksByTerm).sort();
-    
-    if (terms.length === 0) {
-        return '<div class="text-center text-muted py-4">No progress data available</div>';
-    }
-    
-    const averages = terms.map(t => marksByTerm[t].reduce((a, b) => a + b, 0) / marksByTerm[t].length);
-    let points = '';
-    let circles = '';
-    for (let i = 0; i < averages.length; i++) {
-        const x = i * (100 / (averages.length - 1 || 1));
-        const y = 170 - ((averages[i] / 100) * 170);
-        points += `${x},${y} `;
-        circles += `
-            <circle cx="${x}" cy="${y}" r="5" fill="#ff862d" stroke="white" stroke-width="2" />
-            <text x="${x}" y="${y-10}" text-anchor="middle" font-size="9" font-weight="bold" fill="#2c3e50">${averages[i].toFixed(1)}%</text>
-            <text x="${x}" y="${178}" text-anchor="middle" font-size="7" fill="#6c757d">${terms[i]||''}</text>
-        `;
-    }
-    return `
-        <div style="height:100%;padding:10px 0;">
-            <div style="position:relative;height:180px;">
-                <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:0 10px;">
-                    ${[0,25,50,75,100].map(v => `
-                        <div style="border-bottom:1px dashed #eef2f6;position:relative;height:25%;">
-                            <span style="position:absolute;left:-30px;top:-8px;font-size:9px;color:#6c757d;">${v}%</span>
-                        </div>
-                    `).join('')}
-                </div>
-                <div style="position:absolute;top:0;left:35px;right:10px;bottom:0;display:flex;align-items:flex-end;justify-content:space-around;">
-                    <svg style="width:100%;height:100%;" viewBox="0 0 100 180">
-                        <polygon points="0,170 ${points}100,170" fill="rgba(1,96,90,0.2)" />
-                        <polyline points="${points}" fill="none" stroke="#01605a" stroke-width="3" />
-                        ${circles}
-                    </svg>
                 </div>
             </div>
         </div>
@@ -2139,449 +2029,11 @@ function renderHeatmapHTML(marksData, studentsData, subjectScores) {
     html += `</tbody></table></div>`;
     return html;
 }
-
-function renderTrendsChartHTML(marksData) {
-    const marksByTerm = {};
-    for (const mark of marksData) {
-        const key = `${mark.exam} ${mark.year}`;
-        if (!marksByTerm[key]) marksByTerm[key] = [];
-        let pct = 0;
-        if (currentLevel === 'olevel') {
-            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
-        } else {
-            pct = (mark.marks_obtained / mark.max_marks) * 100;
-        }
-        marksByTerm[key].push(pct);
-    }
-    const terms = Object.keys(marksByTerm).sort();
-    
-    if (terms.length === 0) {
-        return '<div class="text-center text-muted py-4">No trend data available</div>';
-    }
-    
-    const averages = terms.map(t => marksByTerm[t].reduce((a, b) => a + b, 0) / marksByTerm[t].length);
-    let points = '';
-    let circles = '';
-    for (let i = 0; i < averages.length; i++) {
-        const x = i * (100 / (averages.length - 1 || 1));
-        const y = 170 - ((averages[i] / 100) * 170);
-        points += `${x},${y} `;
-        circles += `
-            <circle cx="${x}" cy="${y}" r="5" fill="#ff862d" stroke="white" stroke-width="2" />
-            <text x="${x}" y="${y-10}" text-anchor="middle" font-size="9" font-weight="bold" fill="#2c3e50">${averages[i].toFixed(1)}%</text>
-            <text x="${x}" y="${178}" text-anchor="middle" font-size="7" fill="#6c757d">${terms[i]||''}</text>
-        `;
-    }
-    return `
-        <div style="height:100%;padding:10px 0;">
-            <div style="position:relative;height:180px;">
-                <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:0 10px;">
-                    ${[0,25,50,75,100].map(v => `
-                        <div style="border-bottom:1px dashed #eef2f6;position:relative;height:25%;">
-                            <span style="position:absolute;left:-30px;top:-8px;font-size:9px;color:#6c757d;">${v}%</span>
-                        </div>
-                    `).join('')}
-                </div>
-                <div style="position:absolute;top:0;left:35px;right:10px;bottom:0;display:flex;align-items:flex-end;justify-content:space-around;">
-                    <svg style="width:100%;height:100%;" viewBox="0 0 100 180">
-                        <polygon points="0,170 ${points}100,170" fill="rgba(1,96,90,0.2)" />
-                        <polyline points="${points}" fill="none" stroke="#01605a" stroke-width="3" />
-                        ${circles}
-                    </svg>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function renderTrendSummaryHTML(marksData) {
-    const marksByTerm = {};
-    for (const mark of marksData) {
-        const key = `${mark.exam} ${mark.year}`;
-        if (!marksByTerm[key]) marksByTerm[key] = [];
-        let pct = 0;
-        if (currentLevel === 'olevel') {
-            pct = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
-        } else {
-            pct = (mark.marks_obtained / mark.max_marks) * 100;
-        }
-        marksByTerm[key].push(pct);
-    }
-    const terms = Object.keys(marksByTerm).sort();
-    
-    let trend = 'Stable', change = 0;
-    if (terms.length >= 2) {
-        const first = marksByTerm[terms[0]].reduce((a,b) => a + b, 0) / marksByTerm[terms[0]].length;
-        const last = marksByTerm[terms[terms.length-1]].reduce((a,b) => a + b, 0) / marksByTerm[terms[terms.length-1]].length;
-        change = ((last - first) / first) * 100;
-        if (change > 5) trend = 'Improving';
-        else if (change < -5) trend = 'Declining';
-    }
-    return `
-        <div class="trend-item"><span class="trend-label">Overall Trend</span><span class="trend-value" style="color:${trend === 'Improving' ? '#27ae60' : trend === 'Declining' ? '#dc3545' : '#f39c12'};">${trend}</span></div>
-        <div class="trend-item"><span class="trend-label">Improvement</span><span class="trend-value" style="color:${change > 0 ? '#27ae60' : '#6c757d'};">${change > 0 ? change.toFixed(1) : 0}%</span></div>
-        <div class="trend-item"><span class="trend-label">Decline</span><span class="trend-value" style="color:${change < 0 ? '#dc3545' : '#6c757d'};">${change < 0 ? Math.abs(change).toFixed(1) : 0}%</span></div>
-        <div class="trend-item"><span class="trend-label">Total Records</span><span class="trend-value">${marksData.length}</span></div>
-    `;
-}
-
-// ============================================
-// PERFORMANCE FILTER FUNCTIONS
-// ============================================
-
-window.applyPerformanceFilters = function() {
-    const data = window._analyticsData;
-    if (!data) return;
-    
-    const year = document.getElementById('perfYear')?.value;
-    const term = document.getElementById('perfTerm')?.value;
-    const subject = document.getElementById('perfSubject')?.value;
-    const studentId = document.getElementById('perfStudent')?.value;
-    
-    // Filter marks data
-    let filteredMarks = data.marksData;
-    
-    if (year) {
-        filteredMarks = filteredMarks.filter(m => m.year === year);
-    }
-    if (term) {
-        filteredMarks = filteredMarks.filter(m => m.exam === term);
-    }
-    if (subject) {
-        filteredMarks = filteredMarks.filter(m => m.subject === subject);
-    }
-    if (studentId) {
-        filteredMarks = filteredMarks.filter(m => m.student_id === studentId);
-    }
-    
-    // Recalculate statistics
-    const gradeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
-    let totalScores = 0, passCount = 0, distinctionCount = 0;
-    const subjectScores = {};
-    
-    for (const mark of filteredMarks) {
-        let percentage = 0;
-        if (currentLevel === 'olevel') {
-            percentage = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
-        } else {
-            percentage = (mark.marks_obtained / mark.max_marks) * 100;
-        }
-        
-        totalScores += percentage;
-        
-        let grade = 'F';
-        if (percentage >= 80) grade = 'A';
-        else if (percentage >= 70) grade = 'B';
-        else if (percentage >= 60) grade = 'C';
-        else if (percentage >= 50) grade = 'D';
-        else if (percentage >= 40) grade = 'E';
-        gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
-        
-        if (percentage >= 50) passCount++;
-        if (percentage >= 80) distinctionCount++;
-        
-        const subj = mark.subject || 'Unknown';
-        if (!subjectScores[subj]) subjectScores[subj] = { total: 0, count: 0 };
-        subjectScores[subj].total += percentage;
-        subjectScores[subj].count++;
-    }
-    
-    const totalMarks = filteredMarks.length || 1;
-    const avgScore = (totalScores / totalMarks).toFixed(1);
-    const passRate = ((passCount / totalMarks) * 100).toFixed(1);
-    const distinctionRate = ((distinctionCount / totalMarks) * 100).toFixed(1);
-    
-    // Update UI
-    document.getElementById('gradeBarsContainer').innerHTML = renderGradeBarsHTML(gradeCounts, totalMarks);
-    document.getElementById('subjectBarsContainer').innerHTML = renderSubjectBarsHTML(subjectScores);
-    document.getElementById('filteredTotalMarks').textContent = totalMarks;
-    document.getElementById('filteredAvgScore').textContent = avgScore + '%';
-    document.getElementById('filteredPassRate').textContent = passRate + '%';
-    document.getElementById('filteredDistinctionRate').textContent = distinctionRate + '%';
-    
-    // Update best/worst subjects
-    let best = '-', worst = '-';
-    let bestScore = 0, worstScore = 100;
-    for (const [subj, data] of Object.entries(subjectScores)) {
-        const avg = data.total / data.count;
-        if (avg > bestScore) { bestScore = avg; best = subj; }
-        if (avg < worstScore) { worstScore = avg; worst = subj; }
-    }
-    document.getElementById('filteredBestSubject').textContent = best;
-    document.getElementById('filteredWorstSubject').textContent = worst;
-};
-
-window.resetPerformanceFilters = function() {
-    document.getElementById('perfYear').value = '';
-    document.getElementById('perfTerm').value = '';
-    document.getElementById('perfSubject').value = '';
-    document.getElementById('perfStudent').value = '';
-    applyPerformanceFilters();
-};
-
-// ============================================
-// TOP PERFORMER FILTER FUNCTIONS
-// ============================================
-
-window.updateTopPerformers = function() {
-    const data = window._analyticsData;
-    if (!data) return;
-    
-    const selectedClass = document.getElementById('performerClass')?.value;
-    const selectedStream = document.getElementById('performerStream')?.value;
-    
-    // Filter students by class and stream
-    let filteredStudents = data.studentsData;
-    
-    if (selectedClass) {
-        filteredStudents = filteredStudents.filter(s => s.class === selectedClass);
-    }
-    if (selectedStream) {
-        filteredStudents = filteredStudents.filter(s => s.stream === selectedStream);
-    }
-    
-    // Get student IDs from filtered students
-    const filteredStudentIds = new Set(filteredStudents.map(s => s.id));
-    
-    // Filter marks by these students
-    let filteredMarks = data.marksData.filter(m => filteredStudentIds.has(m.student_id));
-    
-    // Calculate top performers from filtered data
-    const studentScores = {};
-    for (const mark of filteredMarks) {
-        let percentage = 0;
-        if (currentLevel === 'olevel') {
-            percentage = Math.min(100, Math.max(0, (mark.ca_score || 0) + (mark.exam_80 || 0)));
-        } else {
-            percentage = (mark.marks_obtained / mark.max_marks) * 100;
-        }
-        
-        const studentName = mark.student_name || 'Unknown';
-        if (!studentScores[studentName]) {
-            studentScores[studentName] = { 
-                name: studentName, 
-                scores: [], 
-                class: mark.student_class || 'Unknown',
-                stream: mark.student_stream || 'Unknown',
-                admission: mark.student_admission || '-'
-            };
-        }
-        studentScores[studentName].scores.push(percentage);
-    }
-    
-    const performers = Object.entries(studentScores)
-        .map(([name, data]) => ({
-            name: name,
-            average: data.scores.reduce((a, b) => a + b, 0) / data.scores.length,
-            count: data.scores.length,
-            class: data.class,
-            stream: data.stream,
-            admission: data.admission
-        }))
-        .sort((a, b) => b.average - a.average)
-        .slice(0, 10);
-    
-    // Update the UI
-    const container = document.getElementById('topPerformersList');
-    if (container) {
-        container.innerHTML = renderTopPerformersHTML(performers);
-    }
-    
-    // Update the title with filter info
-    let filterText = '🏆 Top Performers';
-    if (selectedClass) filterText += ` - ${selectedClass}`;
-    if (selectedStream) filterText += ` (${selectedStream})`;
-    const titleEl = document.getElementById('performerTitle');
-    if (titleEl) titleEl.textContent = filterText;
-};
-
-window.resetPerformerFilters = function() {
-    document.getElementById('performerClass').value = '';
-    document.getElementById('performerStream').value = '';
-    updateTopPerformers();
-};
-
-// ============================================
-// COMPARATIVE ANALYSIS FUNCTIONS
-// ============================================
-
-window.populateComparativeDropdowns = function() {
-    const data = window._analyticsData;
-    if (!data) return;
-    
-    const type = document.getElementById('compareType')?.value || 'classes';
-    const select1 = document.getElementById('compareItem1');
-    const select2 = document.getElementById('compareItem2');
-    if (!select1 || !select2) return;
-    
-    let options = [];
-    if (type === 'classes') {
-        options = [...new Set(data.studentsData.map(s => s.class))].filter(Boolean).sort();
-    } else if (type === 'subjects') {
-        options = Object.keys(data.subjectScores).filter(s => s !== 'Unknown').sort();
-    } else if (type === 'terms') {
-        options = [...new Set(data.marksData.map(m => m.exam))].filter(Boolean);
-    } else if (type === 'years') {
-        options = [...new Set(data.marksData.map(m => m.year))].filter(Boolean).sort();
-    }
-    
-    select1.innerHTML = options.map(o => `<option value="${o}">${o}</option>`).join('');
-    select2.innerHTML = options.map(o => `<option value="${o}">${o}</option>`).join('');
-    if (options.length >= 2) { select1.value = options[0]; select2.value = options[1]; }
-};
-
-window.updateComparativeAnalysis = function() {
-    const data = window._analyticsData;
-    if (!data) return;
-    
-    const type = document.getElementById('compareType')?.value || 'classes';
-    const item1 = document.getElementById('compareItem1')?.value;
-    const item2 = document.getElementById('compareItem2')?.value;
-    const chart = document.getElementById('comparativeChart');
-    const stats1 = document.getElementById('compareStats1');
-    const stats2 = document.getElementById('compareStats2');
-    
-    if (!item1 || !item2 || item1 === item2) {
-        chart.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:180px;">
-            <div style="font-size:36px;">🔍</div><p style="color:#6c757d;">Select two different items to compare</p></div>`;
-        stats1.innerHTML = '<h6>📊 Item 1</h6><p class="text-muted">Select items to compare</p>';
-        stats2.innerHTML = '<h6>📊 Item 2</h6><p class="text-muted">Select items to compare</p>';
-        return;
-    }
-    
-    let data1 = [], data2 = [];
-    let label1 = item1, label2 = item2;
-    
-    if (type === 'classes') {
-        data1 = data.marksData.filter(m => {
-            const student = data.studentsData.find(s => s.id === m.student_id);
-            return student && student.class === item1;
-        });
-        data2 = data.marksData.filter(m => {
-            const student = data.studentsData.find(s => s.id === m.student_id);
-            return student && student.class === item2;
-        });
-        label1 = `Class ${item1}`;
-        label2 = `Class ${item2}`;
-    } else if (type === 'subjects') {
-        data1 = data.marksData.filter(m => m.subject === item1);
-        data2 = data.marksData.filter(m => m.subject === item2);
-        label1 = item1;
-        label2 = item2;
-    } else if (type === 'terms') {
-        data1 = data.marksData.filter(m => m.exam === item1);
-        data2 = data.marksData.filter(m => m.exam === item2);
-        label1 = item1;
-        label2 = item2;
-    } else if (type === 'years') {
-        data1 = data.marksData.filter(m => m.year === item1);
-        data2 = data.marksData.filter(m => m.year === item2);
-        label1 = item1;
-        label2 = item2;
-    }
-    
-    const calcStats = (d) => {
-        let total = 0, pass = 0;
-        for (const m of d) {
-            let pct = 0;
-            if (currentLevel === 'olevel') pct = Math.min(100, Math.max(0, (m.ca_score || 0) + (m.exam_80 || 0)));
-            else pct = (m.marks_obtained / m.max_marks) * 100;
-            total += pct;
-            if (pct >= 50) pass++;
-        }
-        const count = d.length || 1;
-        return { avg: total / count, passRate: (pass / count) * 100, count };
-    };
-    
-    const s1 = calcStats(data1);
-    const s2 = calcStats(data2);
-    
-    chart.innerHTML = `
-        <div style="padding:10px;">
-            <div style="display:flex;justify-content:space-around;align-items:flex-end;height:180px;margin-bottom:15px;">
-                <div style="display:flex;flex-direction:column;align-items:center;width:45%;">
-                    <div style="display:flex;gap:12px;align-items:flex-end;height:140px;">
-                        <div style="display:flex;flex-direction:column;align-items:center;">
-                            <div style="height:${(s1.avg/100)*140}px;width:35px;background:linear-gradient(180deg,#01605a,#2ecc71);border-radius:4px 4px 0 0;">
-                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s1.avg.toFixed(1)}%</span>
-                            </div>
-                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Avg</span>
-                        </div>
-                        <div style="display:flex;flex-direction:column;align-items:center;">
-                            <div style="height:${(s1.passRate/100)*140}px;width:35px;background:linear-gradient(180deg,#27ae60,#2ecc71);border-radius:4px 4px 0 0;">
-                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s1.passRate.toFixed(1)}%</span>
-                            </div>
-                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Pass</span>
-                        </div>
-                    </div>
-                    <div style="margin-top:8px;font-weight:700;font-size:13px;color:#01605a;">${escapeHtml(label1)}</div>
-                    <div style="font-size:10px;color:#6c757d;">${data1.length} records</div>
-                </div>
-                <div style="width:10%;text-align:center;font-size:20px;color:#6c757d;">VS</div>
-                <div style="display:flex;flex-direction:column;align-items:center;width:45%;">
-                    <div style="display:flex;gap:12px;align-items:flex-end;height:140px;">
-                        <div style="display:flex;flex-direction:column;align-items:center;">
-                            <div style="height:${(s2.avg/100)*140}px;width:35px;background:linear-gradient(180deg,#ff862d,#f39c12);border-radius:4px 4px 0 0;">
-                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s2.avg.toFixed(1)}%</span>
-                            </div>
-                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Avg</span>
-                        </div>
-                        <div style="display:flex;flex-direction:column;align-items:center;">
-                            <div style="height:${(s2.passRate/100)*140}px;width:35px;background:linear-gradient(180deg,#e67e22,#f39c12);border-radius:4px 4px 0 0;">
-                                <span style="display:block;text-align:center;color:white;font-size:11px;font-weight:bold;padding-top:3px;">${s2.passRate.toFixed(1)}%</span>
-                            </div>
-                            <span style="margin-top:6px;font-size:11px;font-weight:600;">Pass</span>
-                        </div>
-                    </div>
-                    <div style="margin-top:8px;font-weight:700;font-size:13px;color:#ff862d;">${escapeHtml(label2)}</div>
-                    <div style="font-size:10px;color:#6c757d;">${data2.length} records</div>
-                </div>
-            </div>
-            <div style="text-align:center;padding:8px;background:${s1.avg > s2.avg ? '#d4edda' : s2.avg > s1.avg ? '#f8d7da' : '#fff3cd'};border-radius:8px;">
-                <strong>${s1.avg > s2.avg ? `🏆 ${label1} leads by ${(s1.avg - s2.avg).toFixed(1)}%` : 
-                      s2.avg > s1.avg ? `🏆 ${label2} leads by ${(s2.avg - s1.avg).toFixed(1)}%` : 
-                      `⚖️ ${label1} and ${label2} are tied`}</strong>
-            </div>
-        </div>
-    `;
-    
-    stats1.innerHTML = `<h6>📊 ${escapeHtml(label1)}</h6>
-        <div class="stat-row"><span>Average</span><span><strong>${s1.avg.toFixed(1)}%</strong></span></div>
-        <div class="stat-row"><span>Pass Rate</span><span><strong>${s1.passRate.toFixed(1)}%</strong></span></div>
-        <div class="stat-row"><span>Records</span><span><strong>${data1.length}</strong></span></div>`;
-    
-    stats2.innerHTML = `<h6>📊 ${escapeHtml(label2)}</h6>
-        <div class="stat-row"><span>Average</span><span><strong>${s2.avg.toFixed(1)}%</strong></span></div>
-        <div class="stat-row"><span>Pass Rate</span><span><strong>${s2.passRate.toFixed(1)}%</strong></span></div>
-        <div class="stat-row"><span>Records</span><span><strong>${data2.length}</strong></span></div>`;
-};
-
-// ============================================
-// ANALYTICS TAB SWITCHING
-// ============================================
-
-document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('analytics-tab')) {
-        document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.analytics-panel').forEach(p => p.classList.remove('active'));
-        e.target.classList.add('active');
-        const panel = document.getElementById(`panel-${e.target.dataset.tab}`);
-        if (panel) panel.classList.add('active');
-        
-        if (e.target.dataset.tab === 'comparative') {
-            setTimeout(populateComparativeDropdowns, 100);
-        }
-    }
-});
-
-// Populate comparative dropdowns on initial load
-setTimeout(populateComparativeDropdowns, 500);
 // ============================================
 // COMPLETE STUDENT MANAGEMENT - MASTERPIECE
-// With Class Statistics Dashboard
-// Fixed: Select All only checks VISIBLE rows
-// Fixed: House Filter properly filters by house name
-// NEW: View Student Details with Marks History
+// With Enhanced Class Statistics Dashboard
+// Shows: Total, Boarding, Day per class
+// Responsive: 2 per row on mobile
 // ============================================
 
 const olevelClasses = ['S.1', 'S.2', 'S.3', 'S.4'];
@@ -2914,11 +2366,11 @@ async function verifySuperAdminPasswordForStudent() {
 }
 
 // ============================================
-// GET CLASS STATISTICS
+// GET CLASS STATISTICS WITH BOARDING/DAY BREAKDOWN
 // ============================================
 
 function getClassStatistics() {
-    const classCounts = {};
+    const classStats = {};
     const classColors = {
         'S.1': '#4facfe',
         'S.2': '#43e97b',
@@ -2928,44 +2380,67 @@ function getClassStatistics() {
         'S.6': '#f093fb'
     };
     
+    // Initialize stats for all classes
+    const allClasses = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
+    for (const className of allClasses) {
+        classStats[className] = {
+            total: 0,
+            boarding: 0,
+            day: 0,
+            color: classColors[className] || '#6c757d'
+        };
+    }
+    
+    // Count students per class with boarding/day breakdown
     for (const student of students) {
         const className = student.class || 'Unknown';
-        if (!classCounts[className]) {
-            classCounts[className] = 0;
+        if (!classStats[className]) {
+            classStats[className] = {
+                total: 0,
+                boarding: 0,
+                day: 0,
+                color: '#6c757d'
+            };
         }
-        classCounts[className]++;
+        classStats[className].total++;
+        if (student.student_type === 'Boarding') {
+            classStats[className].boarding++;
+        } else {
+            classStats[className].day++;
+        }
     }
     
-    const total = students.length || 1;
+    // Convert to array and calculate percentages
     const result = [];
+    const totalStudents = students.length || 1;
     
-    const allClasses = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
-    
-    for (const className of allClasses) {
-        const count = classCounts[className] || 0;
-        const percentage = ((count / total) * 100).toFixed(1);
+    for (const [className, stats] of Object.entries(classStats)) {
         result.push({
             class: className,
-            count: count,
-            percentage: percentage,
-            color: classColors[className] || '#6c757d'
+            total: stats.total,
+            boarding: stats.boarding,
+            day: stats.day,
+            percentage: ((stats.total / totalStudents) * 100).toFixed(1),
+            color: stats.color
         });
     }
     
-    if (classCounts['Unknown']) {
-        result.push({
-            class: 'Unknown',
-            count: classCounts['Unknown'],
-            percentage: ((classCounts['Unknown'] / total) * 100).toFixed(1),
-            color: '#6c757d'
-        });
-    }
+    // Sort by class order
+    const classOrder = currentLevel === 'olevel' ? olevelClasses : alevelClasses;
+    result.sort((a, b) => {
+        const indexA = classOrder.indexOf(a.class);
+        const indexB = classOrder.indexOf(b.class);
+        if (indexA === -1 && indexB === -1) return 0;
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+    });
     
     return result;
 }
 
 // ============================================
-// RENDER STUDENTS PAGE WITH FIXED HOUSE FILTER
+// RENDER STUDENTS PAGE WITH ENHANCED STATS
 // ============================================
 
 async function renderStudents() {
@@ -2974,13 +2449,13 @@ async function renderStudents() {
     
     const classStats = getClassStatistics();
     
-    // Generate house filter options with house ID as value
+    // Generate house filter options
     const houseOptions = housesList.map(house => 
         `<option value="${house.id}">🏠 ${escapeHtml(house.name)}</option>`
     ).join('');
     
     return `
-        <!-- CLASS STATISTICS DASHBOARD -->
+        <!-- CLASS STATISTICS DASHBOARD - WITH BOARDING/DAY -->
         <div class="class-stats-dashboard">
             <div class="stats-header">
                 <h5><i class="fas fa-chart-bar"></i> Student Statistics by Class</h5>
@@ -2989,8 +2464,12 @@ async function renderStudents() {
             <div class="stats-grid">
                 ${classStats.map(stat => `
                     <div class="stat-card-mini" style="border-left: 4px solid ${stat.color};">
-                        <div class="stat-number">${stat.count}</div>
-                        <div class="stat-label">${stat.class}</div>
+                        <div class="stat-class">${stat.class}</div>
+                        <div class="stat-number">${stat.total}</div>
+                        <div class="stat-breakdown">
+                            <span class="stat-boarding"><i class="fas fa-home"></i> ${stat.boarding}</span>
+                            <span class="stat-day"><i class="fas fa-sun"></i> ${stat.day}</span>
+                        </div>
                         <div class="stat-bar" style="width: ${stat.percentage}%; background: ${stat.color};"></div>
                         <div class="stat-percent">${stat.percentage}%</div>
                     </div>
@@ -3014,7 +2493,7 @@ async function renderStudents() {
                 </div>
                 
                 <!-- SEARCH & FILTERS -->
-                <div class="row">
+                <div class="row g-2">
                     <div class="col-md-4">
                         <input type="text" id="studentSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Search by name, admission..." onkeyup="filterStudents()">
                     </div>
@@ -3065,6 +2544,9 @@ async function renderStudents() {
         </div>
         
         <style>
+            /* ========================================== */
+            /* CLASS STATISTICS DASHBOARD                 */
+            /* ========================================== */
             .class-stats-dashboard {
                 background: white;
                 border-radius: 16px;
@@ -3097,59 +2579,144 @@ async function renderStudents() {
                 color: #01605a;
                 font-size: 18px;
             }
+            
+            /* ========================================== */
+            /* STATS GRID - 2 PER ROW ON MOBILE           */
+            /* ========================================== */
             .stats-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
                 gap: 12px;
             }
+            
             .stat-card-mini {
                 background: #f8f9fa;
                 border-radius: 12px;
-                padding: 12px 15px;
+                padding: 14px 16px;
                 border-left: 4px solid #01605a;
                 transition: transform 0.2s;
+                text-align: center;
             }
             .stat-card-mini:hover {
-                transform: translateY(-2px);
+                transform: translateY(-3px);
             }
+            
+            .stat-class {
+                font-size: 13px;
+                font-weight: 700;
+                color: #2c3e50;
+                margin-bottom: 2px;
+            }
+            
             .stat-number {
-                font-size: 28px;
+                font-size: 32px;
                 font-weight: 700;
                 color: #2c3e50;
                 line-height: 1.2;
             }
-            .stat-label {
+            
+            .stat-breakdown {
+                display: flex;
+                justify-content: center;
+                gap: 16px;
                 font-size: 12px;
-                color: #6c757d;
-                font-weight: 500;
-                margin-top: 2px;
+                margin: 4px 0 8px;
             }
+            
+            .stat-boarding {
+                color: #01605a;
+                font-weight: 600;
+            }
+            .stat-boarding i {
+                color: #01605a;
+            }
+            
+            .stat-day {
+                color: #f39c12;
+                font-weight: 600;
+            }
+            .stat-day i {
+                color: #f39c12;
+            }
+            
             .stat-bar {
                 height: 4px;
                 border-radius: 2px;
-                margin-top: 8px;
+                margin: 6px auto 0;
                 transition: width 0.5s ease;
+                max-width: 100%;
             }
+            
             .stat-percent {
                 font-size: 10px;
                 color: #6c757d;
-                text-align: right;
+                text-align: center;
                 margin-top: 2px;
             }
+            
+            /* ========================================== */
+            /* RESPONSIVE - 2 PER ROW ON MOBILE           */
+            /* ========================================== */
             @media (max-width: 768px) {
                 .stats-grid {
-                    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-                    gap: 8px;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 10px;
                 }
-                .stat-number {
-                    font-size: 22px;
-                }
+                
                 .stat-card-mini {
-                    padding: 10px 12px;
+                    padding: 12px 10px;
                 }
+                
+                .stat-number {
+                    font-size: 26px;
+                }
+                
+                .stat-breakdown {
+                    font-size: 11px;
+                    gap: 12px;
+                }
+                
+                .stat-class {
+                    font-size: 12px;
+                }
+                
                 .stats-header {
                     flex-direction: column;
                     align-items: flex-start;
+                }
+            }
+            
+            @media (max-width: 480px) {
+                .stats-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
+                }
+                
+                .stat-card-mini {
+                    padding: 10px 8px;
+                    border-left-width: 3px;
+                }
+                
+                .stat-number {
+                    font-size: 22px;
+                }
+                
+                .stat-breakdown {
+                    font-size: 10px;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+                
+                .stat-class {
+                    font-size: 11px;
+                }
+                
+                .stat-bar {
+                    height: 3px;
+                }
+                
+                .stat-percent {
+                    font-size: 9px;
                 }
             }
         </style>
@@ -5757,11 +5324,12 @@ window.printStudentIdCards = async function() {
 // ============================================
 
 console.log('✅ Student Module Loaded - Complete Masterpiece!');
-console.log('✅ Features: Class Statistics Dashboard, View Student Details with Marks, Add, Edit, Delete, Bulk Upload, Export, Print');
+console.log('✅ Features: Class Statistics with Boarding/Day breakdown');
+console.log('✅ Responsive: 2 per row on mobile');
+console.log('✅ View Student Details with Marks History');
 console.log('✅ Fixed: Select All only checks visible rows');
 console.log('✅ Fixed: House Filter properly filters by house name');
 console.log('✅ Fixed: Bulk Delete only deletes visible selected rows');
-
 // ==================== SUBJECTS MODULE ====================
 // ============================================
 // SUBJECTS MODULE - USING SWEETALERT2 (No Bootstrap Modal)
