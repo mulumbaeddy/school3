@@ -6625,7 +6625,6 @@ function escapeHtml(text) {
 }
 // ============================================
 // MARKS MODULE - COMPLETE FINAL MASTERPIECE
-// FULLY MOBILE RESPONSIVE
 // U1/U2/U3 System with Pagination
 // ALL PARTS WORKING: Batch Entry, Filters, Numbering, CRUD
 // ============================================
@@ -6775,7 +6774,7 @@ function validateExamInput(input) {
 }
 
 // ============================================
-// FILTER FUNCTIONS
+// FILTER FUNCTIONS - WORKING
 // ============================================
 
 function applyMarksFilters() {
@@ -6820,9 +6819,6 @@ function applyMarksFilters() {
             countEl.textContent = `Showing ${visibleCount} of ${total} records`;
         }
     }
-    
-    // Update filter badge
-    updateFilterBadge();
 }
 
 function clearMarksFilters() {
@@ -6832,42 +6828,6 @@ function clearMarksFilters() {
     document.getElementById('filterStream').value = '';
     document.getElementById('filterYear').value = '';
     applyMarksFilters();
-}
-
-// ============================================
-// MOBILE FILTER TOGGLE
-// ============================================
-
-function toggleFilters() {
-    const content = document.getElementById('filterContent');
-    const arrow = document.getElementById('filterArrow');
-    
-    if (content) {
-        const isOpen = content.classList.contains('open');
-        if (isOpen) {
-            content.classList.remove('open');
-            if (arrow) arrow.innerHTML = '<i class="fas fa-chevron-down"></i>';
-        } else {
-            content.classList.add('open');
-            if (arrow) arrow.innerHTML = '<i class="fas fa-chevron-up"></i>';
-        }
-    }
-}
-
-function updateFilterBadge() {
-    const badge = document.getElementById('filterBadge');
-    if (!badge) return;
-    
-    let count = 0;
-    const filters = ['filterStudent', 'filterSubject', 'filterClass', 'filterStream', 'filterYear'];
-    for (const id of filters) {
-        const el = document.getElementById(id);
-        if (el && el.value && el.value !== '') {
-            count++;
-        }
-    }
-    badge.textContent = count;
-    badge.style.display = count > 0 ? 'inline-block' : 'none';
 }
 
 // ============================================
@@ -7044,43 +7004,43 @@ function renderTableHeader() {
     if (currentLevel === 'olevel') {
         return `
             <tr>
-                <th width="25"><input type="checkbox" id="selectAllMarks"></th>
-                <th width="30">#</th>
-                <th class="hide-mobile" width="150">Student Details</th>
-                <th class="hide-mobile" width="60">Class</th>
-                <th class="hide-mobile" width="60">Stream</th>
-                <th width="100">Subject</th>
-                <th width="70">Exam</th>
-                <th width="55">Year</th>
-                <th class="hide-mobile" width="50">U1</th>
-                <th class="hide-mobile" width="50">U2</th>
-                <th class="hide-mobile" width="50">U3</th>
-                <th width="65">Exam/80</th>
-                <th width="65">Total</th>
-                <th width="45">Grade</th>
-                <th class="hide-mobile" width="80">Descriptor</th>
-                <th class="hide-mobile" width="60">Initials</th>
-                <th width="70">Actions</th>
+                <th width="30"><input type="checkbox" id="selectAllMarks"></th>
+                <th width="40">#</th>
+                <th width="200">Student Details</th>
+                <th width="70">Class</th>
+                <th width="70">Stream</th>
+                <th width="120">Subject</th>
+                <th width="90">Exam</th>
+                <th width="70">Year</th>
+                <th width="70">U1</th>
+                <th width="70">U2</th>
+                <th width="70">U3</th>
+                <th width="80">Exam/80</th>
+                <th width="80">Total/100</th>
+                <th width="60">Grade</th>
+                <th width="100">Descriptor</th>
+                <th width="80">Initials</th>
+                <th width="80">Actions</th>
             </tr>
         `;
     } else {
         return `
             <tr>
-                <th width="25"><input type="checkbox" id="selectAllMarks"></th>
-                <th width="30">#</th>
-                <th class="hide-mobile" width="150">Student Details</th>
-                <th class="hide-mobile" width="60">Class</th>
-                <th class="hide-mobile" width="60">Stream</th>
-                <th class="hide-mobile" width="80">Combination</th>
-                <th width="100">Subject</th>
-                <th width="80">Type</th>
-                <th width="70">Exam</th>
-                <th width="55">Year</th>
-                <th width="65">Marks</th>
-                <th width="55">%</th>
-                <th width="45">Grade</th>
-                <th width="50">Points</th>
-                <th width="70">Actions</th>
+                <th width="30"><input type="checkbox" id="selectAllMarks"></th>
+                <th width="40">#</th>
+                <th width="200">Student Details</th>
+                <th width="70">Class</th>
+                <th width="70">Stream</th>
+                <th width="100">Combination</th>
+                <th width="120">Subject</th>
+                <th width="100">Subject Type</th>
+                <th width="90">Exam</th>
+                <th width="70">Year</th>
+                <th width="80">Marks</th>
+                <th width="70">%</th>
+                <th width="60">Grade</th>
+                <th width="60">Points</th>
+                <th width="80">Actions</th>
             </tr>
         `;
     }
@@ -7170,7 +7130,7 @@ async function loadMarksPaginated(page = 1, pageSize = 50) {
 }
 
 // ============================================
-// MOBILE-RESPONSIVE PAGINATION CONTROLS
+// PAGINATION CONTROLS
 // ============================================
 
 function updatePaginationInfo() {
@@ -7187,24 +7147,23 @@ function updatePaginationButtons() {
     const container = document.getElementById('paginationButtons');
     if (!container) return;
     
-    const hasPrev = marksCurrentPage > 1;
-    const hasNext = marksCurrentPage < totalPages;
-    
-    container.innerHTML = `
-        <button class="page-btn" onclick="goToPage(1)" ${!hasPrev ? 'disabled' : ''}>
+    let html = `
+        <button class="btn btn-sm btn-outline-primary" onclick="goToPage(1)" ${marksCurrentPage <= 1 ? 'disabled' : ''}>
             <i class="fas fa-angle-double-left"></i>
         </button>
-        <button class="page-btn" onclick="goToPage(${marksCurrentPage - 1})" ${!hasPrev ? 'disabled' : ''}>
+        <button class="btn btn-sm btn-outline-primary" onclick="goToPage(${marksCurrentPage - 1})" ${marksCurrentPage <= 1 ? 'disabled' : ''}>
             <i class="fas fa-angle-left"></i>
         </button>
-        <span class="page-indicator">${marksCurrentPage} / ${totalPages || 1}</span>
-        <button class="page-btn" onclick="goToPage(${marksCurrentPage + 1})" ${!hasNext ? 'disabled' : ''}>
+        <span class="mx-2">Page ${marksCurrentPage} of ${totalPages || 1}</span>
+        <button class="btn btn-sm btn-outline-primary" onclick="goToPage(${marksCurrentPage + 1})" ${marksCurrentPage >= totalPages ? 'disabled' : ''}>
             <i class="fas fa-angle-right"></i>
         </button>
-        <button class="page-btn" onclick="goToPage(${totalPages})" ${!hasNext ? 'disabled' : ''}>
+        <button class="btn btn-sm btn-outline-primary" onclick="goToPage(${totalPages})" ${marksCurrentPage >= totalPages ? 'disabled' : ''}>
             <i class="fas fa-angle-double-right"></i>
         </button>
     `;
+    
+    container.innerHTML = html;
 }
 
 window.goToPage = async function(page) {
@@ -7323,22 +7282,22 @@ function renderMarksTableRows() {
                     data-year="${mark.year}">
                     <td class="text-center"><input type="checkbox" class="markCheck" data-id="${mark.id}"></td>
                     <td class="text-center">${rowNumber}</td>
-                    <td class="hide-mobile"><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
-                    <td class="hide-mobile text-center">${classValue}</td>
-                    <td class="hide-mobile text-center">${streamValue || '-'}</td>
+                    <td><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
+                    <td class="text-center">${classValue}</td>
+                    <td class="text-center">${streamValue || '-'}</td>
                     <td><strong>${escapeHtml(mark.subject)}</strong></td>
                     <td class="text-center">${mark.exam}</td>
                     <td class="text-center">${mark.year}</td>
-                    <td class="hide-mobile text-center">${u1.toFixed(1)}</td>
-                    <td class="hide-mobile text-center">${u2.toFixed(1)}</td>
-                    <td class="hide-mobile text-center">${u3.toFixed(1)}</td>
+                    <td class="text-center">${u1.toFixed(1)}</td>
+                    <td class="text-center">${u2.toFixed(1)}</td>
+                    <td class="text-center">${u3.toFixed(1)}</td>
                     <td class="text-center">${exam80}</td>
                     <td class="text-center"><strong>${total100.toFixed(1)}</strong></td>
-                    <td class="text-center grade-cell" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">
+                    <td class="text-center" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
                         ${gradeInfo.grade}
                     </td>
-                    <td class="hide-mobile text-center">${gradeInfo.descriptor}</td>
-                    <td class="hide-mobile text-center">${escapeHtml(initials) || '-'}</td>
+                    <td class="text-center">${gradeInfo.descriptor}</td>
+                    <td class="text-center">${escapeHtml(initials) || '-'}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-warning me-1" onclick="editMark('${mark.id}')">
                             <i class="fas fa-edit"></i>
@@ -7362,17 +7321,17 @@ function renderMarksTableRows() {
                     data-year="${mark.year}">
                     <td class="text-center"><input type="checkbox" class="markCheck" data-id="${mark.id}"></td>
                     <td class="text-center">${rowNumber}</td>
-                    <td class="hide-mobile"><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
-                    <td class="hide-mobile text-center">${classValue}</td>
-                    <td class="hide-mobile text-center">${streamValue || '-'}</td>
-                    <td class="hide-mobile text-center">${student.combination || '-'}</td>
+                    <td><strong>${escapeHtml(student.name)}</strong><br><small>${student.admission_no || '-'}</small></td>
+                    <td class="text-center">${classValue}</td>
+                    <td class="text-center">${streamValue || '-'}</td>
+                    <td class="text-center">${student.combination || '-'}</td>
                     <td><strong>${escapeHtml(mark.subject)}</strong></td>
                     <td class="text-center">${mark.subject_type || 'principal'}</td>
                     <td class="text-center">${mark.exam}</td>
                     <td class="text-center">${mark.year}</td>
                     <td class="text-center"><strong>${mark.marks_obtained}</strong></td>
                     <td class="text-center">${percentage.toFixed(1)}%</td>
-                    <td class="text-center grade-cell" style="background: ${grade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">
+                    <td class="text-center" style="background: ${grade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
                         ${grade.grade}
                     </td>
                     <td class="text-center"><strong>${grade.points}</strong></td>
@@ -7408,7 +7367,7 @@ function renderMarksTableRows() {
 }
 
 // ============================================
-// RENDER MARKS PAGE - MOBILE RESPONSIVE
+// RENDER MARKS PAGE
 // ============================================
 
 async function renderMarks() {
@@ -7423,54 +7382,54 @@ async function renderMarks() {
     
     return `
         <div class="card shadow-sm mb-3">
-            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white; padding: 8px 12px;">
-                <h5 class="mb-0" style="font-size: 14px;"><i class="fas fa-chart-line"></i> Marks Entry - ${levelName}</h5>
-                <small style="font-size: 10px;">${isOlevel ? 'Select Subject first, then load class' : 'Enter marks for all subjects at once'}</small>
+            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
+                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Marks Entry - ${levelName}</h5>
+                <small>${isOlevel ? 'Select Subject first, then load class' : 'Enter marks for all subjects at once'}</small>
             </div>
-            <div class="card-body" style="padding: 8px 10px;">
-                <div class="row g-1">
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px; font-weight: 600;">📚 Class</label>
-                        <select id="batchClass" class="form-select form-select-sm" style="font-size: 11px; padding: 3px 6px;">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">📚 Class</label>
+                        <select id="batchClass" class="form-select">
                             <option value="">-- Select --</option>
                             ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px; font-weight: 600;">🌊 Stream</label>
-                        <select id="batchStream" class="form-select form-select-sm" style="font-size: 11px; padding: 3px 6px;">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">🌊 Stream</label>
+                        <select id="batchStream" class="form-select">
                             <option value="">-- All Streams --</option>
                             ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
                         </select>
                     </div>
                     ${isOlevel ? `
-                    <div class="col-6 col-md-3">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px; font-weight: 600;">📖 Subject *</label>
-                        <select id="batchSubject" class="form-select form-select-sm" style="font-size: 11px; padding: 3px 6px;">
-                            <option value="">-- Select --</option>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">📖 Subject *</label>
+                        <select id="batchSubject" class="form-select">
+                            <option value="">-- Select Subject --</option>
                             ${dbOlevelSubjects.map(s => `<option value="${s}">${s}</option>`).join('')}
                         </select>
                     </div>
                     ` : ''}
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px; font-weight: 600;">📝 Exam</label>
-                        <select id="batchExam" class="form-select form-select-sm" style="font-size: 11px; padding: 3px 6px;">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">📝 Exam</label>
+                        <select id="batchExam" class="form-select">
                             ${EXAM_OPTIONS.map(e => `<option value="${e}">${e}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px; font-weight: 600;">📅 Year</label>
-                        <input type="text" id="batchYear" class="form-control form-control-sm" value="${getCurrentYear()}" style="font-size: 11px; padding: 3px 6px;">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">📅 Year</label>
+                        <input type="text" id="batchYear" class="form-control" value="${getCurrentYear()}">
                     </div>
-                    <div class="col-6 col-md-1">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px;">&nbsp;</label>
-                        <button class="btn btn-primary btn-sm w-100" onclick="loadBatchMarks()" style="font-size: 11px; padding: 3px 4px;">
+                    <div class="col-md-${isOlevel ? '1' : '2'}">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button class="btn btn-primary w-100" onclick="loadBatchMarks()">
                             <i class="fas fa-users"></i> Load
                         </button>
                     </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size: 10px; margin-bottom: 2px;">&nbsp;</label>
-                        <button class="btn btn-success btn-sm w-100" onclick="saveBatchMarks()" style="font-size: 11px; padding: 3px 4px;">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button class="btn btn-success w-100" onclick="saveBatchMarks()">
                             <i class="fas fa-save"></i> Save All
                         </button>
                     </div>
@@ -7480,32 +7439,32 @@ async function renderMarks() {
         
         <div id="batchMarksContainer" style="display: none;">
             <div class="card shadow-sm mb-4">
-                <div class="card-header ${isOlevel ? 'bg-info' : 'bg-success'} text-white" style="padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;">
-                    <h6 class="mb-0" style="font-size: 12px;">
+                <div class="card-header ${isOlevel ? 'bg-info' : 'bg-success'} text-white" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h6 class="mb-0">
                         <i class="fas fa-edit"></i> 
                         ${isOlevel ? `Entering Marks for: <span id="selectedSubjectDisplay"></span> - <span id="selectedClassDisplay"></span>` : 'Batch Marks Entry'}
                     </h6>
-                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: white; font-size: 16px; cursor: pointer;">
+                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">
                         <i class="fas fa-times-circle"></i>
                     </button>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="table table-bordered table-sm mb-0" style="font-size: 11px;">
+                    <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                        <table class="table table-bordered table-sm mb-0">
                             <thead class="table-primary sticky-top">
                                 <tr id="batchTableHeader"><tr>
                             </thead>
                             <tbody id="batchTableBody"></tbody>
                         </table>
                     </div>
-                    <div class="p-1 bg-light text-end" style="padding: 4px 8px !important;">
-                        <button class="btn btn-danger btn-sm" onclick="closeBatchMarks()" style="font-size: 10px; padding: 2px 6px;">
+                    <div class="p-2 bg-light text-end">
+                        <button class="btn btn-danger btn-sm" onclick="closeBatchMarks()">
                             <i class="fas fa-times"></i> Close
                         </button>
-                        <button class="btn btn-success btn-sm" onclick="saveBatchMarks()" style="font-size: 10px; padding: 2px 6px;">
-                            <i class="fas fa-save"></i> Save
+                        <button class="btn btn-success btn-sm" onclick="saveBatchMarks()">
+                            <i class="fas fa-save"></i> Save All
                         </button>
-                        <button class="btn btn-info btn-sm" onclick="exportBatchMarks()" style="font-size: 10px; padding: 2px 6px;">
+                        <button class="btn btn-info btn-sm" onclick="exportBatchMarks()">
                             <i class="fas fa-file-excel"></i> Export
                         </button>
                     </div>
@@ -7515,114 +7474,88 @@ async function renderMarks() {
         
         <!-- Action Buttons -->
         <div class="card shadow-sm mb-3">
-            <div class="card-body" style="padding: 6px 8px;">
-                <div class="d-flex flex-wrap gap-1">
-                    <button class="btn btn-primary btn-sm" onclick="openAddMarkModal()" style="font-size: 11px; padding: 3px 8px;">
-                        <i class="fas fa-plus"></i> Add
-                    </button>
-                    <button class="btn btn-success btn-sm" onclick="exportAllMarks()" style="font-size: 11px; padding: 3px 8px;">
-                        <i class="fas fa-file-excel"></i> Export
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="bulkDeleteMarks()" style="font-size: 11px; padding: 3px 8px;">
-                        <i class="fas fa-trash"></i> Bulk Delete
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="refreshMarksTable()" style="font-size: 11px; padding: 3px 8px;">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-                    <button class="btn btn-info btn-sm" onclick="refreshSubjectsForMarks()" style="font-size: 11px; padding: 3px 8px;">
-                        <i class="fas fa-sync-alt"></i> Reload Subjects
-                    </button>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <button class="btn btn-primary" onclick="openAddMarkModal()">
+                            <i class="fas fa-plus"></i> Add Single Mark
+                        </button>
+                        <button class="btn btn-success ms-2" onclick="exportAllMarks()">
+                            <i class="fas fa-file-excel"></i> Export All
+                        </button>
+                        <button class="btn btn-danger ms-2" onclick="bulkDeleteMarks()">
+                            <i class="fas fa-trash"></i> Bulk Delete
+                        </button>
+                        <button class="btn btn-secondary ms-2" onclick="refreshMarksTable()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn btn-info ms-2" onclick="refreshSubjectsForMarks()">
+                            <i class="fas fa-sync-alt"></i> Reload Subjects
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
         
-        <!-- MOBILE COLLAPSIBLE FILTERS -->
+        <!-- FAST FILTERS -->
         <div class="card shadow-sm mb-3">
-            <div class="card-body" style="padding: 6px 8px;">
-                <!-- Filter Toggle for Mobile -->
-                <div class="filter-toggle" onclick="toggleFilters()">
-                    <span>
-                        <i class="fas fa-filter"></i> 
-                        <span id="filterBadge" class="filter-badge" style="display:none;">0</span>
-                        <span style="font-weight: 600; font-size: 12px;">Filters</span>
-                    </span>
-                    <span id="filterArrow">
-                        <i class="fas fa-chevron-down"></i>
-                    </span>
-                </div>
-                
-                <!-- Filter Content -->
-                <div id="filterContent" class="filter-content">
-                    <div class="row g-1 mt-1">
-                        <div class="col-6 col-md-3">
-                            <label class="form-label" style="font-size: 9px; margin-bottom: 1px; font-weight: 600;">📚 Class</label>
-                            <select id="filterClass" class="form-select form-select-sm" style="font-size: 10px; padding: 2px 4px;" onchange="applyMarksFilters()">
-                                <option value="">All</option>
-                                ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label" style="font-size: 9px; margin-bottom: 1px; font-weight: 600;">🌊 Stream</label>
-                            <select id="filterStream" class="form-select form-select-sm" style="font-size: 10px; padding: 2px 4px;" onchange="applyMarksFilters()">
-                                <option value="">All</option>
-                                ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label" style="font-size: 9px; margin-bottom: 1px; font-weight: 600;">👨‍🎓 Student</label>
-                            <input type="text" id="filterStudent" class="form-control form-control-sm" style="font-size: 10px; padding: 2px 4px;" placeholder="Search..." onkeyup="debouncedFilterMarks()">
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label" style="font-size: 9px; margin-bottom: 1px; font-weight: 600;">📖 Subject</label>
-                            <input type="text" id="filterSubject" class="form-control form-control-sm" style="font-size: 10px; padding: 2px 4px;" placeholder="Search..." onkeyup="debouncedFilterMarks()">
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label" style="font-size: 9px; margin-bottom: 1px; font-weight: 600;">📅 Year</label>
-                            <input type="text" id="filterYear" class="form-control form-control-sm" style="font-size: 10px; padding: 2px 4px;" placeholder="Year..." onkeyup="debouncedFilterMarks()">
-                        </div>
+            <div class="card-body" style="padding: 10px 15px;">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📚 Class</label>
+                        <select id="filterClass" class="form-select form-select-sm" onchange="applyMarksFilters()">
+                            <option value="">All Classes</option>
+                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
                     </div>
-                    <div class="row mt-1">
-                        <div class="col-12 text-end">
-                            <span id="filterCountDisplay" class="text-muted me-1" style="font-size: 10px;"></span>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="clearMarksFilters()" style="font-size: 9px; padding: 2px 6px;">
-                                <i class="fas fa-eraser"></i> Clear
-                            </button>
-                        </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">🌊 Stream</label>
+                        <select id="filterStream" class="form-select form-select-sm" onchange="applyMarksFilters()">
+                            <option value="">All Streams</option>
+                            ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">👨‍🎓 Student</label>
+                        <input type="text" id="filterStudent" class="form-control form-control-sm" placeholder="Search student..." onkeyup="debouncedFilterMarks()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📖 Subject</label>
+                        <input type="text" id="filterSubject" class="form-control form-control-sm" placeholder="Search subject..." onkeyup="debouncedFilterMarks()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📅 Year</label>
+                        <input type="text" id="filterYear" class="form-control form-control-sm" placeholder="Year..." onkeyup="debouncedFilterMarks()">
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-12 text-end">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="clearMarksFilters()" style="font-size: 12px;">
+                            <i class="fas fa-eraser"></i> Clear All Filters
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- MOBILE PAGINATION CONTROLS -->
+        <!-- PAGINATION CONTROLS -->
         <div class="card shadow-sm mb-2">
-            <div class="card-body" style="padding: 6px 8px;">
-                <div class="pagination-mobile-container">
-                    <div class="pagination-top-row">
-                        <span id="paginationInfo" class="pagination-info-text">Loading...</span>
-                        <div class="pagination-page-size">
-                            <select id="pageSizeSelect" class="form-select form-select-sm" style="font-size: 10px; padding: 2px 4px; width: 55px;" onchange="changePageSize()">
+            <div class="card-body" style="padding: 10px 15px;">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center gap-2">
+                            <span id="paginationInfo" class="text-muted" style="font-size: 13px;">Loading...</span>
+                            <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;" onchange="changePageSize()">
                                 <option value="20">20</option>
                                 <option value="50" selected>50</option>
                                 <option value="100">100</option>
                                 <option value="200">200</option>
                             </select>
-                            <span class="per-page-label">per page</span>
+                            <span style="font-size: 12px; color: #6c757d;">per page</span>
                         </div>
                     </div>
-                    <div class="pagination-bottom-row" id="paginationButtons">
-                        <button class="page-btn" onclick="goToPage(1)" disabled>
-                            <i class="fas fa-angle-double-left"></i>
-                        </button>
-                        <button class="page-btn" onclick="goToPage(1)" disabled>
-                            <i class="fas fa-angle-left"></i>
-                        </button>
-                        <span class="page-indicator">1 / 1</span>
-                        <button class="page-btn" onclick="goToPage(2)" disabled>
-                            <i class="fas fa-angle-right"></i>
-                        </button>
-                        <button class="page-btn" onclick="goToPage(60)" disabled>
-                            <i class="fas fa-angle-double-right"></i>
-                        </button>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-end gap-1" id="paginationButtons"></div>
                     </div>
                 </div>
             </div>
@@ -7630,22 +7563,22 @@ async function renderMarks() {
         
         <!-- Marks Table -->
         <div class="card shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center" style="padding: 4px 8px;">
-                <h6 class="mb-0" style="font-size: 12px;"><i class="fas fa-table"></i> Marks</h6>
-                <small id="filteredRowCount" class="text-muted" style="font-size: 10px;"></small>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center" style="padding: 8px 12px;">
+                <h6 class="mb-0"><i class="fas fa-table"></i> Marks Records</h6>
+                <small id="filteredRowCount" class="text-muted"></small>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive" style="max-height: 500px; overflow-y: auto; font-size: 10px;">
-                    <table class="table table-bordered mb-0" style="font-size: 10px;">
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-bordered mb-0">
                         <thead class="table-primary sticky-top">
                             ${renderTableHeader()}
                         </thead>
                         <tbody id="marksTableBody">
                             <tr><td colspan="${isOlevel ? 17 : 15}" class="text-center py-4">
-                                <div class="spinner-border text-primary" role="status" style="width: 24px; height: 24px;">
+                                <div class="spinner-border text-primary" role="status">
                                     <span class="visually-hidden">Loading...</span>
                                 </div>
-                                <p class="mt-2" style="font-size: 12px;">Loading marks...</p>
+                                <p class="mt-2">Loading marks...</p>
                             </td></tr>
                         </tbody>
                     </table>
@@ -7656,7 +7589,7 @@ async function renderMarks() {
 }
 
 // ============================================
-// BATCH MARKS FUNCTIONS (Your existing code)
+// LOAD BATCH MARKS
 // ============================================
 
 window.loadBatchMarks = async function() {
@@ -7746,18 +7679,19 @@ function renderOlevelBatchTable() {
     
     headerRow.innerHTML = `
         <tr>
-            <th width="20">#</th>
-            <th width="120">Student</th>
-            <th class="hide-mobile" width="50">Stream</th>
-            <th width="55">U1</th>
-            <th width="55">U2</th>
-            <th width="55">U3</th>
-            <th width="65">Exam</th>
-            <th class="hide-mobile" width="60">Initials</th>
-            <th width="55">Total</th>
-            <th width="45">Grade</th>
-            <th class="hide-mobile" width="70">Descriptor</th>
-            <th width="60">Status</th>
+            <th width="30">#</th>
+            <th width="200">Student Details</th>
+            <th width="80">Stream</th>
+            <th width="70">U1</th>
+            <th width="70">U2</th>
+            <th width="70">U3</th>
+            <th width="80">Exam/80</th>
+            <th width="80">Initials</th>
+            <th width="80">Total/20</th>
+            <th width="80">Total/100</th>
+            <th width="60">Grade</th>
+            <th width="100">Descriptor</th>
+            <th width="80">Status</th>
         </tr>
     `;
     
@@ -7790,51 +7724,54 @@ function renderOlevelBatchTable() {
                     <strong>${escapeHtml(student.name)}</strong><br>
                     <small class="text-muted">${student.admission_no || '-'}</small>
                 </td>
-                <td class="hide-mobile text-center">${student.stream || '-'}</td>
+                <td class="text-center">${student.stream || '-'}</td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u1-input" 
                            data-student="${student.id}" value="${u1}" 
-                           min="0" max="20" step="0.5" style="width:55px; font-size:10px; padding:2px 4px;"
+                           min="0" max="20" step="0.5" style="width:70px;"
                            oninput="validateUnitInput(this, 20)" ${isDisabled ? 'disabled' : ''}>
-                    ${isDisabled ? '<span style="color: #6c757d; font-size: 12px;">🔒</span>' : ''}
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u2-input" 
                            data-student="${student.id}" value="${u2}" 
-                           min="0" max="20" step="0.5" style="width:55px; font-size:10px; padding:2px 4px;"
+                           min="0" max="20" step="0.5" style="width:70px;"
                            oninput="validateUnitInput(this, 20)" ${isDisabled ? 'disabled' : ''}>
-                    ${isDisabled ? '<span style="color: #6c757d; font-size: 12px;">🔒</span>' : ''}
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm u3-input" 
                            data-student="${student.id}" value="${u3}" 
-                           min="0" max="20" step="0.5" style="width:55px; font-size:10px; padding:2px 4px;"
+                           min="0" max="20" step="0.5" style="width:70px;"
                            oninput="validateUnitInput(this, 20)" ${isDisabled ? 'disabled' : ''}>
-                    ${isDisabled ? '<span style="color: #6c757d; font-size: 12px;">🔒</span>' : ''}
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm exam-input" 
                            data-student="${student.id}" value="${exam80}" 
-                           min="0" max="80" step="1" style="width:65px; font-size:10px; padding:2px 4px;" ${isDisabled ? 'disabled' : ''}>
-                    ${isDisabled ? '<span style="color: #6c757d; font-size: 12px;">🔒</span>' : ''}
+                           min="0" max="80" step="1" style="width:80px;" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
                 </td>
-                <td class="hide-mobile text-center">
+                <td class="text-center">
                     <input type="text" class="form-control form-control-sm initials-input" 
                            data-student="${student.id}" value="${escapeHtml(initials)}" 
-                           maxlength="5" style="width:60px; font-size:10px; padding:2px 4px; text-transform:uppercase;" ${isDisabled ? 'disabled' : ''}>
-                    ${isDisabled ? '<span style="color: #6c757d; font-size: 12px;">🔒</span>' : ''}
+                           maxlength="5" style="width:70px; text-transform:uppercase;" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
+                </td>
+                <td class="text-center total20-cell" data-student="${student.id}">
+                    <strong>${total20.toFixed(1)}</strong>
                 </td>
                 <td class="text-center total100-cell" data-student="${student.id}">
                     <strong>${total100.toFixed(1)}</strong>
                 </td>
-                <td class="text-center grade-cell" data-student="${student.id}" style="background: ${gradeInfo.color}; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;">
+                <td class="text-center grade-cell" data-student="${student.id}" style="background: ${gradeInfo.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
                     ${gradeInfo.grade}
                 </td>
-                <td class="hide-mobile text-center descriptor-cell" data-student="${student.id}">
+                <td class="text-center descriptor-cell" data-student="${student.id}">
                     ${gradeInfo.descriptor}
                 </td>
                 <td class="text-center">
-                    ${hasExistingMark ? '<span class="badge bg-success" style="font-size: 9px; padding: 2px 6px;"><i class="fas fa-check"></i></span>' : '<span class="badge bg-warning text-dark" style="font-size: 9px; padding: 2px 6px;">New</span>'}
+                    ${hasExistingMark ? '<span class="badge bg-success"><i class="fas fa-check"></i> Saved</span>' : '<span class="badge bg-warning text-dark">New</span>'}
                 </td>
             </tr>
         `;
@@ -7866,10 +7803,12 @@ function recalculateOlevelRow(studentId) {
     total100 = Math.min(100, Math.max(0, total100));
     const gradeInfo = getOlevelGradeDescriptor(total100);
     
+    const total20Cell = document.querySelector(`.total20-cell[data-student="${studentId}"]`);
     const total100Cell = document.querySelector(`.total100-cell[data-student="${studentId}"]`);
     const gradeCell = document.querySelector(`.grade-cell[data-student="${studentId}"]`);
     const descriptorCell = document.querySelector(`.descriptor-cell[data-student="${studentId}"]`);
     
+    if (total20Cell) total20Cell.innerHTML = `<strong>${total20.toFixed(1)}</strong>`;
     if (total100Cell) total100Cell.innerHTML = `<strong>${total100.toFixed(1)}</strong>`;
     if (gradeCell) {
         gradeCell.innerHTML = gradeInfo.grade;
@@ -7891,13 +7830,16 @@ function renderAlevelBatchTable() {
     
     headerRow.innerHTML = `
         <tr>
-            <th width="20">#</th>
-            <th width="120">Student</th>
-            <th class="hide-mobile" width="50">Stream</th>
-            ${batchState.subjects.map(s => `<th class="text-center" style="font-size:9px; padding:2px 4px;">${escapeHtml(s.name)}</th>`).join('')}
-            <th width="50">Total</th>
-            <th width="40">Grade</th>
-            <th width="40">Status</th>
+            <th width="30">#</th>
+            <th>Student Name</th>
+            <th>Admission No</th>
+            <th>Stream</th>
+            <th>Combination</th>
+            ${batchState.subjects.map(s => `<th class="text-center">${escapeHtml(s.name)}<br><small>/100</small></th>`).join('')}
+            <th width="80">Total</th>
+            <th width="80">Grade</th>
+            <th width="80">Points</th>
+            <th width="80">Status</th>
         </tr>
     `;
     
@@ -7910,8 +7852,10 @@ function renderAlevelBatchTable() {
         html += `
             <tr>
                 <td class="text-center">${i + 1}</td>
-                <td><strong>${escapeHtml(student.name)}</strong><br><small class="text-muted">${student.admission_no || '-'}</small></td>
-                <td class="hide-mobile text-center">${student.stream || '-'}</td>
+                <td><strong>${escapeHtml(student.name)}</strong></td>
+                <td>${student.admission_no || '-'}</td>
+                <td>${student.stream || '-'}</td>
+                <td><span class="badge bg-info">${student.combination || 'N/A'}</span></td>
         `;
         
         for (const subject of batchState.subjects) {
@@ -7936,9 +7880,9 @@ function renderAlevelBatchTable() {
                            data-student="${student.id}" data-subject="${subject.name}" 
                            data-type="${isSubsidiary ? 'subsidiary' : 'principal'}" 
                            value="${markValue}" min="0" max="100" step="0.5" 
-                           style="width:55px;text-align:center;font-size:10px;padding:2px 4px;" ${isDisabled ? 'disabled' : ''}>
-                    ${isDisabled ? '<span style="color: #6c757d; font-size: 12px;">🔒</span>' : ''}
-                    ${markValue ? `<small class="grade-display" style="display:block;margin-top:2px;font-size:8px;color:${gradeInfo.color}">${gradeInfo.grade}</small>` : ''}
+                           style="width:80px;text-align:center;" ${isDisabled ? 'disabled' : ''}>
+                    ${isDisabled ? '<span style="color: #6c757d; font-size: 14px;">🔒</span>' : ''}
+                    ${markValue ? `<small class="grade-display" style="display:block;margin-top:4px;color:${gradeInfo.color}">${gradeInfo.grade} (${gradeInfo.points} pts)</small>` : ''}
                 </td>
             `;
         }
@@ -7948,11 +7892,12 @@ function renderAlevelBatchTable() {
         
         html += `
             <td class="text-center total-points" data-student="${student.id}"><strong>${totalPoints}</strong></td>
-            <td class="text-center overall-grade" data-student="${student.id}" style="background: ${overallGrade.color}; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;">
+            <td class="text-center overall-grade" data-student="${student.id}" style="background: ${overallGrade.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px;">
                 ${overallGrade.grade}
             </td>
+            <td class="text-center"><strong>${totalPoints}</strong></td>
             <td class="text-center">
-                ${hasExistingMarks ? '<span class="badge bg-success" style="font-size: 9px; padding: 2px 6px;"><i class="fas fa-check"></i></span>' : '<span class="badge bg-warning text-dark" style="font-size: 9px; padding: 2px 6px;">New</span>'}
+                ${hasExistingMarks ? '<span class="badge bg-success"><i class="fas fa-check"></i> Saved</span>' : '<span class="badge bg-warning text-dark">New</span>'}
             </td>
         </tr>
         `;
@@ -7996,7 +7941,7 @@ function updateAlevelBatchTotals() {
                         gradeDisplay = document.createElement('small');
                         gradeDisplay.className = 'grade-display';
                         gradeDisplay.style.display = 'block';
-                        gradeDisplay.style.marginTop = '2px';
+                        gradeDisplay.style.marginTop = '4px';
                         cell.appendChild(gradeDisplay);
                     }
                     gradeDisplay.innerHTML = `${gradeInfo.grade} (${gradeInfo.points} pts)`;
@@ -8775,7 +8720,243 @@ window.editMark = async function(id) {
         `;
     }
     
-    // ... rest of editMark code (your existing code)
+    if (isOlevel) {
+        // O-Level edit modal
+        Swal.fire({
+            title: '<i class="fas fa-edit"></i> Edit Mark - O-Level',
+            html: `
+                <div class="text-start" style="max-height: 550px; overflow-y: auto;">
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">👨‍🎓 Student</label>
+                            <input type="text" class="form-control" value="${escapeHtml(student?.name)} (${student?.admission_no || '-'}) - ${student?.class}" readonly disabled>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">📖 Subject *</label>
+                            <select id="editSubject" class="form-select">
+                                <option value="">-- Select Subject --</option>
+                                ${subjectOptions}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">📝 Exam *</label>
+                            <select id="editExam" class="form-select">
+                                <option value="Term 1" ${mark.exam === 'Term 1' ? 'selected' : ''}>Term 1</option>
+                                <option value="Term 2" ${mark.exam === 'Term 2' ? 'selected' : ''}>Term 2</option>
+                                <option value="Term 3" ${mark.exam === 'Term 3' ? 'selected' : ''}>Term 3</option>
+                                <option value="Mid-Term" ${mark.exam === 'Mid-Term' ? 'selected' : ''}>Mid-Term</option>
+                                <option value="Mock" ${mark.exam === 'Mock' ? 'selected' : ''}>Mock</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">📅 Year *</label>
+                            <input type="text" id="editYear" class="form-control" value="${mark.year}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">✏️ Teacher Initials</label>
+                            <input type="text" id="editInitials" class="form-control" maxlength="5" value="${escapeHtml(mark.teacher_initials || '')}" placeholder="e.g., JKM">
+                        </div>
+                    </div>
+                    
+                    <hr class="my-3">
+                    <h6 class="text-center fw-bold mb-3">📊 UNIT ASSESSMENTS (0-20 each)</h6>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">📘 Unit 1 (U1)</label>
+                            <input type="number" id="editU1" class="form-control" 
+                                   step="0.5" min="0" max="20" value="${mark.unit1 || 0}"
+                                   oninput="validateUnitInput(this, 20)">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">📗 Unit 2 (U2)</label>
+                            <input type="number" id="editU2" class="form-control" 
+                                   step="0.5" min="0" max="20" value="${mark.unit2 || 0}"
+                                   oninput="validateUnitInput(this, 20)">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">📙 Unit 3 (U3)</label>
+                            <input type="number" id="editU3" class="form-control" 
+                                   step="0.5" min="0" max="20" value="${mark.unit3 || 0}"
+                                   oninput="validateUnitInput(this, 20)">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">📝 End of Term Exam (out of 80) *</label>
+                            <input type="number" id="editExam80" class="form-control" step="1" min="0" max="80" value="${mark.exam_80 || 0}">
+                        </div>
+                    </div>
+                    
+                    <hr class="my-3">
+                    <div id="editPreview" class="alert alert-info text-center" style="font-size: 13px;">
+                        <div class="row">
+                            <div class="col-6 text-start"><strong>Unit Average:</strong> <span id="previewUnitAvg">0</span></div>
+                            <div class="col-6 text-start"><strong>Total/20:</strong> <span id="previewTotal20">0</span></div>
+                            <div class="col-6 text-start"><strong>+ Exam/80:</strong> <span id="previewExam80">0</span></div>
+                            <div class="col-6 text-start"><strong>= Total/100:</strong> <strong id="previewTotal100" class="text-primary">0</strong></div>
+                            <div class="col-12 text-center mt-2">
+                                <strong>Grade:</strong> <span id="previewGrade">-</span>
+                                <strong> | Descriptor:</strong> <span id="previewDescriptor">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            width: '600px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-save"></i> Update Mark',
+            cancelButtonText: 'Cancel',
+            didOpen: () => {
+                const inputs = ['editU1', 'editU2', 'editU3', 'editExam80'];
+                inputs.forEach(id => {
+                    const input = document.getElementById(id);
+                    if (input) {
+                        input.addEventListener('input', updateEditPreview);
+                        input.addEventListener('change', updateEditPreview);
+                    }
+                });
+                
+                function updateEditPreview() {
+                    const u1 = parseFloat(document.getElementById('editU1')?.value) || 0;
+                    const u2 = parseFloat(document.getElementById('editU2')?.value) || 0;
+                    const u3 = parseFloat(document.getElementById('editU3')?.value) || 0;
+                    const exam80 = parseFloat(document.getElementById('editExam80')?.value) || 0;
+                    
+                    const unitAvg = (u1 + u2 + u3) / 3;
+                    const total20 = unitAvg;
+                    let total100 = total20 + exam80;
+                    total100 = Math.min(100, Math.max(0, total100));
+                    const gradeInfo = getOlevelGradeDescriptor(total100);
+                    
+                    document.getElementById('previewUnitAvg').innerText = unitAvg.toFixed(2);
+                    document.getElementById('previewTotal20').innerText = total20.toFixed(1);
+                    document.getElementById('previewExam80').innerText = exam80;
+                    document.getElementById('previewTotal100').innerHTML = `<strong class="text-primary">${total100.toFixed(1)}</strong>`;
+                    document.getElementById('previewGrade').innerHTML = `<span class="badge" style="background: ${gradeInfo.color}">${gradeInfo.grade}</span>`;
+                    document.getElementById('previewDescriptor').innerText = gradeInfo.descriptor;
+                }
+                
+                setTimeout(updateEditPreview, 100);
+            },
+            preConfirm: () => {
+                const subject = document.getElementById('editSubject').value;
+                const exam = document.getElementById('editExam').value;
+                const year = document.getElementById('editYear').value;
+                const u1 = parseFloat(document.getElementById('editU1').value) || 0;
+                const u2 = parseFloat(document.getElementById('editU2').value) || 0;
+                const u3 = parseFloat(document.getElementById('editU3').value) || 0;
+                const exam80 = parseFloat(document.getElementById('editExam80').value) || 0;
+                const initials = document.getElementById('editInitials').value || '';
+                
+                if (!subject) {
+                    Swal.showValidationMessage('Please select a subject');
+                    return false;
+                }
+                if (!exam) {
+                    Swal.showValidationMessage('Please select an exam');
+                    return false;
+                }
+                if (!year) {
+                    Swal.showValidationMessage('Please enter a year');
+                    return false;
+                }
+                
+                const unitAvg = (u1 + u2 + u3) / 3;
+                const total20 = unitAvg;
+                let total100 = total20 + exam80;
+                total100 = Math.min(100, Math.max(0, total100));
+                
+                return {
+                    subject: subject,
+                    exam: exam,
+                    year: year,
+                    unit1: u1,
+                    unit2: u2,
+                    unit3: u3,
+                    exam_80: exam80,
+                    teacher_initials: initials,
+                    marks_obtained: total100,
+                    updated_at: new Date().toISOString()
+                };
+            }
+        }).then(async (result) => {
+            if (result.value) {
+                Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                try {
+                    const { error } = await sb
+                        .from('marks')
+                        .update({
+                            subject: result.value.subject,
+                            exam: result.value.exam,
+                            year: result.value.year,
+                            unit1: result.value.unit1,
+                            unit2: result.value.unit2,
+                            unit3: result.value.unit3,
+                            exam_80: result.value.exam_80,
+                            teacher_initials: result.value.teacher_initials,
+                            marks_obtained: result.value.marks_obtained,
+                            updated_at: result.value.updated_at
+                        })
+                        .eq('id', id);
+                    
+                    if (error) throw error;
+                    Swal.fire('Success!', 'Mark updated successfully.', 'success');
+                    await loadMarksTable();
+                } catch (error) {
+                    console.error('Update error:', error);
+                    Swal.fire('Error!', error.message, 'error');
+                }
+            }
+        });
+    } else {
+        // A-Level edit modal
+        Swal.fire({
+            title: 'Edit Mark - A-Level',
+            html: `
+                <div class="mb-3"><label>Student</label><input type="text" class="form-control" value="${escapeHtml(student?.name)} (${student?.class})" readonly disabled></div>
+                <div class="mb-3"><label>Subject</label><select id="editSubject" class="form-select">${subjectOptions}</select></div>
+                <div class="row"><div class="col-md-6 mb-3"><label>Exam</label><select id="editExam" class="form-select">
+                    <option value="Term 1" ${mark.exam === 'Term 1' ? 'selected' : ''}>Term 1</option>
+                    <option value="Term 2" ${mark.exam === 'Term 2' ? 'selected' : ''}>Term 2</option>
+                    <option value="Term 3" ${mark.exam === 'Term 3' ? 'selected' : ''}>Term 3</option>
+                    <option value="Mid-Term" ${mark.exam === 'Mid-Term' ? 'selected' : ''}>Mid-Term</option>
+                    <option value="Mock" ${mark.exam === 'Mock' ? 'selected' : ''}>Mock</option>
+                </select></div>
+                <div class="col-md-6 mb-3"><label>Year</label><input type="text" id="editYear" class="form-control" value="${mark.year}"></div></div>
+                <div class="mb-3"><label>Marks Obtained (0-100)</label><input type="number" id="editMarks" class="form-control" step="0.5" min="0" max="100" value="${mark.marks_obtained}"></div>
+                <div class="mb-3"><label>Remarks</label><textarea id="editRemarks" class="form-control" rows="2">${mark.remarks || ''}</textarea></div>
+            `,
+            width: '550px',
+            showCancelButton: true,
+            confirmButtonText: 'Update',
+            preConfirm: () => {
+                const subject = document.getElementById('editSubject').value;
+                if (!subject) return Swal.showValidationMessage('Please select a subject');
+                return {
+                    subject: subject,
+                    exam: document.getElementById('editExam').value,
+                    year: document.getElementById('editYear').value,
+                    marks_obtained: parseFloat(document.getElementById('editMarks').value) || 0,
+                    remarks: document.getElementById('editRemarks').value
+                };
+            }
+        }).then(async (result) => {
+            if (result.value) {
+                Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                const { error } = await sb.from('marks').update({ ...result.value, updated_at: new Date().toISOString() }).eq('id', id);
+                if (error) Swal.fire('Error', error.message, 'error');
+                else { Swal.fire('Success', 'Mark updated!', 'success'); await loadMarksTable(); }
+            }
+        });
+    }
 };
 
 // ============================================
@@ -9169,255 +9350,14 @@ if (typeof renderers !== 'undefined') {
 }
 
 // ============================================
-// CSS STYLES - Mobile Responsive
-// ============================================
-
-// Add this CSS to your page
-const mobileStyles = `
-<style>
-/* ============================================
-   MOBILE RESPONSIVE PAGINATION
-   ============================================ */
-
-.pagination-mobile-container {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 100%;
-}
-
-.pagination-top-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.pagination-info-text {
-    font-size: 11px;
-    color: #6c757d;
-    flex: 1;
-    min-width: 100px;
-}
-
-.pagination-page-size {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.per-page-label {
-    font-size: 10px;
-    color: #6c757d;
-}
-
-.pagination-bottom-row {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: wrap;
-}
-
-.page-btn {
-    width: 30px;
-    height: 30px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: white;
-    color: #01605a;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    transition: all 0.2s ease;
-}
-
-.page-btn:hover:not(:disabled) {
-    background: #01605a;
-    color: white;
-    border-color: #01605a;
-}
-
-.page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.page-indicator {
-    font-size: 11px;
-    font-weight: 600;
-    color: #2c3e50;
-    padding: 0 6px;
-    min-width: 60px;
-    text-align: center;
-}
-
-/* ============================================
-   MOBILE FILTER TOGGLE
-   ============================================ */
-
-.filter-toggle {
-    display: none;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    padding: 4px 0;
-    font-size: 13px;
-    color: #2c3e50;
-}
-
-.filter-toggle:hover {
-    color: #01605a;
-}
-
-.filter-badge {
-    background: #dc3545;
-    color: white;
-    border-radius: 50%;
-    padding: 0 5px;
-    font-size: 9px;
-    min-width: 16px;
-    display: inline-block;
-    text-align: center;
-}
-
-.filter-content {
-    display: block;
-}
-
-/* Show toggle only on mobile */
-@media (max-width: 768px) {
-    .filter-toggle {
-        display: flex;
-    }
-}
-
-@media (max-width: 768px) {
-    .filter-content {
-        display: none;
-    }
-    .filter-content.open {
-        display: block;
-    }
-}
-
-@media (min-width: 769px) {
-    .filter-content {
-        display: block !important;
-    }
-}
-
-/* ============================================
-   MOBILE TABLE
-   ============================================ */
-
-@media (max-width: 768px) {
-    .table-responsive {
-        font-size: 9px !important;
-    }
-    
-    .table-responsive th,
-    .table-responsive td {
-        padding: 3px 2px !important;
-        font-size: 8px !important;
-        white-space: nowrap;
-    }
-    
-    .table-responsive .btn-sm {
-        padding: 1px 3px !important;
-        font-size: 7px !important;
-        border-radius: 2px !important;
-    }
-    
-    .hide-mobile {
-        display: none !important;
-    }
-    
-    .grade-cell {
-        padding: 2px 3px !important;
-        font-size: 8px !important;
-        border-radius: 3px !important;
-    }
-    
-    .table-responsive input[type="number"],
-    .table-responsive input[type="text"] {
-        font-size: 8px !important;
-        padding: 1px 2px !important;
-        width: 40px !important;
-    }
-}
-
-/* ============================================
-   TABLET & LARGER
-   ============================================ */
-
-@media (min-width: 769px) {
-    .pagination-mobile-container {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .pagination-top-row {
-        flex: 1;
-        justify-content: flex-start;
-        gap: 15px;
-    }
-    
-    .pagination-bottom-row {
-        flex: 1;
-        justify-content: flex-end;
-    }
-    
-    .hide-mobile {
-        display: table-cell !important;
-    }
-}
-
-/* ============================================
-   EXTRA SMALL PHONES
-   ============================================ */
-
-@media (max-width: 380px) {
-    .page-btn {
-        width: 26px;
-        height: 26px;
-        font-size: 9px;
-    }
-    
-    .page-indicator {
-        font-size: 9px;
-        min-width: 50px;
-    }
-    
-    .pagination-info-text {
-        font-size: 9px;
-    }
-    
-    .table-responsive th,
-    .table-responsive td {
-        padding: 2px 1px !important;
-        font-size: 7px !important;
-    }
-}
-</style>
-`;
-
-// Inject styles
-document.head.insertAdjacentHTML('beforeend', mobileStyles);
-
-// ============================================
 // INITIALIZATION
 // ============================================
 
 console.log('✅ MARKS MODULE LOADED - COMPLETE FINAL MASTERPIECE');
 console.log('📊 System: U1/U2/U3 - Unit tests out of 20');
+console.log('📊 Calculation: (U1+U2+U3)/3 + Exam/80 = Total/100');
 console.log('📄 Pagination: Loads 50 records at a time - NO FREEZING!');
 console.log('🔢 Row numbers: # column shows record number');
-console.log('📱 Fully Mobile Responsive!');
 console.log('🔍 Filters: Class, Stream, Student, Subject, Year - WORKING!');
 console.log('📦 Batch Entry: Load, Edit, Save - WORKING!');
 console.log('👨‍🏫 Teachers: CAN ADD marks, CANNOT EDIT marks');
