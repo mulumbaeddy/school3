@@ -7370,6 +7370,11 @@ function renderMarksTableRows() {
 // RENDER MARKS PAGE
 // ============================================
 
+// ============================================
+// RENDER MARKS - U1/U2/U3 SYSTEM
+// 2x2 GRID ORGANIZED LAYOUT
+// ============================================
+
 async function renderMarks() {
     await loadSubjectsFromDB();
     await loadGradingRules();
@@ -7381,213 +7386,555 @@ async function renderMarks() {
     const isOlevel = currentLevel === 'olevel';
     
     return `
-        <div class="card shadow-sm mb-3">
-            <div class="card-header" style="background: linear-gradient(135deg, #01605a, #ff862d); color: white;">
-                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Marks Entry - ${levelName}</h5>
-                <small>${isOlevel ? 'Select Subject first, then load class' : 'Enter marks for all subjects at once'}</small>
+        <!-- ============================================================
+             CUSTOM CSS - 2x2 GRID ORGANIZED
+             ============================================================ -->
+        <style>
+            /* Square box container */
+            .square-box {
+                border: 1.5px solid #e8e8e8 !important;
+                border-radius: 10px !important;
+                padding: 14px 18px !important;
+                background: #ffffff !important;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
+                margin-bottom: 8px !important;
+            }
+            
+            /* Form elements */
+            .form-select-custom {
+                font-size: 0.8rem !important;
+                padding: 5px 10px !important;
+                border-radius: 6px !important;
+                border: 1.5px solid #e0e0e0 !important;
+                min-height: 34px !important;
+                width: 100% !important;
+                background: white !important;
+            }
+            
+            .form-select-custom:focus {
+                border-color: #01605a !important;
+                outline: none !important;
+                box-shadow: 0 0 0 2px rgba(1,96,90,0.1) !important;
+            }
+            
+            .form-input-custom {
+                font-size: 0.8rem !important;
+                padding: 5px 10px !important;
+                border-radius: 6px !important;
+                border: 1.5px solid #e0e0e0 !important;
+                min-height: 34px !important;
+                width: 100% !important;
+                background: white !important;
+            }
+            
+            .form-input-custom:focus {
+                border-color: #01605a !important;
+                outline: none !important;
+                box-shadow: 0 0 0 2px rgba(1,96,90,0.1) !important;
+            }
+            
+            /* Label */
+            .label-custom {
+                font-size: 0.7rem !important;
+                font-weight: 600 !important;
+                color: #495057 !important;
+                margin-bottom: 2px !important;
+                display: block !important;
+            }
+            
+            .label-custom i {
+                color: #01605a !important;
+                margin-right: 4px !important;
+                width: 14px !important;
+            }
+            
+            /* 2x2 GRID LAYOUTS */
+            .grid-2x2 {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 12px 20px !important;
+            }
+            
+            .grid-2x2-actions {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr !important;
+                gap: 6px 10px !important;
+            }
+            
+            .grid-2x2-filters {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr !important;
+                gap: 6px 12px !important;
+            }
+            
+            .grid-2x2-batch {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 10px 20px !important;
+            }
+            
+            .field-full {
+                grid-column: 1 / -1 !important;
+            }
+            
+            /* LOAD Button - WITH BACKGROUND COLOR */
+            .btn-load-color {
+                font-size: 0.8rem !important;
+                padding: 6px 28px !important;
+                border-radius: 6px !important;
+                font-weight: 700 !important;
+                background: linear-gradient(135deg, #01605a, #018a7a) !important;
+                color: #ffffff !important;
+                border: none !important;
+                min-height: 38px !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+                width: 100% !important;
+                transition: all 0.2s ease !important;
+                cursor: pointer !important;
+                letter-spacing: 0.5px !important;
+                box-shadow: 0 2px 8px rgba(1,96,90,0.3) !important;
+                justify-content: center !important;
+            }
+            
+            .btn-load-color:hover {
+                transform: translateY(-2px) !important;
+                box-shadow: 0 4px 12px rgba(1,96,90,0.4) !important;
+            }
+            
+            .btn-load-color:active {
+                transform: translateY(0px) !important;
+            }
+            
+            .btn-load-color i {
+                font-size: 0.8rem !important;
+            }
+            
+            /* Square action buttons */
+            .btn-square {
+                font-size: 0.6rem !important;
+                padding: 4px 10px !important;
+                border-radius: 6px !important;
+                font-weight: 500 !important;
+                min-height: 28px !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+                border: 1.5px solid #e0e0e0 !important;
+                background: white !important;
+                transition: all 0.15s ease !important;
+                cursor: pointer !important;
+                width: 100% !important;
+                justify-content: center !important;
+            }
+            
+            .btn-square:hover {
+                transform: translateY(-1px) !important;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
+            }
+            
+            .btn-square-primary { color: #01605a !important; border-color: #01605a !important; }
+            .btn-square-primary:hover { background: #01605a !important; color: white !important; }
+            
+            .btn-square-success { color: #28a745 !important; border-color: #28a745 !important; }
+            .btn-square-success:hover { background: #28a745 !important; color: white !important; }
+            
+            .btn-square-danger { color: #dc3545 !important; border-color: #dc3545 !important; }
+            .btn-square-danger:hover { background: #dc3545 !important; color: white !important; }
+            
+            .btn-square-secondary { color: #6c757d !important; border-color: #ced4da !important; }
+            .btn-square-secondary:hover { background: #6c757d !important; color: white !important; }
+            
+            .btn-square-info { color: #17a2b8 !important; border-color: #17a2b8 !important; }
+            .btn-square-info:hover { background: #17a2b8 !important; color: white !important; }
+            
+            /* Pagination buttons */
+            .btn-pagination-square {
+                font-size: 0.7rem !important;
+                padding: 2px 10px !important;
+                border-radius: 6px !important;
+                min-height: 28px !important;
+                height: 28px !important;
+                line-height: 1 !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border: 1.5px solid #01605a !important;
+                background: white !important;
+                color: #01605a !important;
+                cursor: pointer !important;
+                font-weight: 600 !important;
+                min-width: 32px !important;
+            }
+            
+            .btn-pagination-square:hover:not(:disabled) {
+                background: #01605a !important;
+                color: white !important;
+                box-shadow: 0 2px 6px rgba(1,96,90,0.2) !important;
+            }
+            
+            .btn-pagination-square:disabled {
+                opacity: 0.35 !important;
+                cursor: not-allowed !important;
+                border-color: #ced4da !important;
+                color: #6c757d !important;
+            }
+            
+            .btn-pagination-square i {
+                font-size: 0.65rem !important;
+            }
+            
+            /* Filter input */
+            .filter-custom {
+                font-size: 0.7rem !important;
+                padding: 3px 8px !important;
+                border-radius: 6px !important;
+                border: 1.5px solid #e0e0e0 !important;
+                min-height: 28px !important;
+                width: 100% !important;
+                background: white !important;
+            }
+            
+            .filter-custom:focus {
+                border-color: #01605a !important;
+                outline: none !important;
+                box-shadow: 0 0 0 2px rgba(1,96,90,0.08) !important;
+            }
+            
+            .filter-custom::placeholder {
+                color: #adb5bd !important;
+                font-size: 0.6rem !important;
+            }
+            
+            /* Responsive */
+            @media (max-width: 768px) {
+                .grid-2x2 {
+                    grid-template-columns: 1fr !important;
+                }
+                
+                .grid-2x2-actions {
+                    grid-template-columns: 1fr 1fr !important;
+                }
+                
+                .grid-2x2-filters {
+                    grid-template-columns: 1fr 1fr !important;
+                }
+                
+                .grid-2x2-batch {
+                    grid-template-columns: 1fr !important;
+                }
+                
+                .square-box {
+                    padding: 10px 12px !important;
+                }
+                
+                .btn-load-color {
+                    font-size: 0.7rem !important;
+                    padding: 5px 18px !important;
+                    min-height: 32px !important;
+                }
+                
+                .btn-square {
+                    font-size: 0.5rem !important;
+                    padding: 3px 6px !important;
+                    min-height: 24px !important;
+                }
+                
+                .btn-pagination-square {
+                    font-size: 0.55rem !important;
+                    padding: 2px 6px !important;
+                    min-height: 22px !important;
+                    height: 22px !important;
+                    min-width: 26px !important;
+                }
+                
+                .btn-pagination-square i {
+                    font-size: 0.5rem !important;
+                }
+                
+                #paginationInfo {
+                    font-size: 0.55rem !important;
+                }
+            }
+            
+            @media (max-width: 576px) {
+                .grid-2x2-actions {
+                    grid-template-columns: 1fr 1fr !important;
+                }
+                
+                .grid-2x2-filters {
+                    grid-template-columns: 1fr 1fr !important;
+                }
+            }
+            
+            /* Header label */
+            .header-label {
+                font-size: 0.9rem !important;
+                font-weight: 600 !important;
+                color: #01605a !important;
+            }
+            
+            .header-label i {
+                margin-right: 8px !important;
+            }
+            
+            .header-badge {
+                font-size: 0.6rem !important;
+                color: #6c757d !important;
+                background: #f0f0f0 !important;
+                padding: 2px 14px !important;
+                border-radius: 12px !important;
+            }
+        </style>
+        
+        <!-- ============================================================
+             BATCH MARKS ENTRY - 2x2 GRID
+             ============================================================ -->
+        <div class="square-box">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="header-label">
+                    <i class="fas fa-pen-fancy"></i>Batch Marks Entry
+                </span>
+                <span class="header-badge">
+                    <i class="fas fa-info-circle me-1"></i>${isOlevel ? 'U1+U2+U3 + Exam' : 'All Subjects'}
+                </span>
             </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">📚 Class</label>
-                        <select id="batchClass" class="form-select">
-                            <option value="">-- Select --</option>
-                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">🌊 Stream</label>
-                        <select id="batchStream" class="form-select">
-                            <option value="">-- All Streams --</option>
-                            ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
-                        </select>
-                    </div>
-                    ${isOlevel ? `
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">📖 Subject *</label>
-                        <select id="batchSubject" class="form-select">
-                            <option value="">-- Select Subject --</option>
-                            ${dbOlevelSubjects.map(s => `<option value="${s}">${s}</option>`).join('')}
-                        </select>
-                    </div>
-                    ` : ''}
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">📝 Exam</label>
-                        <select id="batchExam" class="form-select">
-                            ${EXAM_OPTIONS.map(e => `<option value="${e}">${e}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">📅 Year</label>
-                        <input type="text" id="batchYear" class="form-control" value="${getCurrentYear()}">
-                    </div>
-                    <div class="col-md-${isOlevel ? '1' : '2'}">
-                        <label class="form-label fw-bold">&nbsp;</label>
-                        <button class="btn btn-primary w-100" onclick="loadBatchMarks()">
-                            <i class="fas fa-users"></i> Load
-                        </button>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">&nbsp;</label>
-                        <button class="btn btn-success w-100" onclick="saveBatchMarks()">
-                            <i class="fas fa-save"></i> Save All
-                        </button>
-                    </div>
+            
+            <!-- 2x2 GRID BATCH FIELDS -->
+            <div class="grid-2x2-batch">
+                <!-- Row 1, Col 1: Class -->
+                <div>
+                    <label class="label-custom"><i class="fas fa-graduation-cap"></i>Class</label>
+                    <select id="batchClass" class="form-select-custom">
+                        <option value="">Select Class</option>
+                        ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <!-- Row 1, Col 2: Stream -->
+                <div>
+                    <label class="label-custom"><i class="fas fa-water"></i>Stream</label>
+                    <select id="batchStream" class="form-select-custom">
+                        <option value="">Select Stream</option>
+                        ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <!-- Row 2, Col 1: Subject (O-Level only) -->
+                ${isOlevel ? `
+                <div>
+                    <label class="label-custom"><i class="fas fa-book"></i>Subject</label>
+                    <select id="batchSubject" class="form-select-custom">
+                        <option value="">Select Subject</option>
+                        ${dbOlevelSubjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                    </select>
+                </div>
+                ` : `
+                <!-- A-Level: Subject will be loaded dynamically -->
+                <div>
+                    <label class="label-custom"><i class="fas fa-book"></i>Subject</label>
+                    <select id="batchSubject" class="form-select-custom" disabled style="background: #f5f5f5; cursor: not-allowed;">
+                        <option value="">All Subjects</option>
+                    </select>
+                </div>
+                `}
+                
+                <!-- Row 2, Col 2: Exam -->
+                <div>
+                    <label class="label-custom"><i class="fas fa-calendar-alt"></i>Exam</label>
+                    <select id="batchExam" class="form-select-custom">
+                        ${EXAM_OPTIONS.map(e => `<option value="${e}">${e}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <!-- Row 3, Col 1: Year -->
+                <div>
+                    <label class="label-custom"><i class="fas fa-calendar"></i>Year</label>
+                    <input type="text" id="batchYear" class="form-input-custom" value="${getCurrentYear()}">
+                </div>
+                
+                <!-- Row 3, Col 2: LOAD Button -->
+                <div style="display: flex; align-items: flex-end;">
+                    <button class="btn-load-color" onclick="loadBatchMarks()" style="width: 100%;">
+                        <i class="fas fa-users"></i> LOAD
+                    </button>
                 </div>
             </div>
         </div>
         
+        <!-- ============================================================
+             BATCH MARKS CONTAINER
+             ============================================================ -->
         <div id="batchMarksContainer" style="display: none;">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header ${isOlevel ? 'bg-info' : 'bg-success'} text-white" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h6 class="mb-0">
-                        <i class="fas fa-edit"></i> 
-                        ${isOlevel ? `Entering Marks for: <span id="selectedSubjectDisplay"></span> - <span id="selectedClassDisplay"></span>` : 'Batch Marks Entry'}
-                    </h6>
-                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">
+            <div class="square-box" style="border-color: #01605a; background: #f8faf9;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span style="font-size: 0.8rem; font-weight: 600; color: #01605a;">
+                        <i class="fas fa-edit me-2"></i> 
+                        ${isOlevel ? `<span id="selectedSubjectDisplay"></span> · <span id="selectedClassDisplay"></span>` : 'Batch Marks Entry'}
+                    </span>
+                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: #01605a; font-size: 18px; cursor: pointer; padding: 0 4px;">
                         <i class="fas fa-times-circle"></i>
                     </button>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                        <table class="table table-bordered table-sm mb-0">
-                            <thead class="table-primary sticky-top">
-                                <tr id="batchTableHeader"><tr>
-                            </thead>
-                            <tbody id="batchTableBody"></tbody>
-                        </table>
-                    </div>
-                    <div class="p-2 bg-light text-end">
-                        <button class="btn btn-danger btn-sm" onclick="closeBatchMarks()">
-                            <i class="fas fa-times"></i> Close
-                        </button>
-                        <button class="btn btn-success btn-sm" onclick="saveBatchMarks()">
-                            <i class="fas fa-save"></i> Save All
-                        </button>
-                        <button class="btn btn-info btn-sm" onclick="exportBatchMarks()">
-                            <i class="fas fa-file-excel"></i> Export
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div class="card shadow-sm mb-3">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <button class="btn btn-primary" onclick="openAddMarkModal()">
-                            <i class="fas fa-plus"></i> Add Single Mark
-                        </button>
-                        <button class="btn btn-success ms-2" onclick="exportAllMarks()">
-                            <i class="fas fa-file-excel"></i> Export All
-                        </button>
-                        <button class="btn btn-danger ms-2" onclick="bulkDeleteMarks()">
-                            <i class="fas fa-trash"></i> Bulk Delete
-                        </button>
-                        <button class="btn btn-secondary ms-2" onclick="refreshMarksTable()">
-                            <i class="fas fa-sync-alt"></i> Refresh
-                        </button>
-                        <button class="btn btn-info ms-2" onclick="refreshSubjectsForMarks()">
-                            <i class="fas fa-sync-alt"></i> Reload Subjects
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- FAST FILTERS -->
-        <div class="card shadow-sm mb-3">
-            <div class="card-body" style="padding: 10px 15px;">
-                <div class="row g-2">
-                    <div class="col-md-3">
-                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📚 Class</label>
-                        <select id="filterClass" class="form-select form-select-sm" onchange="applyMarksFilters()">
-                            <option value="">All Classes</option>
-                            ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">🌊 Stream</label>
-                        <select id="filterStream" class="form-select form-select-sm" onchange="applyMarksFilters()">
-                            <option value="">All Streams</option>
-                            ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">👨‍🎓 Student</label>
-                        <input type="text" id="filterStudent" class="form-control form-control-sm" placeholder="Search student..." onkeyup="debouncedFilterMarks()">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📖 Subject</label>
-                        <input type="text" id="filterSubject" class="form-control form-control-sm" placeholder="Search subject..." onkeyup="debouncedFilterMarks()">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label" style="font-size: 11px; margin-bottom: 2px; font-weight: 600;">📅 Year</label>
-                        <input type="text" id="filterYear" class="form-control form-control-sm" placeholder="Year..." onkeyup="debouncedFilterMarks()">
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-12 text-end">
-                        <button class="btn btn-outline-secondary btn-sm" onclick="clearMarksFilters()" style="font-size: 12px;">
-                            <i class="fas fa-eraser"></i> Clear All Filters
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- PAGINATION CONTROLS -->
-        <div class="card shadow-sm mb-2">
-            <div class="card-body" style="padding: 10px 15px;">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <div class="d-flex align-items-center gap-2">
-                            <span id="paginationInfo" class="text-muted" style="font-size: 13px;">Loading...</span>
-                            <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;" onchange="changePageSize()">
-                                <option value="20">20</option>
-                                <option value="50" selected>50</option>
-                                <option value="100">100</option>
-                                <option value="200">200</option>
-                            </select>
-                            <span style="font-size: 12px; color: #6c757d;">per page</span>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-end gap-1" id="paginationButtons"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Marks Table -->
-        <div class="card shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center" style="padding: 8px 12px;">
-                <h6 class="mb-0"><i class="fas fa-table"></i> Marks Records</h6>
-                <small id="filteredRowCount" class="text-muted"></small>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                    <table class="table table-bordered mb-0">
+                <div style="max-height: 350px; overflow-y: auto;">
+                    <table class="table table-bordered table-sm mb-0" style="font-size: 0.8rem;">
                         <thead class="table-primary sticky-top">
-                            ${renderTableHeader()}
+                            <tr id="batchTableHeader"></tr>
                         </thead>
-                        <tbody id="marksTableBody">
-                            <tr><td colspan="${isOlevel ? 17 : 15}" class="text-center py-4">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2">Loading marks...</p>
-                            </td></tr>
-                        </tbody>
+                        <tbody id="batchTableBody"></tbody>
                     </table>
                 </div>
+                <div class="grid-2x2-actions mt-2" style="grid-template-columns: 1fr 1fr 1fr !important;">
+                    <button class="btn-square btn-square-danger" onclick="closeBatchMarks()">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                    <button class="btn-square btn-square-success" onclick="saveBatchMarks()">
+                        <i class="fas fa-save"></i> Save All
+                    </button>
+                    <button class="btn-square btn-square-info" onclick="exportBatchMarks()">
+                        <i class="fas fa-file-excel"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ============================================================
+             ACTION BUTTONS - 5 COLUMN GRID
+             ============================================================ -->
+        <div class="square-box">
+            <div class="grid-2x2-actions">
+                <button class="btn-square btn-square-primary" onclick="openAddMarkModal()">
+                    <i class="fas fa-plus"></i> Add Single
+                </button>
+                <button class="btn-square btn-square-success" onclick="exportAllMarks()">
+                    <i class="fas fa-file-excel"></i> Export All
+                </button>
+                <button class="btn-square btn-square-danger" onclick="bulkDeleteMarks()">
+                    <i class="fas fa-trash"></i> Bulk Delete
+                </button>
+                <button class="btn-square btn-square-secondary" onclick="refreshMarksTable()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button class="btn-square btn-square-info" onclick="refreshSubjectsForMarks()">
+                    <i class="fas fa-sync-alt"></i> Subjects
+                </button>
+            </div>
+        </div>
+        
+        <!-- ============================================================
+             FILTERS - 5 COLUMN GRID
+             ============================================================ -->
+        <div class="square-box">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span style="font-size: 0.8rem; font-weight: 600; color: #6c757d;">
+                    <i class="fas fa-filter me-2"></i>Filters
+                </span>
+                <button class="btn-pagination-square" onclick="clearMarksFilters()" style="border-color: #6c757d; color: #6c757d; font-size: 0.6rem; padding: 0 14px; min-height: 28px; height: 28px;">
+                    <i class="fas fa-times me-1"></i>Clear All
+                </button>
+            </div>
+            
+            <!-- 5 COLUMN FILTERS -->
+            <div class="grid-2x2-filters">
+                <div>
+                    <label class="label-custom" style="font-size: 0.6rem;"><i class="fas fa-graduation-cap"></i>Class</label>
+                    <select id="filterClass" class="filter-custom" onchange="applyMarksFilters()">
+                        <option value="">All</option>
+                        ${classOptions.map(c => `<option value="${c}">${c}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="label-custom" style="font-size: 0.6rem;"><i class="fas fa-water"></i>Stream</label>
+                    <select id="filterStream" class="filter-custom" onchange="applyMarksFilters()">
+                        <option value="">All</option>
+                        ${streamOptionsList.map(s => `<option value="${s}">${s}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="label-custom" style="font-size: 0.6rem;"><i class="fas fa-user-graduate"></i>Student</label>
+                    <input type="text" id="filterStudent" class="filter-custom" placeholder="Search..." onkeyup="debouncedFilterMarks()">
+                </div>
+                
+                <div>
+                    <label class="label-custom" style="font-size: 0.6rem;"><i class="fas fa-book"></i>Subject</label>
+                    <input type="text" id="filterSubject" class="filter-custom" placeholder="Search..." onkeyup="debouncedFilterMarks()">
+                </div>
+                
+                <div>
+                    <label class="label-custom" style="font-size: 0.6rem;"><i class="fas fa-calendar"></i>Year</label>
+                    <input type="text" id="filterYear" class="filter-custom" placeholder="Search..." onkeyup="debouncedFilterMarks()">
+                </div>
+            </div>
+        </div>
+        
+        <!-- ============================================================
+             PAGINATION
+             ============================================================ -->
+        <div class="square-box" style="padding: 8px 16px !important;">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span id="paginationInfo" class="text-muted" style="font-size: 0.8rem; font-weight: 500; color: #495057 !important;">
+                        Showing 1-50 of 1,707
+                    </span>
+                    <select id="pageSizeSelect" class="form-select" style="width: 50px; font-size: 0.7rem; padding: 2px 6px; height: 30px; border-radius: 6px; border: 1.5px solid #e0e0e0;" onchange="changePageSize()">
+                        <option value="20">20</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                    </select>
+                    <span style="font-size: 0.65rem; color: #6c757d;">per page</span>
+                </div>
+                <div class="d-flex align-items-center gap-2" id="paginationButtons">
+                    <button class="btn-pagination-square" onclick="goToPage(1)" ${marksCurrentPage <= 1 ? 'disabled' : ''}>
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button class="btn-pagination-square" onclick="goToPage(${marksCurrentPage - 1})" ${marksCurrentPage <= 1 ? 'disabled' : ''}>
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+                    <span style="font-size: 0.8rem; font-weight: 600; color: #01605a; white-space: nowrap; padding: 0 6px;">
+                        Page ${marksCurrentPage} of ${totalPages || 1}
+                    </span>
+                    <button class="btn-pagination-square" onclick="goToPage(${marksCurrentPage + 1})" ${marksCurrentPage >= totalPages ? 'disabled' : ''}>
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button class="btn-pagination-square" onclick="goToPage(${totalPages})" ${marksCurrentPage >= totalPages ? 'disabled' : ''}>
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ============================================================
+             MARKS TABLE
+             ============================================================ -->
+        <div class="square-box" style="padding: 0 !important; overflow: hidden; border-radius: 10px !important;">
+            <div class="d-flex justify-content-between align-items-center" style="padding: 6px 16px; border-bottom: 1.5px solid #f0f0f0;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: #01605a;">
+                    <i class="fas fa-table me-2"></i>Marks Records
+                </span>
+                <small id="filteredRowCount" class="text-muted" style="font-size: 0.65rem;"></small>
+            </div>
+            <div style="overflow-x: auto; max-height: 500px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                <table class="table table-bordered mb-0" style="font-size: 0.75rem; min-width: 700px; white-space: nowrap;">
+                    <thead class="table-light sticky-top" style="border-bottom: 2px solid #dee2e6;">
+                        ${renderTableHeader()}
+                    </thead>
+                    <tbody id="marksTableBody">
+                        <tr><td colspan="${isOlevel ? 17 : 15}" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status" style="width: 28px; height: 28px;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2" style="font-size: 0.8rem; color: #6c757d;">Loading marks...</p>
+                        </td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     `;
 }
-
 // ============================================
 // LOAD BATCH MARKS
 // ============================================
