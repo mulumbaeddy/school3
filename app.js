@@ -1,6 +1,5 @@
 const SUPABASE_URL = 'https://dljvmlshqegrwxqduggo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsanZtbHNocWVncnd4cWR1Z2dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDE5NDgsImV4cCI6MjA5MDQ3Nzk0OH0.1TjmfFhcy5trfOgfu0Y8iQTeKFUNqvjUnniKUtzvuX8';
-
 let sb = null;
 let currentUser = null;
 let currentUserRole = null;
@@ -7773,9 +7772,17 @@ async function renderMarks() {
                         <i class="fas fa-edit me-2"></i> 
                         ${isOlevel ? `<span id="selectedSubjectDisplay"></span> · <span id="selectedClassDisplay"></span>` : 'Batch Marks Entry'}
                     </span>
-                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: #01605a; font-size: 18px; cursor: pointer; padding: 0 4px;">
-                        <i class="fas fa-times-circle"></i>
-                    </button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <!-- ✅ NEW: Change Exam Period Button -->
+                        <button type="button" onclick="openChangeExamModal()" 
+                                style="background: #ffc107; border: none; color: #212529; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            <i class="fas fa-exchange-alt"></i> Change Exam
+                        </button>
+                        <button type="button" onclick="closeBatchMarks()" 
+                                style="background: none; border: none; color: #01605a; font-size: 18px; cursor: pointer; padding: 0 4px;">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </div>
                 </div>
                 <div style="max-height: 350px; overflow-y: auto;">
                     <table class="table table-bordered table-sm mb-0" style="font-size: 0.8rem;">
@@ -8015,6 +8022,443 @@ window.loadBatchMarks = async function() {
         Swal.fire('Error', error.message, 'error');
     }
 };
+
+// ============================================
+// ✅ NEW: CHANGE EXAM PERIOD MODAL
+// ============================================
+
+// ============================================
+// ✅ UPDATED: CHANGE EXAM PERIOD - ADMIN ONLY
+// ONLY changes marks that already exist (saved)
+// ============================================
+
+window.openChangeExamModal = function() {
+    if (batchState.students.length === 0) {
+        Swal.fire('Error', 'No marks loaded. Please load batch marks first.', 'error');
+        return;
+    }
+    
+    // ✅ Check if there are any marks to change
+    let hasMarks = false;
+    let markCount = 0;
+    for (const student of batchState.students) {
+        const key = `${student.id}_${batchState.subject}`;
+        if (batchState.marksMap[key]) {
+            hasMarks = true;
+            markCount++;
+        }
+    }
+    
+    if (!hasMarks) {
+        Swal.fire('Info', 'No saved marks found to change exam period. Please load marks first.', 'info');
+        return;
+    }
+    
+    // ✅ STEP 1: FIRST - Verify Admin password ONLY
+    Swal.fire({
+        title: '🔐 Admin Authorization Required',
+        html: `
+            <div class="text-start">
+                <div class="alert alert-warning mb-3" style="font-size: 13px;">
+                    <i class="fas fa-shield-alt"></i>
+                    <strong>Admin Authorization Required!</strong><br>
+                    Changing exam period for marks requires <strong>Admin</strong> credentials.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Admin Password</label>
+                    <input type="password" id="changeAuthPassword" class="form-control" 
+                           placeholder="Enter admin password" autocomplete="off">
+                </div>
+                <div id="changeAuthError" class="alert alert-danger small" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    <span id="changeAuthErrorMessage">Incorrect admin password. Access denied.</span>
+                </div>
+            </div>
+        `,
+        width: '420px',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+        confirmButtonColor: '#d33',
+        allowOutsideClick: false,
+        didOpen: () => {
+            const passwordInput = document.getElementById('changeAuthPassword');
+            if (passwordInput) {
+                passwordInput.focus();
+                passwordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') Swal.clickConfirm();
+                });
+            }
+            
+            // Clear error on input
+            passwordInput?.addEventListener('input', () => {
+                document.getElementById('changeAuthError').style.display = 'none';
+            });
+        },
+        preConfirm: async () => {
+            const password = document.getElementById('changeAuthPassword')?.value;
+            const errorDiv = document.getElementById('changeAuthError');
+            const errorMsg = document.getElementById('changeAuthErrorMessage');
+            
+            // Hide previous error
+            errorDiv.style.display = 'none';
+            
+            if (!password) {
+                errorMsg.textContent = 'Please enter admin password';
+                errorDiv.style.display = 'block';
+                Swal.showValidationMessage('Please enter admin password');
+                return false;
+            }
+            
+            try {
+                // ✅ Get the admin email from database
+                const { data: userData, error: userError } = await sb
+                    .from('users')
+                    .select('email')
+                    .eq('role', 'admin')
+                    .limit(1)
+                    .single();
+                
+                if (userError || !userData) {
+                    errorMsg.textContent = 'Could not find admin account. Please contact system administrator.';
+                    errorDiv.style.display = 'block';
+                    Swal.showValidationMessage('Could not find admin account');
+                    return false;
+                }
+                
+                // ✅ Verify admin password using Supabase Auth
+                const { error: signInError } = await sb.auth.signInWithPassword({
+                    email: userData.email,
+                    password: password
+                });
+                
+                if (signInError) {
+                    if (signInError.message.includes('Invalid login credentials')) {
+                        errorMsg.textContent = 'Incorrect admin password. Access denied.';
+                    } else if (signInError.message.includes('rate limit')) {
+                        errorMsg.textContent = 'Too many attempts. Please wait a moment and try again.';
+                    } else {
+                        errorMsg.textContent = `Authentication failed: ${signInError.message}`;
+                    }
+                    errorDiv.style.display = 'block';
+                    Swal.showValidationMessage(errorMsg.textContent);
+                    return false;
+                }
+                
+                // ✅ Success - password verified
+                return true;
+                
+            } catch (err) {
+                console.error('Verification error:', err);
+                errorMsg.textContent = `Verification failed: ${err.message || 'Unknown error'}`;
+                errorDiv.style.display = 'block';
+                Swal.showValidationMessage('Verification failed. Please try again.');
+                return false;
+            }
+        }
+    }).then(async (authResult) => {
+        // ✅ STEP 2: If authorized, proceed with exam change modal
+        if (authResult.isConfirmed && authResult.value === true) {
+            // Show success briefly
+            await Swal.fire({
+                icon: 'success',
+                title: '✅ Authorization Granted',
+                text: 'You are authorized to change the exam period.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+            
+            // ✅ STEP 3: Show the exam change modal
+            showExamChangeModal();
+        }
+    });
+};
+
+// ============================================
+// ✅ SHOW EXAM CHANGE MODAL (After Authorization)
+// ============================================
+
+function showExamChangeModal() {
+    // ✅ Count ONLY students with saved marks
+    let savedMarkCount = 0;
+    let savedStudentNames = [];
+    for (const student of batchState.students) {
+        const key = `${student.id}_${batchState.subject}`;
+        if (batchState.marksMap[key]) {
+            savedMarkCount++;
+            savedStudentNames.push(student.name);
+        }
+    }
+    
+    Swal.fire({
+        title: '🔄 Change Exam Period',
+        html: `
+            <div class="text-start">
+                <div class="alert alert-info mb-3" style="font-size: 13px;">
+                    <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                    <strong>Admin Authorization Verified!</strong> You can now change the exam period.
+                </div>
+                
+                <div class="alert alert-warning mb-3" style="font-size: 13px;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This will change the exam period for <strong>ONLY saved marks</strong>.
+                    <br><br>
+                    <strong>Current Exam:</strong> <span class="badge bg-primary">${batchState.exam}</span>
+                    <strong>Current Year:</strong> <span class="badge bg-secondary">${batchState.year}</span>
+                </div>
+                
+                <div class="alert alert-success mb-3" style="font-size: 13px;">
+                    <i class="fas fa-check-circle"></i>
+                    <strong>${savedMarkCount} student(s)</strong> with saved marks will be updated.
+                    ${savedMarkCount > 5 ? `<br><small class="text-muted">Showing first 5: ${savedStudentNames.slice(0, 5).join(', ')}${savedStudentNames.length > 5 ? '...' : ''}</small>` : 
+                    `<br><small class="text-muted">${savedStudentNames.join(', ')}</small>`}
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">📝 New Exam Period</label>
+                        <select id="newExamPeriod" class="form-select">
+                            ${EXAM_OPTIONS.map(e => `<option value="${e}" ${e === batchState.exam ? 'selected' : ''}>${e}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">📅 New Year</label>
+                        <input type="text" id="newExamYear" class="form-control" value="${batchState.year}">
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mb-2" style="font-size: 12px;">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>${batchState.students.length} students</strong> loaded total · 
+                    <strong>${savedMarkCount} students</strong> with saved marks will be changed
+                </div>
+            </div>
+        `,
+        width: '550px',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-exchange-alt"></i> Change Exam Period',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#ffc107',
+        allowOutsideClick: false,
+        preConfirm: () => {
+            const newExam = document.getElementById('newExamPeriod').value;
+            const newYear = document.getElementById('newExamYear').value;
+            
+            if (!newExam) {
+                Swal.showValidationMessage('Please select an exam period');
+                return false;
+            }
+            if (!newYear) {
+                Swal.showValidationMessage('Please enter a year');
+                return false;
+            }
+            
+            return { newExam, newYear };
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed && result.value) {
+            await performExamChange(result.value.newExam, result.value.newYear);
+        }
+    });
+}
+
+// ============================================
+// ✅ PERFORM EXAM CHANGE - ONLY FOR SAVED MARKS
+// ============================================
+
+async function performExamChange(newExam, newYear) {
+    const loading = Swal.fire({
+        title: '⏳ Changing Exam Period...',
+        text: `Updating marks from "${batchState.exam}" to "${newExam}"...`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+    
+    let updated = 0;
+    let errors = 0;
+    let markIds = [];
+    let studentNames = [];
+    
+    // ✅ Collect ONLY mark IDs that exist (saved marks)
+    for (const student of batchState.students) {
+        const key = `${student.id}_${batchState.subject}`;
+        const mark = batchState.marksMap[key];
+        if (mark) {
+            markIds.push(mark.id);
+            studentNames.push(student.name);
+        }
+    }
+    
+    if (markIds.length === 0) {
+        Swal.close();
+        Swal.fire('Info', 'No saved marks found to update.', 'info');
+        return;
+    }
+    
+    try {
+        // ✅ Update ONLY the marks that exist (saved marks)
+        const { error } = await sb
+            .from('marks')
+            .update({
+                exam: newExam,
+                year: newYear,
+                updated_at: new Date().toISOString()
+            })
+            .in('id', markIds);
+        
+        if (error) throw error;
+        
+        updated = markIds.length;
+        
+        // ✅ Update the batchState and reload
+        batchState.exam = newExam;
+        batchState.year = newYear;
+        
+        // Update the dropdowns to reflect new values
+        document.getElementById('batchExam').value = newExam;
+        document.getElementById('batchYear').value = newYear;
+        
+        Swal.close();
+        
+        // Show success with details
+        await Swal.fire({
+            icon: 'success',
+            title: '✅ Exam Period Changed!',
+            html: `
+                <div class="text-start">
+                    <p><strong>Updated:</strong> ${updated} mark records</p>
+                    <p><strong>From:</strong> ${batchState.exam} (${batchState.year})</p>
+                    <p><strong>To:</strong> ${newExam} (${newYear})</p>
+                    <p class="text-muted small mt-2">
+                        ✅ Only students with saved marks were updated.
+                        ${studentNames.length <= 10 ? `<br><small>Students: ${studentNames.join(', ')}</small>` : ''}
+                    </p>
+                </div>
+            `,
+            timer: 4000,
+            timerProgressBar: true
+        });
+        
+        // ✅ Reload the batch marks to reflect changes
+        await loadBatchMarks();
+        
+        // ✅ Refresh the main marks table
+        await loadMarksTable();
+        
+        showTopRightNotification(
+            '✅ Exam Period Changed!', 
+            `${updated} marks updated to ${newExam} ${newYear}`,
+            'success',
+            4000
+        );
+        
+    } catch (error) {
+        Swal.close();
+        console.error('Error changing exam period:', error);
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: `Failed to change exam period: ${error.message}`,
+            timer: 4000
+        });
+    }
+}
+// ============================================
+// ✅ NEW: PERFORM EXAM CHANGE
+// ============================================
+
+async function performExamChange(newExam, newYear) {
+    const loading = Swal.fire({
+        title: '⏳ Changing Exam Period...',
+        text: `Updating marks from "${batchState.exam}" to "${newExam}"...`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+    
+    let updated = 0;
+    let errors = 0;
+    let markIds = [];
+    
+    // Collect all mark IDs that need to be changed
+    for (const student of batchState.students) {
+        const key = `${student.id}_${batchState.subject}`;
+        const mark = batchState.marksMap[key];
+        if (mark) {
+            markIds.push(mark.id);
+        }
+    }
+    
+    if (markIds.length === 0) {
+        Swal.close();
+        Swal.fire('Info', 'No marks found to update.', 'info');
+        return;
+    }
+    
+    try {
+        // Update all marks in one batch
+        const { error } = await sb
+            .from('marks')
+            .update({
+                exam: newExam,
+                year: newYear,
+                updated_at: new Date().toISOString()
+            })
+            .in('id', markIds);
+        
+        if (error) throw error;
+        
+        updated = markIds.length;
+        
+        // ✅ Update the batchState and reload
+        batchState.exam = newExam;
+        batchState.year = newYear;
+        
+        // Update the dropdowns to reflect new values
+        document.getElementById('batchExam').value = newExam;
+        document.getElementById('batchYear').value = newYear;
+        
+        Swal.close();
+        
+        // Show success
+        await Swal.fire({
+            icon: 'success',
+            title: '✅ Exam Period Changed!',
+            html: `
+                <div class="text-start">
+                    <p><strong>Updated:</strong> ${updated} mark records</p>
+                    <p><strong>From:</strong> ${batchState.exam} (${batchState.year})</p>
+                    <p><strong>To:</strong> ${newExam} (${newYear})</p>
+                    <p class="text-muted small mt-2">⚠️ Reloading marks to show changes...</p>
+                </div>
+            `,
+            timer: 3000,
+            timerProgressBar: true
+        });
+        
+        // ✅ Reload the batch marks to reflect changes
+        await loadBatchMarks();
+        
+        // ✅ Refresh the main marks table
+        await loadMarksTable();
+        
+        showTopRightNotification(
+            '✅ Exam Period Changed!', 
+            `${updated} marks updated to ${newExam} ${newYear}`,
+            'success',
+            4000
+        );
+        
+    } catch (error) {
+        Swal.close();
+        console.error('Error changing exam period:', error);
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: `Failed to change exam period: ${error.message}`,
+            timer: 4000
+        });
+    }
+}
 
 // ============================================
 // RENDER O-LEVEL BATCH TABLE
@@ -9707,27 +10151,10 @@ console.log('📄 Pagination: Loads 50 records at a time - NO FREEZING!');
 console.log('🔢 Row numbers: # column shows record number');
 console.log('🔍 Filters: Class, Stream, Student, Subject, Year - WORKING!');
 console.log('📦 Batch Entry: Load, Edit, Save - WORKING!');
+console.log('🔄 Change Exam: Update exam period for all loaded marks - NEW!');
 console.log('👨‍🏫 Teachers: CAN ADD marks, CANNOT EDIT marks');
 console.log('🎯 Grades from: olevel_grades table (Settings)');
 console.log('🚀 ALL PARTS WORKING - READY TO USE!');
-
-// Make functions globally accessible
-window.applyMarksFilters = applyMarksFilters;
-window.clearMarksFilters = clearMarksFilters;
-window.debouncedFilterMarks = debouncedFilterMarks;
-window.loadMarksTable = loadMarksTable;
-window.renderMarks = renderMarks;
-window.loadBatchMarks = loadBatchMarks;
-window.saveBatchMarks = saveBatchMarks;
-window.openAddMarkModal = openAddMarkModal;
-window.editMark = editMark;
-window.deleteMark = deleteMark;
-window.bulkDeleteMarks = bulkDeleteMarks;
-window.closeBatchMarks = closeBatchMarks;
-window.exportBatchMarks = exportBatchMarks;
-window.exportAllMarks = exportAllMarks;
-window.refreshMarksTable = refreshMarksTable;
-window.refreshSubjectsForMarks = refreshSubjectsForMarks;
 // ==================== TEACHERS MODULE ====================
 // ============================================
 // TEACHERS MODULE - USING SWEETALERT2 (No Bootstrap Modal)
