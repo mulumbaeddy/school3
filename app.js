@@ -16577,9 +16577,30 @@ function getGradeAndPointsFromSettings(percentage, subjectName = '') {
 // LOAD O-LEVEL MARKS - FIXED
 // ============================================
 
+// ============================================
+// ✅ UPDATED: LOAD O-LEVEL MARKS - SHOWS ALL SUBJECTS (MARKS FIRST, BLANK FOR NO MARKS)
+// ============================================
+
 async function loadOlevelMarksForReport(studentId, exam, year) {
     try {
-        const { data, error } = await sb
+        // ✅ STEP 1: Get ALL subjects for O-Level from database
+        const { data: allSubjects, error: subjectsError } = await sb
+            .from('subjects')
+            .select('name')
+            .eq('level', 'olevel')
+            .order('name', { ascending: true });
+        
+        if (subjectsError) {
+            console.error('Error loading subjects:', subjectsError);
+            var allSubjectsList = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology', 
+                                   'History', 'Geography', 'Agriculture', 'Computer Studies', 
+                                   'Divinity', 'Literature', 'French', 'Kiswahili'];
+        } else {
+            var allSubjectsList = allSubjects.map(s => s.name);
+        }
+        
+        // ✅ STEP 2: Get student's marks
+        const { data: studentMarks, error: marksError } = await sb
             .from('marks')
             .select('*')
             .eq('student_id', studentId)
@@ -16587,110 +16608,183 @@ async function loadOlevelMarksForReport(studentId, exam, year) {
             .eq('year', year)
             .eq('level', 'olevel');
         
-        if (error) throw error;
+        if (marksError) throw marksError;
         
-        if (!data || data.length === 0) {
-            return [];
+        // ✅ STEP 3: Build a map of existing marks
+        const marksMap = {};
+        for (const m of studentMarks || []) {
+            marksMap[m.subject] = m;
         }
         
-        return (data || []).map(m => {
-            const u1 = m.unit1 || 0;
-            const u2 = m.unit2 || 0;
-            const u3 = m.unit3 || 0;
-            const exam80 = m.exam_80 || 0;
+        // ✅ STEP 4: Build result array with ALL subjects
+        const result = [];
+        for (const subjectName of allSubjectsList) {
+            const mark = marksMap[subjectName];
             
-            // CORRECT CALCULATION (same as Marks Module)
-            const unitAvg = (u1 + u2 + u3) / 3;
-            const unitContribution = (unitAvg / 20) * 100;
-            const examContribution = (exam80 / 80) * 100;
-            let total100 = (unitContribution * 0.2) + (examContribution * 0.8);
-            total100 = Math.min(100, Math.max(0, total100));
-            
-            // GET GRADE FROM DATABASE (same as Marks Module)
-            const gradeInfo = getGradeAndPointsFromSettings(total100, m.subject);
-            
-            let unitDescriptor = 'Basic';
-            if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
-            else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
-            
-            return {
-                subject: m.subject,
-                u1, u2, u3,
-                avgUnit: unitAvg.toFixed(1),
-                identifier: Math.round(unitAvg),
-                unitDescriptor: unitDescriptor,
-                total20: (unitAvg / 3 * 20).toFixed(1),
-                exam80: exam80,
-                total100: total100.toFixed(1),
-                grade: gradeInfo.grade,
-                color: gradeInfo.color,
-                descriptor: gradeInfo.remark || gradeInfo.grade,
-                teacher_initials: m.teacher_initials || ''
-            };
-        });
+            if (mark) {
+                // ✅ Student has marks for this subject
+                const u1 = mark.unit1 || 0;
+                const u2 = mark.unit2 || 0;
+                const u3 = mark.unit3 || 0;
+                const exam80 = mark.exam_80 || 0;
+                
+                const unitAvg = (u1 + u2 + u3) / 3;
+                const unitContribution = (unitAvg / 20) * 100;
+                const examContribution = (exam80 / 80) * 100;
+                let total100 = (unitContribution * 0.2) + (examContribution * 0.8);
+                total100 = Math.min(100, Math.max(0, total100));
+                
+                const gradeInfo = getGradeAndPointsFromSettings(total100, subjectName);
+                
+                let unitDescriptor = 'Basic';
+                if (unitAvg >= 2.5) unitDescriptor = 'Outstanding';
+                else if (unitAvg >= 1.5) unitDescriptor = 'Moderate';
+                
+                result.push({
+                    subject: subjectName,
+                    u1: u1,
+                    u2: u2,
+                    u3: u3,
+                    avgUnit: unitAvg.toFixed(1),
+                    identifier: Math.round(unitAvg),
+                    unitDescriptor: unitDescriptor,
+                    exam80: exam80,
+                    total100: total100.toFixed(1),
+                    grade: gradeInfo.grade,
+                    color: gradeInfo.color || '#6c757d',
+                    descriptor: gradeInfo.remark || gradeInfo.grade || '',
+                    teacher_initials: mark.teacher_initials || '',
+                    has_mark: true
+                });
+            } else {
+                // ✅ No marks - show blank
+                result.push({
+                    subject: subjectName,
+                    u1: '',
+                    u2: '',
+                    u3: '',
+                    avgUnit: '',
+                    identifier: '',
+                    unitDescriptor: '',
+                    exam80: '',
+                    total100: '',
+                    grade: '',
+                    color: '#ffffff',
+                    descriptor: '',
+                    teacher_initials: '',
+                    has_mark: false
+                });
+            }
+        }
+        
+        return result;
+        
     } catch (error) {
         console.error('Error loading O-Level marks:', error);
         return [];
     }
 }
-
 // ============================================
 // LOAD MARKS WITH GRADES - FIXED
 // ============================================
 
+// ============================================
+// ✅ UPDATED: LOAD MARKS FOR REPORT - SHOWS ALL SUBJECTS (A-Level, BLANK FOR NO MARKS)
+// ============================================
+
 async function loadMarksForReport(studentId, exam, year) {
     try {
-        const { data, error } = await sb
+        let allSubjectsList = [];
+        
+        if (currentLevel === 'alevel') {
+            // ✅ Get ALL A-Level subjects (Principal + Subsidiary)
+            const { data: principalSubjects, error: pError } = await sb
+                .from('subjects')
+                .select('name')
+                .eq('level', 'alevel')
+                .eq('category', 'principal')
+                .order('name', { ascending: true });
+            
+            if (pError) throw pError;
+            
+            const { data: subsidiarySubjects, error: sError } = await sb
+                .from('subsidiary_subjects')
+                .select('subject_name')
+                .order('subject_name', { ascending: true });
+            
+            if (sError) throw sError;
+            
+            // ✅ Combine subjects
+            const principalNames = (principalSubjects || []).map(s => s.name);
+            const subsidiaryNames = (subsidiarySubjects || []).map(s => s.subject_name);
+            allSubjectsList = [...principalNames, ...subsidiaryNames];
+        } else {
+            // ✅ O-Level subjects (handled in separate function)
+            return await loadOlevelMarksForReport(studentId, exam, year);
+        }
+        
+        // ✅ Get student's marks
+        const { data: studentMarks, error: marksError } = await sb
             .from('marks')
             .select('*')
             .eq('student_id', studentId)
             .eq('exam', exam)
             .eq('year', year);
         
-        if (error) throw error;
+        if (marksError) throw marksError;
         
-        if (!data || data.length === 0) {
-            return [];
+        // ✅ Build map of existing marks
+        const marksMap = {};
+        for (const m of studentMarks || []) {
+            marksMap[m.subject] = m;
         }
         
-        return (data || []).map(m => {
-            let percentage;
-            let subjectName = m.subject || '';
+        // ✅ Build result array with ALL subjects
+        const result = [];
+        for (const subjectName of allSubjectsList) {
+            const mark = marksMap[subjectName];
             
-            if (currentLevel === 'olevel') {
-                // O-Level: Use unit-based calculation
-                const u1 = m.unit1 || 0;
-                const u2 = m.unit2 || 0;
-                const u3 = m.unit3 || 0;
-                const exam80 = m.exam_80 || 0;
-                const unitAvg = (u1 + u2 + u3) / 3;
-                const unitContribution = (unitAvg / 20) * 100;
-                const examContribution = (exam80 / 80) * 100;
-                percentage = (unitContribution * 0.2) + (examContribution * 0.8);
-                percentage = Math.min(100, Math.max(0, percentage));
+            if (mark) {
+                // ✅ Student has marks for this subject
+                const maxMarks = mark.max_marks || 100;
+                const obtained = mark.marks_obtained || 0;
+                const percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
+                const isSubsidiary = subsidiarySubjectsList.includes(subjectName);
+                const gradeInfo = getGradeAndPointsFromSettings(percentage, subjectName);
+                
+                result.push({
+                    ...mark,
+                    percentage: percentage,
+                    grade: gradeInfo.grade || '?',
+                    points: gradeInfo.points || 0,
+                    color: gradeInfo.color || '#6c757d',
+                    remark: gradeInfo.remark || gradeInfo.grade || '',
+                    subject: subjectName,
+                    has_mark: true
+                });
             } else {
-                const maxMarks = m.max_marks || 100;
-                const obtained = m.marks_obtained || 0;
-                percentage = maxMarks > 0 ? (obtained / maxMarks) * 100 : 0;
+                // ✅ No marks - show blank
+                result.push({
+                    subject: subjectName,
+                    marks_obtained: '',
+                    max_marks: '',
+                    percentage: '',
+                    grade: '',
+                    points: '',
+                    color: '#ffffff',
+                    remark: '',
+                    has_mark: false
+                });
             }
-            
-            const gradeInfo = getGradeAndPointsFromSettings(percentage, subjectName);
-            
-            return {
-                ...m,
-                percentage: percentage,
-                grade: gradeInfo.grade,
-                points: gradeInfo.points || 0,
-                color: gradeInfo.color || '#6c757d',
-                subject: subjectName
-            };
-        });
+        }
+        
+        return result;
+        
     } catch (error) {
         console.error('Error loading marks:', error);
         return [];
     }
 }
-
 // ============================================
 // CHECK UNIVERSITY ELIGIBILITY
 // ============================================
@@ -16811,31 +16905,75 @@ function getRemarkMessage(totalPoints, avgPercentage, division) {
 // GENERATE O-LEVEL REPORT CARD HTML - NO FEE STRUCTURE
 // ============================================
 
+// ============================================
+// ✅ UPDATED: GENERATE O-LEVEL REPORT HTML - SUBJECTS WITH MARKS FIRST, OTHERS BLACK BOLD
+// ============================================
+
 function generateOlevelReportHTML(student, marks, exam, year, classTeacher, isForPrint = false) {
+    // ✅ Split marks into: with marks and without marks
+    const withMarks = marks.filter(m => m.has_mark);
+    const withoutMarks = marks.filter(m => !m.has_mark);
+    
+    // ✅ Combine: with marks first, then without marks
+    const sortedMarks = [...withMarks, ...withoutMarks];
+    
     let totalSum = 0;
-    for (const m of marks) totalSum += parseFloat(m.total100);
-    const overallAvg = marks.length ? (totalSum / marks.length).toFixed(1) : '0.0';
+    let subjectsWithMarks = 0;
+    
+    for (const m of sortedMarks) {
+        if (m.has_mark) {
+            totalSum += parseFloat(m.total100);
+            subjectsWithMarks++;
+        }
+    }
+    const overallAvg = subjectsWithMarks > 0 ? (totalSum / subjectsWithMarks).toFixed(1) : '0.0';
+    
     const gradeInfo = getGradeAndPointsFromSettings(parseFloat(overallAvg), '');
     const currentDate = getCurrentDate();
     
-    const subjectsHtml = marks.map(m => `
-        <tr>
-            <td style="padding: 8px; border: 1px solid #000;">${escapeHtml(m.subject)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u1.toFixed(1)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u2.toFixed(1)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.u3.toFixed(1)}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.avgUnit}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.identifier}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.unitDescriptor}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.exam80}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;"><strong>${m.total100}</strong></td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold; background: ${m.color}; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
-                ${m.grade}
-            </td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${m.descriptor}</td>
-            <td style="padding: 8px; text-align: center; border: 1px solid #000;">${escapeHtml(m.teacher_initials)}</td>
-        </tr>
-    `).join('');
+    const subjectsHtml = sortedMarks.map(m => {
+        const isBlank = !m.has_mark;
+        return `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${escapeHtml(m.subject)}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.u1.toFixed(1) : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.u2.toFixed(1) : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.u3.toFixed(1) : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.avgUnit : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.identifier : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.unitDescriptor : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.exam80 : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.total100 : ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; font-weight: bold; background: ${m.has_mark ? m.color : '#ffffff'}; color: ${m.has_mark ? 'white' : '#000'}; text-shadow: ${m.has_mark ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'};">
+                    ${m.grade || ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.descriptor || ''}
+                </td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.teacher_initials || ''}
+                </td>
+            </tr>
+        `;
+    }).join('');
     
     const logoWatermark = schoolInfo.school_logo ? 
         `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.12; z-index: 0; pointer-events: none; width: 55%; max-width: 400px;">
@@ -16869,6 +17007,7 @@ function generateOlevelReportHTML(student, marks, exam, year, classTeacher, isFo
                     <div><strong>Class:</strong> ${student.class}</div>
                     <div><strong>Stream:</strong> ${student.stream || '-'}</div>
                     <div><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</div>
+                    <div><strong>Subjects with Marks:</strong> ${subjectsWithMarks}</div>
                 </div>
             </div>
             
@@ -16973,45 +17112,70 @@ function generateOlevelReportHTML(student, marks, exam, year, classTeacher, isFo
         ` : ''}
     `;
 }
-
 // ============================================
 // GENERATE A-LEVEL REPORT CARD HTML - NO FEE STRUCTURE
 // ============================================
 
+// ============================================
+// ✅ UPDATED: GENERATE A-LEVEL REPORT HTML - SUBJECTS WITH MARKS FIRST, OTHERS BLACK BOLD
+// ============================================
+
 function generateAlevelReportHTML(student, marks, exam, year, classTeacher, isForPrint = false) {
+    // ✅ Split marks into: with marks and without marks
+    const withMarks = marks.filter(m => m.has_mark);
+    const withoutMarks = marks.filter(m => !m.has_mark);
+    
+    // ✅ Combine: with marks first, then without marks
+    const sortedMarks = [...withMarks, ...withoutMarks];
+    
     let totalPoints = 0;
     let totalPercentage = 0;
+    let subjectsWithMarks = 0;
     
-    const subjectsHtml = marks.map(m => {
-        let percentage = m.percentage;
+    const subjectsHtml = sortedMarks.map(m => {
+        const isBlank = !m.has_mark;
         
-        totalPoints += m.points || 0;
-        totalPercentage += percentage;
+        if (m.has_mark) {
+            totalPoints += m.points || 0;
+            totalPercentage += m.percentage || 0;
+            subjectsWithMarks++;
+        }
         
-        const finalScore = m.marks_obtained || 0;
         const isSubsidiary = subsidiarySubjectsList.includes(m.subject);
+        
         return `
             <tr style="border-bottom: 1px solid #000;">
-                <td style="padding: 10px 8px; border: 1px solid #000;">
+                <td style="padding: 10px 8px; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
                     <strong>${escapeHtml(m.subject)}</strong>
-                    ${isSubsidiary ? '<span style="background: #000; color: white; padding: 2px 8px; font-size: 10px; margin-left: 5px;">Sub</span>' : ''}
+                    ${isSubsidiary && m.has_mark ? '<span style="background: #000; color: white; padding: 2px 8px; font-size: 10px; margin-left: 5px; border-radius: 3px;">Sub</span>' : ''}
                 </td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${finalScore}</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${m.max_marks}</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;">${percentage.toFixed(1)}%</td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; background: ${m.color}; color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
-                    ${m.grade}
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.marks_obtained : ''}
                 </td>
-                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000;"><strong>${m.points}</strong></td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? (m.max_marks || 100) : ''}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? m.percentage.toFixed(1) + '%' : ''}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; background: ${m.has_mark ? (m.color || '#6c757d') : '#ffffff'}; color: ${m.has_mark ? 'white' : '#000'}; font-weight: bold; text-shadow: ${m.has_mark ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'};">
+                    ${m.grade || ''}
+                </td>
+                <td style="padding: 10px 8px; text-align: center; border: 1px solid #000; ${isBlank ? 'color: #000; font-weight: bold;' : ''}">
+                    ${m.has_mark ? (m.points || 0) : ''}
+                </td>
             </tr>
         `;
     }).join('');
     
-    const avgPercentage = marks.length > 0 ? (totalPercentage / marks.length).toFixed(1) : 0;
+    const avgPercentage = subjectsWithMarks > 0 ? (totalPercentage / subjectsWithMarks).toFixed(1) : '0.0';
     const division = calculateGradeDivision(avgPercentage, totalPoints);
     const levelName = 'UACE REPORT CARD';
     
-    let universityEligibility = checkUniversityEligibility(totalPoints, marks);
+    let universityEligibility = null;
+    if (subjectsWithMarks > 0) {
+        universityEligibility = checkUniversityEligibility(totalPoints, marks);
+    }
     
     const tableHeaders = `<tr style="background: #000; color: white;">
         <th style="padding: 10px; border: 1px solid #000;">Subject</th>
@@ -17052,6 +17216,7 @@ function generateAlevelReportHTML(student, marks, exam, year, classTeacher, isFo
                         <tr><td style="border: none;"><strong>Class:</strong> ${student.class}</td><td style="border: none;"><strong>Stream:</strong> ${student.stream || '-'}</td></tr>
                         <tr><td style="border: none;"><strong>Type:</strong> ${student.student_type || 'Day'}</td><td style="border: none;"><strong>Combination:</strong> ${student.combination || 'N/A'}</td></tr>
                         <tr><td colspan="2" style="border: none;"><strong>Class Teacher:</strong> ${escapeHtml(classTeacher)}</td></tr>
+                        <tr><td colspan="2" style="border: none;"><strong>Subjects with Marks:</strong> ${subjectsWithMarks}</td></tr>
                     </table>
                 </div>
                 
@@ -17110,7 +17275,6 @@ function generateAlevelReportHTML(student, marks, exam, year, classTeacher, isFo
         ` : ''}
     `;
 }
-
 // ============================================
 // GENERATE REPORT (AUTO-DETECT LEVEL)
 // ============================================
