@@ -10187,6 +10187,10 @@ async function performExamChange(newExam, newYear, newInitials) {
 // VERIFY ADMIN/SUPER ADMIN PASSWORD
 // ============================================
 
+// ============================================
+// FIXED: VERIFY ADMIN PASSWORD - WITHOUT users TABLE QUERY
+// ============================================
+
 async function verifyAdminOrSuperAdminPassword(action = 'this action') {
     return new Promise((resolve) => {
         Swal.fire({
@@ -10233,40 +10237,59 @@ async function verifyAdminOrSuperAdminPassword(action = 'this action') {
             preConfirm: async () => {
                 const accountType = document.getElementById('accountType')?.value;
                 const password = document.getElementById('authPassword')?.value;
+                
                 if (!password) {
                     Swal.showValidationMessage('Please enter password');
                     return false;
                 }
+
                 try {
-                    const { data: userData, error: userError } = await sb
-                        .from('users')
-                        .select('email')
-                        .eq('role', accountType)
-                        .limit(1)
-                        .single();
-                    if (userError) {
-                        Swal.showValidationMessage(`Could not find ${accountType} account`);
+                    // ✅ FIX: Get the current user's email from the session
+                    const { data: { session }, error: sessionError } = await sb.auth.getSession();
+                    
+                    if (sessionError || !session) {
+                        Swal.showValidationMessage('No active session. Please login again.');
                         return false;
                     }
+
+                    // ✅ FIX: Verify password using the current user's email
                     const { error } = await sb.auth.signInWithPassword({
-                        email: userData.email,
+                        email: session.user.email,
                         password: password
                     });
+
                     if (error) {
                         document.getElementById('passwordError').style.display = 'block';
-                        Swal.showValidationMessage(`Incorrect ${accountType} password`);
+                        Swal.showValidationMessage('Incorrect password');
                         return false;
                     }
+
+                    // ✅ FIX: Check if user has the required role from the session metadata
+                    const userRole = session.user.user_metadata?.role || currentUserRole;
+                    
+                    if (accountType === 'admin' && userRole !== 'admin' && userRole !== 'superadmin') {
+                        Swal.showValidationMessage(`You are not an ${accountType}`);
+                        return false;
+                    }
+                    
+                    if (accountType === 'superadmin' && userRole !== 'superadmin') {
+                        Swal.showValidationMessage('You are not a Super Admin');
+                        return false;
+                    }
+
                     return true;
+
                 } catch (err) {
-                    Swal.showValidationMessage('Verification failed');
+                    console.error('Verification error:', err);
+                    Swal.showValidationMessage('Verification failed. Please try again.');
                     return false;
                 }
             }
-        }).then((result) => resolve(result.isConfirmed));
+        }).then((result) => {
+            resolve(result.isConfirmed);
+        });
     });
 }
-
 // ============================================
 // ADD TO RENDERERS
 // ============================================
