@@ -9752,9 +9752,8 @@ window.refreshSubjectsForMarks = async function() {
     });
     await loadPage('marks');
 };
-
 // ============================================
-// ✅ CHANGE EXAM PERIOD - U1/U2/U3 WITH ADMIN PASSWORD
+// ✅ FIXED: CHANGE EXAM PERIOD - USES SESSION (No users table query)
 // ============================================
 
 window.openChangeExamModal = function() {
@@ -9779,7 +9778,7 @@ window.openChangeExamModal = function() {
         return;
     }
 
-    // ✅ FIRST: Verify Admin password
+    // ✅ FIXED: Verify using current session (no users table query)
     Swal.fire({
         title: '🔐 Admin Authorization Required',
         html: `
@@ -9787,15 +9786,19 @@ window.openChangeExamModal = function() {
                 <div class="alert alert-warning mb-3" style="font-size: 13px;">
                     <i class="fas fa-shield-alt"></i>
                     <strong>Admin Authorization Required!</strong><br>
-                    Changing exam period for marks requires <strong>Admin</strong> credentials.
+                    Changing exam period for marks requires your password to confirm your identity.
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Admin Password</label>
+                    <label class="form-label fw-bold">Your Password</label>
                     <input type="password" id="changeAuthPassword" class="form-control" 
-                           placeholder="Enter admin password" autocomplete="off">
+                           placeholder="Enter your password" autocomplete="off">
                 </div>
                 <div id="changePasswordError" class="alert alert-danger small" style="display: none;">
                     <i class="fas fa-exclamation-triangle"></i> Incorrect password. Access denied.
+                </div>
+                <div class="alert alert-info small mt-2">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Note:</strong> Only Admin and Super Admin can change exam periods.
                 </div>
             </div>
         `,
@@ -9818,39 +9821,44 @@ window.openChangeExamModal = function() {
             const password = document.getElementById('changeAuthPassword')?.value;
             
             if (!password) {
-                Swal.showValidationMessage('Please enter admin password');
+                Swal.showValidationMessage('Please enter your password');
                 return false;
             }
             
             try {
-                // ✅ Get admin email from database
-                const { data: userData, error: userError } = await sb
-                    .from('users')
-                    .select('email')
-                    .eq('role', 'admin')
-                    .limit(1)
-                    .single();
+                // ✅ FIXED: Get current user from session
+                const { data: { session }, error: sessionError } = await sb.auth.getSession();
                 
-                if (userError) {
-                    Swal.showValidationMessage('Could not find admin account');
+                if (sessionError || !session) {
+                    Swal.showValidationMessage('No active session. Please login again.');
                     return false;
                 }
+
+                // ✅ Check if user has Admin or Super Admin role
+                const userRole = session.user.user_metadata?.role || currentUserRole;
                 
-                // ✅ Verify password using Supabase Auth
+                if (userRole !== 'admin' && userRole !== 'superadmin') {
+                    Swal.showValidationMessage(`Access Denied. Your role: ${userRole}. Only Admin or Super Admin can do this.`);
+                    return false;
+                }
+
+                // ✅ Verify password using current user's email (NOT querying users table)
                 const { error } = await sb.auth.signInWithPassword({
-                    email: userData.email,
+                    email: session.user.email,
                     password: password
                 });
-                
+
                 if (error) {
                     document.getElementById('changePasswordError').style.display = 'block';
-                    Swal.showValidationMessage('Incorrect admin password. Access denied.');
+                    Swal.showValidationMessage('Incorrect password. Access denied.');
                     return false;
                 }
                 
                 return true;
+                
             } catch (err) {
-                Swal.showValidationMessage('Verification failed');
+                console.error('Auth error:', err);
+                Swal.showValidationMessage('Verification failed. Please try again.');
                 return false;
             }
         }
@@ -9889,7 +9897,7 @@ async function showExamChangeModal() {
             <div class="text-start">
                 <div class="alert alert-success mb-3" style="font-size: 13px;">
                     <i class="fas fa-check-circle" style="color: #28a745;"></i>
-                    <strong>Admin Authorization Verified!</strong> You can now change the exam period.
+                    <strong>Authorization Verified!</strong> You can now change the exam period.
                 </div>
                 
                 <div class="alert alert-warning mb-3" style="font-size: 13px;">
@@ -10038,7 +10046,6 @@ async function performExamChange(newExam, newYear, newInitials) {
             
             if (existingMap[student.id]) {
                 // ✅ This student already has marks for the new exam/year
-                // We need to UPDATE the existing record instead of creating a duplicate
                 updates.push({
                     id: existingMap[student.id],
                     student_id: student.id,
@@ -10182,7 +10189,6 @@ async function performExamChange(newExam, newYear, newInitials) {
         });
     }
 }
-
 // ============================================
 // VERIFY ADMIN/SUPER ADMIN PASSWORD
 // ============================================
