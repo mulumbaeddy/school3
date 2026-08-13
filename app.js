@@ -7808,7 +7808,7 @@ async function renderMarks() {
         </div>
         
         <!-- ============================================================
-             BATCH MARKS CONTAINER
+             BATCH MARKS CONTAINER - WITH CHANGE EXAM BUTTON
              ============================================================ -->
         <div id="batchMarksContainer" style="display: none;">
             <div class="square-box" style="border-color: #01605a; background: #f8faf9;">
@@ -7817,9 +7817,17 @@ async function renderMarks() {
                         <i class="fas fa-edit me-2"></i> 
                         ${isOlevel ? `<span id="selectedSubjectDisplay"></span> · <span id="selectedClassDisplay"></span>` : 'Batch Marks Entry'}
                     </span>
-                    <button type="button" onclick="closeBatchMarks()" style="background: none; border: none; color: #01605a; font-size: 18px; cursor: pointer; padding: 0 4px;">
-                        <i class="fas fa-times-circle"></i>
-                    </button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <!-- ✅ Change Exam Period Button -->
+                        <button type="button" onclick="openChangeExamModal()" 
+                                style="background: #ffc107; border: none; color: #212529; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            <i class="fas fa-exchange-alt"></i> Change Exam
+                        </button>
+                        <button type="button" onclick="closeBatchMarks()" 
+                                style="background: none; border: none; color: #dc3545; font-size: 18px; cursor: pointer; padding: 0 4px;">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="batchTableWrapper">
                     <!-- Global Initials Container will be inserted here by renderOlevelBatchTable() -->
@@ -8068,30 +8076,40 @@ window.loadBatchMarks = async function() {
 // APPLY GLOBAL INITIALS - ONLY FOR STUDENTS WITH EXISTING MARKS
 // ============================================
 
+// ============================================
+// ✅ UPDATED: APPLY GLOBAL INITIALS - ALL STUDENTS (Saved + Unsaved)
+// ============================================
+
 function applyGlobalInitials(initials) {
-    // ✅ ONLY apply to students who already have marks (data-has-mark="true")
-    const inputs = document.querySelectorAll('.initials-input:not([disabled])[data-has-mark="true"]');
+    // ✅ Apply to ALL students (both saved and unsaved)
+    // Remove the data-has-mark="true" filter
+    const inputs = document.querySelectorAll('.initials-input:not([disabled])');
+    console.log(`📝 Applying initials "${initials}" to ${inputs.length} total students`);
     inputs.forEach(input => {
         input.value = initials;
         input.dispatchEvent(new Event('input'));
     });
 }
-
 // ============================================
 // APPLY GLOBAL INITIALS TO EXISTING - FOR AUTO-LOAD
+// ============================================
+
+// ============================================
+// ✅ UPDATED: APPLY GLOBAL INITIALS TO ALL STUDENTS - FOR AUTO-LOAD
 // ============================================
 
 function applyGlobalInitialsToExisting(initials) {
     // Wait a moment for the table to render
     setTimeout(() => {
-        const inputs = document.querySelectorAll('.initials-input:not([disabled])[data-has-mark="true"]');
+        // ✅ Apply to ALL students (both saved and unsaved)
+        const inputs = document.querySelectorAll('.initials-input:not([disabled])');
+        console.log(`📝 Auto-applying initials "${initials}" to ${inputs.length} total students`);
         inputs.forEach(input => {
             input.value = initials;
             input.dispatchEvent(new Event('input'));
         });
     }, 100);
 }
-
 // ============================================
 // RENDER O-LEVEL BATCH TABLE - WITH AUTO-FILL INITIALS
 // ONLY for students who already have marks
@@ -9736,6 +9754,436 @@ window.refreshSubjectsForMarks = async function() {
 };
 
 // ============================================
+// ✅ CHANGE EXAM PERIOD - U1/U2/U3 WITH ADMIN PASSWORD
+// ============================================
+
+window.openChangeExamModal = function() {
+    if (batchState.students.length === 0) {
+        Swal.fire('Error', 'No marks loaded. Please load batch marks first.', 'error');
+        return;
+    }
+    
+    // Check if there are any marks to change
+    let hasMarks = false;
+    let markCount = 0;
+    for (const student of batchState.students) {
+        const key = `${student.id}_${batchState.subject}`;
+        if (batchState.marksMap[key]) {
+            hasMarks = true;
+            markCount++;
+        }
+    }
+    
+    if (!hasMarks) {
+        Swal.fire('Info', 'No saved marks found to change exam period. Please load marks first.', 'info');
+        return;
+    }
+
+    // ✅ FIRST: Verify Admin password
+    Swal.fire({
+        title: '🔐 Admin Authorization Required',
+        html: `
+            <div class="text-start">
+                <div class="alert alert-warning mb-3" style="font-size: 13px;">
+                    <i class="fas fa-shield-alt"></i>
+                    <strong>Admin Authorization Required!</strong><br>
+                    Changing exam period for marks requires <strong>Admin</strong> credentials.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Admin Password</label>
+                    <input type="password" id="changeAuthPassword" class="form-control" 
+                           placeholder="Enter admin password" autocomplete="off">
+                </div>
+                <div id="changePasswordError" class="alert alert-danger small" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i> Incorrect password. Access denied.
+                </div>
+            </div>
+        `,
+        width: '420px',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-check"></i> Authorize',
+        cancelButtonText: '<i class="fas fa-times"></i> Cancel',
+        confirmButtonColor: '#d33',
+        allowOutsideClick: false,
+        didOpen: () => {
+            const passwordInput = document.getElementById('changeAuthPassword');
+            if (passwordInput) {
+                passwordInput.focus();
+                passwordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') Swal.clickConfirm();
+                });
+            }
+        },
+        preConfirm: async () => {
+            const password = document.getElementById('changeAuthPassword')?.value;
+            
+            if (!password) {
+                Swal.showValidationMessage('Please enter admin password');
+                return false;
+            }
+            
+            try {
+                // ✅ Get admin email from database
+                const { data: userData, error: userError } = await sb
+                    .from('users')
+                    .select('email')
+                    .eq('role', 'admin')
+                    .limit(1)
+                    .single();
+                
+                if (userError) {
+                    Swal.showValidationMessage('Could not find admin account');
+                    return false;
+                }
+                
+                // ✅ Verify password using Supabase Auth
+                const { error } = await sb.auth.signInWithPassword({
+                    email: userData.email,
+                    password: password
+                });
+                
+                if (error) {
+                    document.getElementById('changePasswordError').style.display = 'block';
+                    Swal.showValidationMessage('Incorrect admin password. Access denied.');
+                    return false;
+                }
+                
+                return true;
+            } catch (err) {
+                Swal.showValidationMessage('Verification failed');
+                return false;
+            }
+        }
+    }).then(async (authResult) => {
+        if (authResult.isConfirmed) {
+            await showExamChangeModal();
+        }
+    });
+};
+
+// ============================================
+// ✅ SHOW EXAM CHANGE MODAL (After Authorization)
+// ============================================
+
+async function showExamChangeModal() {
+    // ✅ Get current user's initials for auto-fill
+    let currentUserInitials = '';
+    if (currentUser?.name) {
+        currentUserInitials = currentUser.name
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .toUpperCase()
+            .substring(0, 5);
+    } else if (currentUser?.email) {
+        currentUserInitials = currentUser.email.substring(0, 2).toUpperCase();
+    } else {
+        currentUserInitials = 'ADMIN';
+    }
+    
+    const savedInitials = localStorage.getItem('lastTeacherInitials') || currentUserInitials;
+    
+    const result = await Swal.fire({
+        title: '🔄 Change Exam Period',
+        html: `
+            <div class="text-start">
+                <div class="alert alert-success mb-3" style="font-size: 13px;">
+                    <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                    <strong>Admin Authorization Verified!</strong> You can now change the exam period.
+                </div>
+                
+                <div class="alert alert-warning mb-3" style="font-size: 13px;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This will change the exam period for ALL marks currently loaded in the batch.
+                    <br><br>
+                    <strong>Current Exam:</strong> <span class="badge bg-primary">${batchState.exam}</span>
+                    <strong>Current Year:</strong> <span class="badge bg-secondary">${batchState.year}</span>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">📝 New Exam Period</label>
+                        <select id="newExamPeriod" class="form-select">
+                            ${EXAM_OPTIONS.map(e => `<option value="${e}" ${e === batchState.exam ? 'selected' : ''}>${e}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">📅 New Year</label>
+                        <input type="text" id="newExamYear" class="form-control" value="${batchState.year}">
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label class="form-label fw-bold">✏️ Teacher Initials (Auto-filled)</label>
+                        <input type="text" id="newExamInitials" class="form-control" 
+                               value="${savedInitials}" maxlength="5" 
+                               placeholder="e.g., JKM" style="text-transform: uppercase; background: #f0f4f8;">
+                        <small class="text-muted">Auto-filled from your name. You can change if needed.</small>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mb-2" style="font-size: 12px;">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>${batchState.students.length} students</strong> loaded · 
+                    <strong>${Object.keys(batchState.marksMap).length} marks</strong> will be changed
+                    <br><small>✏️ Teacher initials will be updated to: <strong id="initialsPreview">${savedInitials}</strong></small>
+                </div>
+            </div>
+        `,
+        width: '550px',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-exchange-alt"></i> Change Exam Period',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#ffc107',
+        allowOutsideClick: false,
+        didOpen: () => {
+            const initialsInput = document.getElementById('newExamInitials');
+            const previewSpan = document.getElementById('initialsPreview');
+            if (initialsInput && previewSpan) {
+                initialsInput.addEventListener('input', function() {
+                    previewSpan.textContent = this.value.toUpperCase() || 'N/A';
+                });
+            }
+        },
+        preConfirm: () => {
+            const newExam = document.getElementById('newExamPeriod').value;
+            const newYear = document.getElementById('newExamYear').value;
+            const initials = document.getElementById('newExamInitials').value.toUpperCase().trim() || savedInitials;
+            
+            if (!newExam) {
+                Swal.showValidationMessage('Please select an exam period');
+                return false;
+            }
+            if (!newYear) {
+                Swal.showValidationMessage('Please enter a year');
+                return false;
+            }
+            if (!initials) {
+                Swal.showValidationMessage('Please enter teacher initials');
+                return false;
+            }
+            
+            return { newExam, newYear, initials };
+        }
+    });
+    
+    if (result.isConfirmed && result.value) {
+        await performExamChange(result.value.newExam, result.value.newYear, result.value.initials);
+    }
+}
+
+// ============================================
+// ✅ PERFORM EXAM CHANGE - U1/U2/U3 WITH DUPLICATE HANDLING
+// ============================================
+
+async function performExamChange(newExam, newYear, newInitials) {
+    const loading = Swal.fire({
+        title: '⏳ Changing Exam Period...',
+        text: `Updating marks from "${batchState.exam}" to "${newExam}"...`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+    
+    let updated = 0;
+    let errors = 0;
+    let skipped = 0;
+    let markIds = [];
+    let studentIds = [];
+    
+    // ✅ Collect all mark IDs that need to be changed
+    for (const student of batchState.students) {
+        const key = `${student.id}_${batchState.subject}`;
+        const mark = batchState.marksMap[key];
+        if (mark) {
+            markIds.push(mark.id);
+            studentIds.push(student.id);
+        }
+    }
+    
+    if (markIds.length === 0) {
+        Swal.close();
+        Swal.fire('Info', 'No marks found to update.', 'info');
+        return;
+    }
+    
+    try {
+        // ✅ STEP 1: Check if any marks already exist with the new exam/year
+        const { data: existingMarks, error: checkError } = await sb
+            .from('marks')
+            .select('student_id, id')
+            .in('student_id', studentIds)
+            .eq('subject', batchState.subject)
+            .eq('exam', newExam)
+            .eq('year', newYear)
+            .eq('level', 'olevel');
+        
+        if (checkError) throw checkError;
+        
+        // ✅ Build map of students who already have marks for the new exam
+        const existingMap = {};
+        for (const mark of existingMarks || []) {
+            existingMap[mark.student_id] = mark.id;
+        }
+        
+        // ✅ STEP 2: Separate into updates and inserts
+        const updates = [];
+        const inserts = [];
+        const duplicates = [];
+        
+        for (const student of batchState.students) {
+            const key = `${student.id}_${batchState.subject}`;
+            const mark = batchState.marksMap[key];
+            if (!mark) continue;
+            
+            if (existingMap[student.id]) {
+                // ✅ This student already has marks for the new exam/year
+                // We need to UPDATE the existing record instead of creating a duplicate
+                updates.push({
+                    id: existingMap[student.id],
+                    student_id: student.id,
+                    unit1: mark.unit1 || 0,
+                    unit2: mark.unit2 || 0,
+                    unit3: mark.unit3 || 0,
+                    exam_80: mark.exam_80 || 0,
+                    marks_obtained: mark.marks_obtained || 0,
+                    teacher_initials: newInitials,
+                    updated_at: new Date().toISOString()
+                });
+                duplicates.push(student.name);
+            } else {
+                // ✅ This student has no marks for the new exam/year - UPDATE the old record
+                inserts.push({
+                    id: mark.id,
+                    student_id: student.id,
+                    exam: newExam,
+                    year: newYear,
+                    teacher_initials: newInitials,
+                    updated_at: new Date().toISOString()
+                });
+            }
+        }
+        
+        console.log(`📊 Updates: ${updates.length}, Inserts: ${inserts.length}, Duplicates: ${duplicates.length}`);
+        
+        // ✅ STEP 3: Update existing records to new exam/year (for students without duplicates)
+        if (inserts.length > 0) {
+            for (const item of inserts) {
+                const { error } = await sb
+                    .from('marks')
+                    .update({
+                        exam: newExam,
+                        year: newYear,
+                        teacher_initials: newInitials,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', item.id);
+                
+                if (error) throw error;
+                updated++;
+            }
+        }
+        
+        // ✅ STEP 4: For students with duplicates, UPDATE the existing record with new marks
+        if (updates.length > 0) {
+            for (const item of updates) {
+                const { error } = await sb
+                    .from('marks')
+                    .update({
+                        unit1: item.unit1,
+                        unit2: item.unit2,
+                        unit3: item.unit3,
+                        exam_80: item.exam_80,
+                        marks_obtained: item.marks_obtained,
+                        teacher_initials: item.teacher_initials,
+                        updated_at: item.updated_at
+                    })
+                    .eq('id', item.id);
+                
+                if (error) throw error;
+                updated++;
+            }
+            
+            // ✅ Delete the old records for students with duplicates
+            const oldMarkIds = [];
+            for (const student of batchState.students) {
+                if (existingMap[student.id]) {
+                    const key = `${student.id}_${batchState.subject}`;
+                    const mark = batchState.marksMap[key];
+                    if (mark) {
+                        oldMarkIds.push(mark.id);
+                    }
+                }
+            }
+            
+            if (oldMarkIds.length > 0) {
+                console.log(`🗑️ Deleting ${oldMarkIds.length} old duplicate records...`);
+                const { error: deleteError } = await sb
+                    .from('marks')
+                    .delete()
+                    .in('id', oldMarkIds);
+                
+                if (deleteError) throw deleteError;
+                skipped = oldMarkIds.length;
+            }
+        }
+        
+        // ✅ Save initials to localStorage
+        localStorage.setItem('lastTeacherInitials', newInitials);
+        
+        // ✅ Update batchState
+        batchState.exam = newExam;
+        batchState.year = newYear;
+        
+        document.getElementById('batchExam').value = newExam;
+        document.getElementById('batchYear').value = newYear;
+        
+        Swal.close();
+        
+        // ✅ Show success with details
+        let message = `✅ ${updated} marks updated to ${newExam} ${newYear}`;
+        if (skipped > 0) {
+            message += `<br>🔄 ${skipped} duplicate records merged (old ones deleted)`;
+        }
+        
+        await Swal.fire({
+            icon: 'success',
+            title: '✅ Exam Period Changed!',
+            html: `
+                <div class="text-start">
+                    <p>${message}</p>
+                    <p><strong>✏️ Teacher Initials:</strong> <span class="badge bg-info">${newInitials}</span></p>
+                    ${duplicates.length > 0 ? `<p class="text-warning small">⚠️ ${duplicates.length} student(s) already had ${newExam} marks. Their marks were updated.</p>` : ''}
+                </div>
+            `,
+            timer: 4000,
+            timerProgressBar: true
+        });
+        
+        // ✅ Reload
+        await loadBatchMarks();
+        await loadMarksTable();
+        
+        showTopRightNotification(
+            '✅ Exam Period Changed!', 
+            `${updated} marks updated to ${newExam} ${newYear}`,
+            'success',
+            4000
+        );
+        
+    } catch (error) {
+        Swal.close();
+        console.error('Error changing exam period:', error);
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: `Failed to change exam period: ${error.message}`,
+            timer: 4000
+        });
+    }
+}
+
+// ============================================
 // VERIFY ADMIN/SUPER ADMIN PASSWORD
 // ============================================
 
@@ -9841,27 +10289,8 @@ console.log('📦 Batch Entry: Load, Edit, Save - WORKING!');
 console.log('👨‍🏫 Teachers: CAN ADD marks, CANNOT EDIT marks');
 console.log('🎯 Grades from: olevel_grades table (Settings)');
 console.log('✏️ AUTO-FILL INITIALS: ONLY for students with existing marks');
+console.log('🔄 CHANGE EXAM PERIOD: Update exam period with Admin password & auto-initials');
 console.log('🚀 ALL PARTS WORKING - READY TO USE!');
-
-// Make functions globally accessible
-window.applyMarksFilters = applyMarksFilters;
-window.clearMarksFilters = clearMarksFilters;
-window.debouncedFilterMarks = debouncedFilterMarks;
-window.loadMarksTable = loadMarksTable;
-window.renderMarks = renderMarks;
-window.loadBatchMarks = loadBatchMarks;
-window.saveBatchMarks = saveBatchMarks;
-window.openAddMarkModal = openAddMarkModal;
-window.editMark = editMark;
-window.deleteMark = deleteMark;
-window.bulkDeleteMarks = bulkDeleteMarks;
-window.closeBatchMarks = closeBatchMarks;
-window.exportBatchMarks = exportBatchMarks;
-window.exportAllMarks = exportAllMarks;
-window.refreshMarksTable = refreshMarksTable;
-window.refreshSubjectsForMarks = refreshSubjectsForMarks;
-window.applyGlobalInitials = applyGlobalInitials;
-window.applyGlobalInitialsToExisting = applyGlobalInitialsToExisting;
 // ==================== TEACHERS MODULE ====================
 // ============================================
 // TEACHERS MODULE - USING SWEETALERT2 (No Bootstrap Modal)
